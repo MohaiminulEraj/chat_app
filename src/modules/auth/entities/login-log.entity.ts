@@ -1,23 +1,19 @@
 import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
-import { User } from 'src/modules/users/entities/user.entity'
-import { Column, Entity, ManyToOne } from 'typeorm'
+import { User } from 'src/modules/user/entities/user.entity'
+import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm'
 
-@Entity()
+@Entity({ name: 'login_logs' })
 export class LoginLog extends CustomBaseEntity {
-    @Column({
-        type: 'int',
-        nullable: false
-    })
-    userId: number
+    @Column('uuid')
+    userId: string
 
-    @ManyToOne(() => User, (user) => user.loginLog, {
-        onDelete: 'CASCADE'
-    })
-    user: User
+    @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    time: Date
 
-    @Column({ type: 'varchar', length: 30, nullable: true })
+    @Column({ nullable: true })
     ip: string
 
-    @Column()
-    time: Date
+    @ManyToOne(() => User, (user) => user.loginLogs, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'userId', referencedColumnName: 'uuid' })
+    user: User
 }
