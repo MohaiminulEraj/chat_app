@@ -1,11 +1,7 @@
 import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
-import { GiftTransaction } from 'src/modules/gift/entities/gift-transaction.entity'
-import { GroupMember } from 'src/modules/group/entities/group-member.entity'
-import { RoomParticipant } from 'src/modules/room/entities/room-participant.entity'
 import { Column, Entity, Index, OneToMany } from 'typeorm'
 import { LoginLog } from '../../auth/entities/login-log.entity'
 import { Friendship } from '../../friendship/entities/friendship.entity'
-import { Group } from '../../group/entities/group.entity'
 
 @Entity('users')
 export class User extends CustomBaseEntity {
@@ -78,18 +74,18 @@ export class User extends CustomBaseEntity {
     @OneToMany(() => LoginLog, (loginLog) => loginLog.user)
     loginLogs: LoginLog[]
 
-    @OneToMany(() => GroupMember, (member) => member.user)
-    groupMemberships: GroupMember[]
+    // @OneToMany(() => GroupMember, (member) => member.user)
+    // groupMemberships: GroupMember[]
 
-    @OneToMany(() => Group, (group) => group.owner)
-    ownedGroups: Group[]
+    // @OneToMany(() => Group, (group) => group.owner)
+    // ownedGroups: Group[]
 
-    @OneToMany(() => RoomParticipant, (participant) => participant.user)
-    roomParticipations: RoomParticipant[]
+    // @OneToMany(() => RoomParticipant, (participant) => participant.user)
+    // roomParticipations: RoomParticipant[]
 
-    @OneToMany(() => GiftTransaction, (transaction) => transaction.sender)
-    sentGifts: GiftTransaction[]
+    // @OneToMany(() => GiftTransaction, (transaction) => transaction.sender)
+    // sentGifts: GiftTransaction[]
 
-    @OneToMany(() => GiftTransaction, (transaction) => transaction.receiver)
-    receivedGifts: GiftTransaction[]
+    // @OneToMany(() => GiftTransaction, (transaction) => transaction.receiver)
+    // receivedGifts: GiftTransaction[]
 }
