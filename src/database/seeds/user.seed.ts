@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcryptjs'
-import { UserTypes } from 'src/modules/users/data/user-type.enum'
-import { User } from 'src/modules/users/entities/user.entity'
+import { UserTypes } from 'src/modules/user/data/user-type.enum'
+import { User } from 'src/modules/user/entities/user.entity'
 import { DataSource } from 'typeorm'
 import { Factory, Seeder } from 'typeorm-seeding'
 
@@ -15,15 +15,14 @@ export class UserSeed implements Seeder {
         await userRepository.delete({})
 
         // Create a superadmin user
-        const user = await factory(User)().make({
-            username: 'superadmin',
-            name: 'Super Admin',
-            email: 'superadmin@example.com',
-            phoneNumber: '+1234567890',
+        const user = await factory(User)({
+            email: 'admin@example.com',
+            // Remove username: 'superadmin',
             password: hashedPassword,
+            userType: UserTypes.ADMIN,
             isEmailVerified: true,
-            isPhoneVerified: true,
-        })
+            name: 'Super Admin'
+        }).make()
 
         await factory(User)().create(user)
     }
