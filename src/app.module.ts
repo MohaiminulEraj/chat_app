@@ -5,12 +5,13 @@ import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { typeOrmAsyncConfig } from 'src/config/typeorm.config'
-import { UsersModule } from 'src/modules/users/users.module'
+import { UserModule } from 'src/modules/user/user.module'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import smtpConfig from './config/smtp.config'
 import { AuthModule } from './modules/auth/auth.module'
 import { EmailService } from './modules/email/services/email.service'
+import { FriendshipModule } from './modules/friendship/friendship.module'
 import { WebsocketModule } from './modules/websocket/websocket.module'
 @Module({
     imports: [
@@ -38,8 +39,12 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
         ScheduleModule.forRoot(),
         AuthModule,
-        UsersModule,
+        UserModule,
+        FriendshipModule,
         WebsocketModule
+        // MongooseModule.forRoot(
+        //     process.env.MONGODB_URI || 'mongodb://localhost:27017/imo_chat'
+        // )
     ],
     controllers: [AppController],
     providers: [AppService, EmailService],
