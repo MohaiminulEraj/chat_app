@@ -8,10 +8,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
 import * as crypto from 'crypto'
-import { LoggedInUser } from 'src/modules/users/data/logged-in-user.type'
+import { LoggedInUser } from 'src/modules/user/data/logged-in-user.type'
 import { Repository } from 'typeorm'
 import { EmailService } from '../../email/services/email.service'
-import { User } from '../../users/entities/user.entity'
+import { User } from '../../user/entities/user.entity'
 import {
     EmailVerificationDto,
     ForgetPasswordDto,
@@ -34,6 +34,18 @@ export class AuthService {
         private readonly jwtService: JwtService,
         private readonly emailService: EmailService
     ) {}
+
+    // Add validateUser method for compatibility with LocalStrategy
+    async validateUser(emailOrPhone: string, password: string): Promise<any> {
+        const loginDto = { emailOrPhone, password }
+
+        try {
+            const result = await this.login({}, loginDto)
+            return result // Return the full result including user info
+        } catch (error) {
+            return null // Return null if validation fails
+        }
+    }
 
     async login(req: any, loginDto: LoginDto) {
         // Check if the input is email or phone number
@@ -81,7 +93,7 @@ export class AuthService {
      *
      * @return  {[type]}                            [return description]
      */
-    async registration(req: any, registrationDto: RegistrationDto) {
+    async registration(registrationDto: RegistrationDto) {
         if (registrationDto.password != registrationDto.confirmPassword) {
             throw new HttpException(
                 'Password Mismatched',
@@ -135,10 +147,11 @@ export class AuthService {
             // GENERATE A VERIFICATION CODE AND SEND MAIL
             const verificationCodeSenderDto = new VerificationCodeSenderDto()
             verificationCodeSenderDto.email = registrationDto.email
-            // await this.generateEmailVerificationCode(verificationCodeSenderDto)
+            await this.generateEmailVerificationCode(verificationCodeSenderDto)
 
-            return await this.unifiedAuthResponse(registeredUser)
+            return registeredUser
         } catch (error) {
+            console.log(error)
             throw new HttpException(
                 'An error occurred while registering a user',
                 HttpStatus.BAD_REQUEST
@@ -254,7 +267,7 @@ export class AuthService {
                 phoneNumber: true,
                 password: true,
                 name: true,
-                username: true,
+                // Remove username: true,
                 avatarUrl: true,
                 isEmailVerified: true,
                 isPhoneVerified: true,
@@ -273,7 +286,7 @@ export class AuthService {
         return {
             id: user.id,
             uuid: user.uuid,
-            username: user.username,
+            // Remove username: user.username,
             name: user.name,
             email: user.email,
             phoneNumber: user.phoneNumber,
@@ -292,7 +305,7 @@ export class AuthService {
     async logging(user: User, requestObject: any) {
         try {
             const loginLog = new LoginLog()
-            loginLog.userId = user.id
+            loginLog.userId = user.uuid // Use uuid instead of id
             loginLog.time = new Date()
             const ip =
                 requestObject.headers['x-forwarded-for'] ||

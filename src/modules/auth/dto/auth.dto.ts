@@ -18,7 +18,8 @@ export class LoginDto {
         message: ValidationMessage('emailOrPhone').isNotEmpty
     })
     @ApiProperty({
-        description: 'Email address or phone number'
+        description: 'Email address or phone number',
+        example: 'eraj@gmail.com'
     })
     emailOrPhone: string
 
@@ -28,7 +29,10 @@ export class LoginDto {
     @IsNotEmpty({
         message: ValidationMessage('password').isNotEmpty
     })
-    @ApiProperty()
+    @ApiProperty({
+        description: 'User password',
+        example: '123456'
+    })
     password: string
 }
 
@@ -39,7 +43,10 @@ export class RegistrationDto {
     @IsNotEmpty({
         message: ValidationMessage('name').isNotEmpty
     })
-    @ApiProperty()
+    @ApiProperty({
+        description: 'User name',
+        example: 'Eraj'
+    })
     name: string
 
     @IsString({
@@ -49,7 +56,10 @@ export class RegistrationDto {
         message: ValidationMessage('email').isNotEmpty
     })
     @IsEmail()
-    @ApiProperty()
+    @ApiProperty({
+        description: 'User email address',
+        example: 'eraj@gmail.com'
+    })
     email: string
 
     @IsString({
@@ -58,7 +68,10 @@ export class RegistrationDto {
     @IsNotEmpty({
         message: ValidationMessage('phoneNumber').isNotEmpty
     })
-    @ApiProperty()
+    @ApiProperty({
+        description: 'User phone number',
+        example: '01891234567'
+    })
     phoneNumber: string
 
     @IsString({
@@ -68,7 +81,10 @@ export class RegistrationDto {
         message: ValidationMessage('password').isNotEmpty
     })
     @MinLength(6)
-    @ApiProperty()
+    @ApiProperty({
+        description: 'User password',
+        example: '123456'
+    })
     password: string
 
     @IsString({
@@ -78,7 +94,10 @@ export class RegistrationDto {
         message: ValidationMessage('confirmPassword').isNotEmpty
     })
     @MinLength(6)
-    @ApiProperty()
+    @ApiProperty({
+        description: 'Confirm password',
+        example: '123456'
+    })
     confirmPassword: string
 }
 

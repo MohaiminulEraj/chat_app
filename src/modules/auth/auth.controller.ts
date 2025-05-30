@@ -29,7 +29,6 @@ import { AuthService } from './service/auth.service'
 @Controller('auth')
 export class AuthController {
     constructor(private readonly authService: AuthService) {}
-
     @Post('login')
     @ApiOperation({
         summary: 'Login Endpoint'
@@ -42,7 +41,7 @@ export class AuthController {
         description: 'Login successful',
         status: HttpStatus.OK
     })
-    async login(@Body() loginDto: LoginDto, @Request() req) {
+    async login(@Request() req, @Body() loginDto: LoginDto) {
         return {
             statusCode: HttpStatus.OK,
             message: 'Login done successfully',
@@ -62,14 +61,11 @@ export class AuthController {
         description: 'Registration successful',
         status: HttpStatus.CREATED
     })
-    async registration(
-        @Body() registrationDto: RegistrationDto,
-        @Request() req
-    ) {
+    async registration(@Body() registrationDto: RegistrationDto) {
         return {
             statusCode: HttpStatus.CREATED,
             message: 'Registration done successfully',
-            result: await this.authService.registration(req, registrationDto)
+            result: await this.authService.registration(registrationDto)
         }
     }
 
@@ -140,11 +136,15 @@ export class AuthController {
     })
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    async regenerateAnotherCode(@Body() verificationCodeSenderDto: VerificationCodeSenderDto) {
+    async regenerateAnotherCode(
+        @Body() verificationCodeSenderDto: VerificationCodeSenderDto
+    ) {
         return {
             status: HttpStatus.OK,
             message: 'A new code has been sent to your inbox',
-            result: await this.authService.generateEmailVerificationCode(verificationCodeSenderDto)
+            result: await this.authService.generateEmailVerificationCode(
+                verificationCodeSenderDto
+            )
         }
     }
 

@@ -1,0 +1,133 @@
+import {
+    ConflictException,
+    Injectable,
+    NotFoundException
+} from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import * as bcrypt from 'bcryptjs'
+import { Repository } from 'typeorm'
+import { CreateUserDto } from './dto/create-user.dto'
+import { UpdateUserDto } from './dto/update-user.dto'
+import { User } from './entities/user.entity'
+
+@Injectable()
+export class UserService {
+    constructor(
+        @InjectRepository(User)
+        private userRepository: Repository<User>
+    ) {}
+
+    async create(createUserDto: CreateUserDto): Promise<User> {
+        // Check if user already exists
+        const existingUser = await this.userRepository.findOne({
+            where: [{ email: createUserDto.email }]
+        })
+
+        if (existingUser) {
+            throw new ConflictException('User with this email already exists')
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(createUserDto.password, 10)
+
+        const user = this.userRepository.create({
+            ...createUserDto,
+            password: hashedPassword
+        })
+
+        const savedUser = await this.userRepository.save(user)
+        return Array.isArray(savedUser) ? savedUser[0] : savedUser
+    }
+
+    async findByEmail(email: string): Promise<User | undefined> {
+        return this.userRepository.findOne({
+            where: { email },
+            select: [
+                'id',
+                'uuid',
+                'email',
+                'displayName',
+                'avatarUrl',
+                'name',
+                'phoneNumber',
+                'isEmailVerified',
+                'isPhoneVerified'
+            ]
+        })
+    }
+
+    async findOne(id: string): Promise<User> {
+        const user = await this.userRepository.findOne({ where: { uuid: id } })
+        if (!user) {
+            throw new NotFoundException(`User with ID ${id} not found`)
+        }
+        return user
+    }
+
+    async findAll(): Promise<User[]> {
+        return await this.userRepository.find({
+            where: { isActive: true },
+            select: [
+                'id',
+                'uuid',
+                'email',
+                'displayName',
+                'avatarUrl',
+                'status',
+                'lastSeen'
+            ]
+        })
+    }
+
+    async update(id: string, updateData: UpdateUserDto): Promise<User> {
+        const user = await this.findOne(id)
+
+        if (updateData.password) {
+            updateData.password = await bcrypt.hash(updateData.password, 10)
+        }
+
+        Object.assign(user, updateData)
+        const savedUser = await this.userRepository.save(user)
+        return Array.isArray(savedUser) ? savedUser[0] : savedUser
+    }
+
+    async updateStatus(
+        id: string,
+        status: 'online' | 'offline' | 'away' | 'busy'
+    ): Promise<void> {
+        await this.userRepository.update(
+            { uuid: id },
+            {
+                status,
+                lastSeen: status === 'offline' ? new Date() : null
+            }
+        )
+    }
+
+    async remove(id: string): Promise<void> {
+        const result = await this.userRepository.update(
+            { uuid: id },
+            { isActive: false }
+        )
+        if (result.affected === 0) {
+            throw new NotFoundException(`User with ID ${id} not found`)
+        }
+    }
+
+    async searchUsers(query: string): Promise<User[]> {
+        return this.userRepository
+            .createQueryBuilder('user')
+            .where('user.displayName ILIKE :query OR user.email ILIKE :query', {
+                query: `%${query}%`
+            })
+            .andWhere('user.isActive = :isActive', { isActive: true })
+            .select([
+                'user.uuid',
+                'user.email',
+                'user.displayName',
+                'user.avatarUrl',
+                'user.status'
+            ])
+            .getMany()
+    }
+}

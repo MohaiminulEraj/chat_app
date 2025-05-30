@@ -1,42 +1,36 @@
 import {
     HttpStatus,
-    Logger,
     UnprocessableEntityException,
-    ValidationPipe
+    ValidationPipe,
+    VersioningType
 } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { ValidationPipe as VP } from 'src/common/pipes/validation.pipe'
 import { AppModule } from './app.module'
 async function bootstrap() {
     const app = await NestFactory.create(AppModule)
 
-    const configService = app.get(ConfigService)
-
-    const logger = new Logger('Bootstrap')
-
-    app.setGlobalPrefix('api')
-    app.useGlobalPipes(new VP())
+    // Global validation pipe
     app.useGlobalPipes(
         new ValidationPipe({
             whitelist: true,
-            errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
             transform: true,
-            dismissDefaultMessages: true,
+            forbidNonWhitelisted: true,
+            errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+            transformOptions: {
+                enableImplicitConversion: true
+            },
             exceptionFactory: (errors) =>
                 new UnprocessableEntityException(errors)
         })
     )
-    const apiOptions = {
-        origin: '*',
-        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-        preflightContinue: false,
-        optionsSuccessStatus: 204,
-        credentials: true
-    }
 
-    app.enableCors(apiOptions)
+    // API Versioning
+    app.setGlobalPrefix('api')
+    app.enableVersioning({
+        type: VersioningType.URI,
+        defaultVersion: '1'
+    })
 
     // SWAGGER CONFIGURATION
     const options = new DocumentBuilder()
@@ -48,7 +42,7 @@ async function bootstrap() {
         .build()
 
     const document = SwaggerModule.createDocument(app, options)
-    SwaggerModule.setup('/docs', app, document, {
+    SwaggerModule.setup('docs', app, document, {
         swaggerOptions: {
             persistAuthorization: true,
             filter: true,
@@ -57,8 +51,20 @@ async function bootstrap() {
         }
     })
 
-    await app.listen(configService.get<number>('APP_PORT', 3000))
-    logger.log(`Server is running on ${process.env.APP_URL}`)
-    logger.log(`Swagger UI is available on ${process.env.APP_URL}/docs`)
+    // Enable CORS for all origins
+    app.enableCors({
+        origin: '*',
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+        credentials: true
+    })
+
+    const port = process.env.PORT || 3000
+    await app.listen(port)
+
+    console.log(`🚀 Application is running on: http://localhost:${port}`)
+    console.log(
+        `📚 API Documentation available at: http://localhost:${port}/docs`
+    )
 }
+
 bootstrap()

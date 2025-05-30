@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { JwtService as Jwt } from '@nestjs/jwt'
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
-import { User } from 'src/modules/users/entities/user.entity'
+import { User } from 'src/modules/user/entities/user.entity'
 import { Repository } from 'typeorm'
 @Injectable()
 export class JwtService {
@@ -23,8 +23,7 @@ export class JwtService {
     // Get User by User ID we get from decode()
     public async validateUser(decoded: any) {
         const user: User = await this.userRepository.findOne({
-            where: { id: decoded.id },
-            relations: ['role']
+            where: { uuid: decoded.uuid } // Use uuid instead of id
         })
 
         if (!user) {
@@ -35,7 +34,7 @@ export class JwtService {
         return {
             id: user.id,
             uuid: user.uuid,
-            username: user.username,
+            // Remove username: user.username,
             name: user.name,
             email: user.email,
             authProvider: user.authProvider,
@@ -46,7 +45,11 @@ export class JwtService {
 
     // Generate JWT Token
     public generateToken(auth: User): string {
-        return this.jwt.sign({ id: auth.id, email: auth.email })
+        return this.jwt.sign({
+            id: auth.id,
+            uuid: auth.uuid,
+            email: auth.email
+        })
     }
 
     // Validate User's password
