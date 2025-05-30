@@ -1,21 +1,20 @@
 import {
     BaseEntity,
+    BeforeInsert,
     Column,
     CreateDateColumn,
-    DeleteDateColumn,
-    Generated,
     Index,
     PrimaryGeneratedColumn,
     UpdateDateColumn
 } from 'typeorm'
+import { v4 as uuidv4 } from 'uuid'
 
 export class CustomBaseEntity extends BaseEntity {
     @PrimaryGeneratedColumn('increment')
     id: number
 
     @Index({ unique: true })
-    @Column({ unique: true })
-    @Generated('uuid')
+    @Column('uuid')
     uuid: string
 
     @CreateDateColumn()
@@ -24,6 +23,10 @@ export class CustomBaseEntity extends BaseEntity {
     @UpdateDateColumn()
     updatedAt: Date
 
-    @DeleteDateColumn()
-    deletedAt: Date
+    @BeforeInsert()
+    generateUuid() {
+        if (!this.uuid) {
+            this.uuid = uuidv4()
+        }
+    }
 }
