@@ -26,7 +26,12 @@
         "migration:generate": "npm run typeorm -- migration:generate -d src/config/data-source.ts",
         "migration:run": "npm run typeorm -- migration:run -d src/config/data-source.ts",
         "migration:revert": "npm run typeorm -- migration:revert -d src/config/data-source.ts",
-        "schema:drop": "npm run typeorm -- schema:drop -d src/config/data-source.ts"
+        "schema:drop": "npm run typeorm -- schema:drop -d src/config/data-source.ts",
+        "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+        "test:ci": "jest --ci --coverage --maxWorkers=2",
+        "build:prod": "nest build --webpack",
+        "docker:build": "docker build -t nestjs-app .",
+        "docker:run": "docker run -p 3000:3000 --env-file .env nestjs-app"
     },
     "dependencies": {
         "@nestjs-modules/mailer": "^2.0.0",
