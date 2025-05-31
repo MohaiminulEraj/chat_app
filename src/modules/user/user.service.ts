@@ -111,7 +111,7 @@ export class UserService {
                 avatarFile,
                 {
                     folder:
-                        process.env.CLOUDINARY_FOLDER ?? 'kitty' + '/avatars',
+                        (process.env.CLOUDINARY_FOLDER ?? 'kitty') + '/avatars',
                     transformation: {
                         width: 500,
                         height: 500,
