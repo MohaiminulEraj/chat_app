@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
 import { Repository } from 'typeorm'
+import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { CreateUserDto } from './dto/create-user.dto'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { User } from './entities/user.entity'
@@ -14,7 +15,8 @@ import { User } from './entities/user.entity'
 export class UserService {
     constructor(
         @InjectRepository(User)
-        private userRepository: Repository<User>
+        private userRepository: Repository<User>,
+        private cloudinaryService: CloudinaryService
     ) {}
 
     async create(createUserDto: CreateUserDto): Promise<User> {
@@ -79,8 +81,47 @@ export class UserService {
         })
     }
 
-    async update(id: string, updateData: UpdateUserDto): Promise<User> {
+    async update(
+        id: string,
+        updateData: UpdateUserDto,
+        avatarFile?: Express.Multer.File
+    ): Promise<User> {
         const user = await this.findOne(id)
+
+        // Handle avatar upload if file is provided
+        if (avatarFile) {
+            // Delete old avatar if exists
+            if (user.avatarUrl) {
+                try {
+                    // Extract public_id from the URL
+                    const urlParts = user.avatarUrl.split('/')
+                    const publicIdWithExtension = urlParts[urlParts.length - 1]
+                    const publicId = publicIdWithExtension.split('.')[0]
+                    const folderPath = urlParts.slice(-2, -1)[0]
+                    await this.cloudinaryService.deleteFile(
+                        `${folderPath}/${publicId}`
+                    )
+                } catch (error) {
+                    console.error('Failed to delete old avatar:', error)
+                }
+            }
+
+            // Upload new avatar
+            const uploadResult = await this.cloudinaryService.uploadImage(
+                avatarFile,
+                {
+                    folder:
+                        process.env.CLOUDINARY_FOLDER ?? 'kitty' + '/avatars',
+                    transformation: {
+                        width: 500,
+                        height: 500,
+                        crop: 'fill',
+                        gravity: 'face'
+                    }
+                }
+            )
+            updateData.avatarUrl = uploadResult.secure_url
+        }
 
         if (updateData.password) {
             updateData.password = await bcrypt.hash(updateData.password, 10)
