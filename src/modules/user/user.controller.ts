@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     Controller,
     Delete,
@@ -8,11 +9,15 @@ import {
     Patch,
     Query,
     Request,
-    UseGuards
+    UploadedFile,
+    UseGuards,
+    UseInterceptors
 } from '@nestjs/common'
+import { FileInterceptor } from '@nestjs/platform-express'
 import {
     ApiBearerAuth,
     ApiBody,
+    ApiConsumes,
     ApiOperation,
     ApiParam,
     ApiQuery,
@@ -148,14 +153,29 @@ export class UserController {
     @Patch(':id')
     @ApiOperation({
         summary: 'Update user',
-        description: 'Update user information'
+        description: 'Update user information with optional avatar upload'
     })
     @ApiParam({
         name: 'id',
         description: 'User UUID',
-        example: '123e4567-e89b-12d3-a456-426614174000'
+        example: '123e4567-e89b-12d3-a456-426614174000',
+        required: false
     })
-    @ApiBody({ type: UpdateUserDto })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                displayName: { type: 'string', example: 'John Doe' },
+                bio: { type: 'string', example: 'Software Developer' },
+                avatar: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Avatar image file'
+                }
+            }
+        }
+    })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'User updated successfully',
@@ -165,14 +185,91 @@ export class UserController {
         status: HttpStatus.NOT_FOUND,
         description: 'User not found'
     })
+    @UseInterceptors(
+        FileInterceptor('avatar', {
+            fileFilter: (req, file, cb) => {
+                if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+                    return cb(
+                        new BadRequestException('Only image files are allowed'),
+                        false
+                    )
+                }
+                cb(null, true)
+            },
+            limits: {
+                fileSize: 5 * 1024 * 1024 // 5MB limit
+            }
+        })
+    )
     async update(
+        @Request() req: any,
         @Param('id') id: string,
-        @Body() updateUserDto: UpdateUserDto
+        @Body() updateUserDto: UpdateUserDto,
+        @UploadedFile() avatarFile?: Express.Multer.File
     ) {
         return {
             statusCode: HttpStatus.OK,
             message: 'User updated successfully',
-            data: await this.userService.update(id, updateUserDto)
+            data: await this.userService.update(
+                req.user.uuid === id ? req.user.uuid : id,
+                updateUserDto,
+                avatarFile
+            )
+        }
+    }
+
+    @Patch('profile/avatar')
+    @ApiOperation({
+        summary: 'Update current user avatar',
+        description: 'Update the avatar of the authenticated user'
+    })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                avatar: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Avatar image file'
+                }
+            },
+            required: ['avatar']
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Avatar updated successfully',
+        type: User
+    })
+    @UseInterceptors(
+        FileInterceptor('avatar', {
+            fileFilter: (req, file, cb) => {
+                if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+                    return cb(
+                        new BadRequestException('Only image files are allowed'),
+                        false
+                    )
+                }
+                cb(null, true)
+            },
+            limits: {
+                fileSize: 5 * 1024 * 1024 // 5MB limit
+            }
+        })
+    )
+    async updateProfileAvatar(
+        @Request() req: any,
+        @UploadedFile() avatarFile: Express.Multer.File
+    ) {
+        if (!avatarFile) {
+            throw new BadRequestException('Avatar file is required')
+        }
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Avatar updated successfully',
+            data: await this.userService.update(req.user.uuid, {}, avatarFile)
         }
     }
 
