@@ -8,10 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { v4 as uuidv4 } from 'uuid'
 import { CloudinaryService } from '../cloudinary/cloudinary.service'
+import { CreateGroupDto } from './dto/create-group.dto'
 import { GroupMember } from './entities/group-member.entity'
 import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
 import { Group } from './entities/group.entity'
+import { GroupCategory } from './group.constants'
 
 @Injectable()
 export class GroupService {
@@ -29,8 +31,9 @@ export class GroupService {
 
     async createGroup(
         ownerId: string,
-        data: any,
-        avatarFile?: Express.Multer.File
+        data: CreateGroupDto,
+        avatarFile?: Express.Multer.File,
+        flagFile?: Express.Multer.File
     ): Promise<Group> {
         // Validate members don't include owner
         if (data.memberIds && data.memberIds.includes(ownerId)) {
@@ -62,20 +65,33 @@ export class GroupService {
             }
         }
 
+        // Handle flag upload if file is provided
+        let flagUrl: string | undefined
+        if (flagFile) {
+            try {
+                const flagResult = await this.cloudinaryService.uploadImage(
+                    flagFile,
+                    {
+                        folder: 'group-flags'
+                    }
+                )
+                flagUrl = flagResult.secure_url
+            } catch {
+                // ignore flag upload failure
+            }
+        }
         // Create group
         const group = this.groupRepository.create({
             ...data,
             ownerId,
-            avatarUrl: avatarUrl || data.avatarUrl,
-            inviteCode: data.isPublic ? uuidv4() : null
+            avatarUrl,
+            flagUrl,
+            inviteCode: data.isPublic ? uuidv4() : null,
+            lastActiveAt: new Date()
         })
+        const savedGroup = await this.groupRepository.save(group)
+        const groupId = savedGroup.uuid
 
-        const savedGroup = (await this.groupRepository.save(group)) as
-            | Group
-            | Group[]
-        const groupId = Array.isArray(savedGroup)
-            ? savedGroup[0].uuid
-            : savedGroup.uuid
         // Create default roles
         await this.createDefaultRoles(groupId)
         // Create group settings
@@ -92,7 +108,7 @@ export class GroupService {
 
         // Add owner as super admin
         const ownerRole = await this.roleRepository.findOne({
-            where: { groupId: groupId, name: 'Owner' }
+            where: { groupId: groupId, name: 'Group Owner' }
         })
 
         const ownerMember = this.memberRepository.create({
@@ -120,14 +136,14 @@ export class GroupService {
         }
 
         // Return the actual group entity
-        return Array.isArray(savedGroup) ? savedGroup[0] : savedGroup
+        return savedGroup
     }
 
     async createDefaultRoles(groupId: string): Promise<void> {
         const defaultRoles = [
             {
                 groupId,
-                name: 'Owner',
+                name: 'Group Owner',
                 priority: 100,
                 permissions: {
                     manageGroup: true,
@@ -142,6 +158,24 @@ export class GroupService {
                     banMembers: true
                 },
                 color: '#FF0000'
+            },
+            {
+                groupId,
+                name: 'Super Admin',
+                priority: 90,
+                permissions: {
+                    manageGroup: true,
+                    manageRoles: true,
+                    manageMembers: true,
+                    manageRooms: true,
+                    sendMessages: true,
+                    deleteMessages: true,
+                    mentionEveryone: true,
+                    createInvites: true,
+                    kickMembers: true,
+                    banMembers: true
+                },
+                color: '#FF6B00'
             },
             {
                 groupId,
@@ -163,21 +197,21 @@ export class GroupService {
             },
             {
                 groupId,
-                name: 'Moderator',
+                name: 'VIP Member',
                 priority: 60,
                 permissions: {
                     manageGroup: false,
                     manageRoles: false,
                     manageMembers: false,
-                    manageRooms: true,
+                    manageRooms: false,
                     sendMessages: true,
-                    deleteMessages: true,
-                    mentionEveryone: false,
+                    deleteMessages: false,
+                    mentionEveryone: true,
                     createInvites: true,
-                    kickMembers: true,
+                    kickMembers: false,
                     banMembers: false
                 },
-                color: '#0000FF'
+                color: '#FFD700'
             },
             {
                 groupId,
@@ -597,5 +631,119 @@ export class GroupService {
 
         group.avatarUrl = uploadResult.secure_url
         return await this.groupRepository.save(group)
+    }
+
+    // Add methods to get groups by calculated categories
+    async getGroupsByCategory(
+        category: GroupCategory,
+        limit: number = 20
+    ): Promise<Group[]> {
+        switch (category) {
+            case GroupCategory.POPULAR:
+                return this.getPopularGroups(limit)
+            case GroupCategory.RECOMMENDED:
+                return this.getRecommendedGroups(limit)
+            case GroupCategory.COUNTRY:
+            default:
+                return this.getCountryGroups(limit)
+        }
+    }
+
+    async getPopularGroups(limit: number = 20): Promise<Group[]> {
+        // Groups with highest user engagement (visits + active users)
+        return this.groupRepository
+            .createQueryBuilder('group')
+            .leftJoinAndSelect('group.members', 'members')
+            .leftJoinAndSelect('group.owner', 'owner')
+            .addSelect(
+                '(group.totalVisits + group.activeUsersCount * 10)',
+                'popularity_score'
+            )
+            .where('group.isPublic = :isPublic', { isPublic: true })
+            .orderBy('popularity_score', 'DESC')
+            .limit(limit)
+            .getMany()
+    }
+
+    async getRecommendedGroups(limit: number = 20): Promise<Group[]> {
+        // Groups with highest gift transaction activity
+        return this.groupRepository
+            .createQueryBuilder('group')
+            .leftJoinAndSelect('group.members', 'members')
+            .leftJoinAndSelect('group.owner', 'owner')
+            .where('group.isPublic = :isPublic', { isPublic: true })
+            .andWhere('group.giftTransactionCount > :minTransactions', {
+                minTransactions: 0
+            })
+            .orderBy('group.giftTransactionCount', 'DESC')
+            .addOrderBy('group.totalGiftValue', 'DESC')
+            .limit(limit)
+            .getMany()
+    }
+
+    async getCountryGroups(limit: number = 20): Promise<Group[]> {
+        // All groups grouped by country/location
+        return this.groupRepository
+            .createQueryBuilder('group')
+            .leftJoinAndSelect('group.members', 'members')
+            .leftJoinAndSelect('group.owner', 'owner')
+            .where('group.isPublic = :isPublic', { isPublic: true })
+            .andWhere('group.location IS NOT NULL')
+            .orderBy('group.location', 'ASC')
+            .addOrderBy('group.createdAt', 'DESC')
+            .limit(limit)
+            .getMany()
+    }
+
+    // Method to update group engagement metrics
+    async updateGroupEngagement(
+        groupId: string,
+        type: 'visit' | 'gift_transaction',
+        value?: number
+    ): Promise<void> {
+        const group = await this.groupRepository.findOne({
+            where: { uuid: groupId }
+        })
+        if (!group) return
+
+        switch (type) {
+            case 'visit':
+                group.totalVisits += 1
+                group.lastActiveAt = new Date()
+                break
+            case 'gift_transaction':
+                group.giftTransactionCount += 1
+                if (value) {
+                    group.totalGiftValue = Number(group.totalGiftValue) + value
+                }
+                group.lastActiveAt = new Date()
+                break
+        }
+
+        await this.groupRepository.save(group)
+    }
+
+    // Method to update active users count (call this when users join/leave rooms)
+    async updateActiveUsersCount(groupId: string): Promise<void> {
+        const activeCount = await this.memberRepository
+            .createQueryBuilder('member')
+            .leftJoin('member.user', 'user')
+            .where('member.groupId = :groupId', { groupId })
+            .andWhere('user.status IN (:...statuses)', {
+                statuses: ['online', 'away']
+            })
+            .getCount()
+
+        await this.groupRepository.update(
+            { uuid: groupId },
+            { activeUsersCount: activeCount }
+        )
+    }
+
+    async getGroupRoles(groupId: string): Promise<GroupRole[]> {
+        return this.roleRepository.find({
+            where: { groupId },
+            order: { priority: 'DESC' }
+        })
     }
 }

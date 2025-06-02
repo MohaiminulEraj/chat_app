@@ -12,10 +12,14 @@ import {
     Query,
     Request,
     UploadedFile,
+    UploadedFiles,
     UseGuards,
     UseInterceptors
 } from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
+import {
+    FileFieldsInterceptor,
+    FileInterceptor
+} from '@nestjs/platform-express'
 import {
     ApiBearerAuth,
     ApiBody,
@@ -30,8 +34,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { CreateGroupDto } from './dto/create-group.dto'
 import { UpdateGroupSettingsDto } from './dto/update-group-settings.dto'
 import { GroupMember } from './entities/group-member.entity'
+import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
 import { Group } from './entities/group.entity'
+import { GroupCategory } from './group.constants'
 import { GroupService } from './group.service'
 
 @ApiTags('👥 Groups')
@@ -67,6 +73,11 @@ export class GroupController {
                     type: 'string',
                     format: 'binary',
                     description: 'Group avatar image file'
+                },
+                flag: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Group flag image file'
                 }
             },
             required: ['name']
@@ -82,26 +93,20 @@ export class GroupController {
         description: 'Cannot add yourself as a member'
     })
     @UseInterceptors(
-        FileInterceptor('avatar', {
-            fileFilter: (req, file, cb) => {
-                if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-                    return cb(
-                        new BadRequestException('Only image files are allowed'),
-                        false
-                    )
-                }
-                cb(null, true)
-            },
-            limits: {
-                fileSize: 2 * 1024 * 1024 // Reduced to 2MB limit for faster uploads
-            }
-        })
+        FileFieldsInterceptor([
+            { name: 'avatar', maxCount: 1 },
+            { name: 'flag', maxCount: 1 }
+        ])
     )
     async create(
         @Request() req: any,
         @Body() createGroupDto: CreateGroupDto,
-        @UploadedFile() avatarFile?: Express.Multer.File
+        @UploadedFiles()
+        files: { avatar?: Express.Multer.File[]; flag?: Express.Multer.File[] }
     ) {
+        const avatarFile = files.avatar?.[0]
+        const flagFile = files.flag?.[0]
+
         // Parse memberIds if it's a string (from multipart/form-data)
         if (
             typeof createGroupDto.memberIds === 'string' &&
@@ -121,7 +126,8 @@ export class GroupController {
             const data = await this.groupService.createGroup(
                 req.user.uuid,
                 createGroupDto,
-                avatarFile
+                avatarFile,
+                flagFile
             )
             return {
                 statusCode: HttpStatus.CREATED,
@@ -626,6 +632,66 @@ export class GroupController {
         return {
             statusCode: HttpStatus.OK,
             message: 'Group avatar updated successfully',
+            data
+        }
+    }
+
+    @Get('categories/:category')
+    @ApiOperation({
+        summary: 'Get groups by category',
+        description:
+            'Get groups categorized as Country, Popular, or Recommended'
+    })
+    @ApiParam({
+        name: 'category',
+        description: 'Group category',
+        enum: GroupCategory
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        description: 'Number of groups to return',
+        example: 20
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Groups by category retrieved successfully',
+        type: [Group]
+    })
+    async getGroupsByCategory(
+        @Param('category') category: GroupCategory,
+        @Query('limit') limit: number = 20
+    ) {
+        const data = await this.groupService.getGroupsByCategory(
+            category,
+            limit
+        )
+        return {
+            statusCode: HttpStatus.OK,
+            message: `${category} groups fetched successfully`,
+            data
+        }
+    }
+
+    @Get(':id/roles')
+    @ApiOperation({
+        summary: 'Get group roles',
+        description: 'Get all roles available in a specific group'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Group UUID'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'List of group roles',
+        type: [GroupRole]
+    })
+    async getRoles(@Param('id') groupId: string) {
+        const data = await this.groupService.getGroupRoles(groupId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Group roles fetched successfully',
             data
         }
     }

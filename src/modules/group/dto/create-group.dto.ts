@@ -82,4 +82,34 @@ export class CreateGroupDto {
     })
     @IsOptional()
     avatar?: any
+
+    @ApiProperty({
+        description: 'Country or city name',
+        example: 'Germany',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    location?: string
+
+    @ApiProperty({ description: 'Latitude', example: 51.1657, required: false })
+    @IsOptional()
+    latitude?: number
+
+    @ApiProperty({
+        description: 'Longitude',
+        example: 10.4515,
+        required: false
+    })
+    @IsOptional()
+    longitude?: number
+
+    @ApiProperty({
+        description: 'Flag image file (binary)',
+        type: 'string',
+        format: 'binary',
+        required: false
+    })
+    @IsOptional()
+    flag?: any
 }
