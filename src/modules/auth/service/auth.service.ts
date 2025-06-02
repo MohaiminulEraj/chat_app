@@ -58,10 +58,7 @@ export class AuthService {
         const user: User = await this.getAUser(searchCondition)
 
         if (!user) {
-            throw new HttpException(
-                'Invalid User credentials',
-                HttpStatus.BAD_REQUEST
-            )
+            throw new HttpException('User not found', HttpStatus.NOT_FOUND)
         }
         try {
             const isPasswordValid: boolean = this.jwtService.isPasswordValid(
