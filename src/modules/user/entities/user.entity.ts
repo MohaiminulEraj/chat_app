@@ -13,7 +13,7 @@ export class User extends CustomBaseEntity {
     @Index()
     email: string
 
-    @Column({ select: false })
+    @Column({ type: 'varchar', select: false })
     password: string
 
     @Column({ nullable: true })
