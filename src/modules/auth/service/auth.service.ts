@@ -142,11 +142,11 @@ export class AuthService {
                 await this.userRepository.save(userToRegister)
 
             // GENERATE A VERIFICATION CODE AND SEND MAIL
-            const verificationCodeSenderDto = new VerificationCodeSenderDto()
-            verificationCodeSenderDto.email = registrationDto.email
-            await this.generateEmailVerificationCode(verificationCodeSenderDto)
+            // const verificationCodeSenderDto = new VerificationCodeSenderDto()
+            // verificationCodeSenderDto.email = registrationDto.email
+            // await this.generateEmailVerificationCode(verificationCodeSenderDto)
 
-            return registeredUser
+            return await this.unifiedAuthResponse(registeredUser)
         } catch (error) {
             console.log(error)
             throw new HttpException(
