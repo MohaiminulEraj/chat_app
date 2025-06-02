@@ -14,9 +14,7 @@ import { EmailService } from './modules/email/services/email.service'
 import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
 import { GroupModule } from './modules/group/group.module'
-import { OtpModule } from './modules/otp/otp.module' // Import OtpModule
-import { RoomModule } from './modules/room/room.module' // Import RoomModule
-import { UploadModule } from './modules/upload/upload.module'
+import { RoomModule } from './modules/room/room.module'
 import { WebsocketModule } from './modules/websocket/websocket.module'
 @Module({
     imports: [
@@ -59,10 +57,10 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         GroupModule,
         WebsocketModule,
         CloudinaryModule,
-        UploadModule,
+        // UploadModule,
         RoomModule, // Add RoomModule to imports
-        GiftModule, // Add GiftModule to imports
-        OtpModule // Add OtpModule to imports
+        GiftModule // Add GiftModule to imports
+        // OtpModule // Add OtpModule to imports
         // MongooseModule.forRoot(
         //     process.env.MONGODB_URI || 'mongodb://localhost:27017/imo_chat'
         // )
