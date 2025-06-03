@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
     UploadApiErrorResponse,
@@ -20,6 +20,7 @@ export interface CloudinaryResponse {
 @Injectable()
 export class CloudinaryService {
     private folder: string
+    private readonly logger = new Logger(CloudinaryService.name)
 
     constructor(
         @Inject('CLOUDINARY') private cloudinary: typeof cloudinaryV2,
@@ -46,11 +47,11 @@ export class CloudinaryService {
 
             const uploadStream = this.cloudinary.uploader.upload_stream(
                 uploadOptions,
-                (error: UploadApiErrorResponse, result: UploadApiResponse) => {
-                    if (error) {
-                        reject(
+                (err, result) => {
+                    if (err) {
+                        return reject(
                             new BadRequestException(
-                                `Failed to upload image: ${error.message}`
+                                `Failed to upload image: ${err.message}`
                             )
                         )
                     }

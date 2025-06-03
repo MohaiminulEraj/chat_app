@@ -1,7 +1,11 @@
 import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
+import { GroupMember } from 'src/modules/group/entities/group-member.entity'
+import { Group } from 'src/modules/group/entities/group.entity'
+import { RoomParticipant } from 'src/modules/room/entities/room-participant.entity'
 import { Column, Entity, Index, OneToMany } from 'typeorm'
 import { LoginLog } from '../../auth/entities/login-log.entity'
 import { Friendship } from '../../friendship/entities/friendship.entity'
+import { Gift } from '../../gift/entities/gift.entity'
 
 @Entity('users')
 export class User extends CustomBaseEntity {
@@ -9,7 +13,7 @@ export class User extends CustomBaseEntity {
     @Index()
     email: string
 
-    @Column({ select: false })
+    @Column({ type: 'varchar', select: false })
     password: string
 
     @Column({ nullable: true })
@@ -74,18 +78,18 @@ export class User extends CustomBaseEntity {
     @OneToMany(() => LoginLog, (loginLog) => loginLog.user)
     loginLogs: LoginLog[]
 
-    // @OneToMany(() => GroupMember, (member) => member.user)
-    // groupMemberships: GroupMember[]
+    @OneToMany(() => GroupMember, (member) => member.user)
+    groupMemberships: GroupMember[]
 
-    // @OneToMany(() => Group, (group) => group.owner)
-    // ownedGroups: Group[]
+    @OneToMany(() => Group, (group) => group.owner)
+    ownedGroups: Group[]
 
-    // @OneToMany(() => RoomParticipant, (participant) => participant.user)
-    // roomParticipations: RoomParticipant[]
+    @OneToMany(() => RoomParticipant, (participant) => participant.user)
+    roomParticipations: RoomParticipant[]
 
-    // @OneToMany(() => GiftTransaction, (transaction) => transaction.sender)
-    // sentGifts: GiftTransaction[]
+    @OneToMany(() => Gift, (gift) => gift.sender)
+    sentGifts: Gift[]
 
-    // @OneToMany(() => GiftTransaction, (transaction) => transaction.receiver)
-    // receivedGifts: GiftTransaction[]
+    @OneToMany(() => Gift, (gift) => gift.receiver)
+    receivedGifts: Gift[]
 }

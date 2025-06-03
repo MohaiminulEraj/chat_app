@@ -30,6 +30,6 @@ import { JwtStrategy } from './strategy/jwt.strategy'
         ConfigService,
         EmailService
     ],
-    exports: [AuthService]
+    exports: [AuthService, JwtModule] // Export AuthService and JwtModule
 })
 export class AuthModule {}

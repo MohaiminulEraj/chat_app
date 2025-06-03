@@ -4,14 +4,17 @@ import { ConfigModule } from '@nestjs/config'
 import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { TypeOrmModule } from '@nestjs/typeorm'
-import { typeOrmAsyncConfig } from 'src/config/typeorm.config'
 import { UserModule } from 'src/modules/user/user.module'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import smtpConfig from './config/smtp.config'
 import { AuthModule } from './modules/auth/auth.module'
+import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
 import { EmailService } from './modules/email/services/email.service'
 import { FriendshipModule } from './modules/friendship/friendship.module'
+import { GiftModule } from './modules/gift/gift.module'
+import { GroupModule } from './modules/group/group.module'
+import { RoomModule } from './modules/room/room.module'
 import { WebsocketModule } from './modules/websocket/websocket.module'
 @Module({
     imports: [
@@ -36,12 +39,28 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
             })
         }),
         MailerModule.forRootAsync(smtpConfig),
-        TypeOrmModule.forRootAsync(typeOrmAsyncConfig),
+        TypeOrmModule.forRoot({
+            type: 'postgres',
+            host: process.env.DB_HOST,
+            port: +process.env.DB_PORT,
+            username: process.env.DB_USERNAME,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+            autoLoadEntities: true,
+            synchronize: true, // dev only: sync schema from entities
+            dropSchema: false // dev only: drop & recreate database on each run
+        }),
         ScheduleModule.forRoot(),
         AuthModule,
         UserModule,
         FriendshipModule,
-        WebsocketModule
+        GroupModule,
+        WebsocketModule,
+        CloudinaryModule,
+        // UploadModule,
+        RoomModule, // Add RoomModule to imports
+        GiftModule // Add GiftModule to imports
+        // OtpModule // Add OtpModule to imports
         // MongooseModule.forRoot(
         //     process.env.MONGODB_URI || 'mongodb://localhost:27017/imo_chat'
         // )

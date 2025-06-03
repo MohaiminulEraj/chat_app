@@ -58,10 +58,7 @@ export class AuthService {
         const user: User = await this.getAUser(searchCondition)
 
         if (!user) {
-            throw new HttpException(
-                'Invalid User credentials',
-                HttpStatus.BAD_REQUEST
-            )
+            throw new HttpException('User not found', HttpStatus.NOT_FOUND)
         }
         try {
             const isPasswordValid: boolean = this.jwtService.isPasswordValid(
@@ -145,11 +142,11 @@ export class AuthService {
                 await this.userRepository.save(userToRegister)
 
             // GENERATE A VERIFICATION CODE AND SEND MAIL
-            const verificationCodeSenderDto = new VerificationCodeSenderDto()
-            verificationCodeSenderDto.email = registrationDto.email
-            await this.generateEmailVerificationCode(verificationCodeSenderDto)
+            // const verificationCodeSenderDto = new VerificationCodeSenderDto()
+            // verificationCodeSenderDto.email = registrationDto.email
+            // await this.generateEmailVerificationCode(verificationCodeSenderDto)
 
-            return registeredUser
+            return await this.unifiedAuthResponse(registeredUser)
         } catch (error) {
             console.log(error)
             throw new HttpException(
