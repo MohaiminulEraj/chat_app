@@ -1,0 +1,352 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Chat Test Client</title>
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            .user-section {
+                border: 1px solid #ccc;
+                padding: 20px;
+                margin: 10px 0;
+            }
+            .messages {
+                height: 300px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                padding: 10px;
+                margin: 10px 0;
+            }
+            .message {
+                margin: 5px 0;
+                padding: 5px;
+            }
+            .sent {
+                background: #e3f2fd;
+                text-align: right;
+            }
+            .received {
+                background: #f5f5f5;
+            }
+            input,
+            button {
+                margin: 5px;
+                padding: 5px;
+            }
+            .status {
+                color: green;
+                font-weight: bold;
+            }
+            .offline {
+                color: red;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Real-Time Chat Test Client</h1>
+
+            <!-- User 1 Section -->
+            <div class="user-section">
+                <h2>User 1</h2>
+                <div>
+                    <input
+                        type="text"
+                        id="token1"
+                        placeholder="JWT Token"
+                        style="width: 300px"
+                    />
+                    <button onclick="connectUser1()">Connect</button>
+                    <span id="status1" class="status offline"
+                        >Disconnected</span
+                    >
+                </div>
+                <div>
+                    <input
+                        type="text"
+                        id="recipient1"
+                        placeholder="Recipient UUID"
+                        style="width: 300px"
+                    />
+                </div>
+                <div class="messages" id="messages1"></div>
+                <div>
+                    <input
+                        type="text"
+                        id="message1"
+                        placeholder="Type a message..."
+                        style="width: 300px"
+                    />
+                    <button onclick="sendMessage1()">Send</button>
+                </div>
+            </div>
+
+            <!-- User 2 Section -->
+            <div class="user-section">
+                <h2>User 2</h2>
+                <div>
+                    <input
+                        type="text"
+                        id="token2"
+                        placeholder="JWT Token"
+                        style="width: 300px"
+                    />
+                    <button onclick="connectUser2()">Connect</button>
+                    <span id="status2" class="status offline"
+                        >Disconnected</span
+                    >
+                </div>
+                <div>
+                    <input
+                        type="text"
+                        id="recipient2"
+                        placeholder="Recipient UUID"
+                        style="width: 300px"
+                    />
+                </div>
+                <div class="messages" id="messages2"></div>
+                <div>
+                    <input
+                        type="text"
+                        id="message2"
+                        placeholder="Type a message..."
+                        style="width: 300px"
+                    />
+                    <button onclick="sendMessage2()">Send</button>
+                </div>
+            </div>
+
+            <h3>Event Log</h3>
+            <div
+                id="eventLog"
+                style="
+                    height: 200px;
+                    overflow-y: auto;
+                    border: 1px solid #ddd;
+                    padding: 10px;
+                "
+            ></div>
+        </div>
+
+        <script>
+            let socket1, socket2
+            let user1Id, user2Id
+
+            function log(message) {
+                const eventLog = document.getElementById('eventLog')
+                eventLog.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`
+                eventLog.scrollTop = eventLog.scrollHeight
+            }
+
+            function connectUser1() {
+                const token = document.getElementById('token1').value
+
+                socket1 = io('http://localhost:3000/chat', {
+                    transports: ['websocket']
+                })
+
+                socket1.on('connect', () => {
+                    log('User 1: Connected to server')
+                    document.getElementById('status1').textContent = 'Connected'
+                    document
+                        .getElementById('status1')
+                        .classList.remove('offline')
+
+                    // Authenticate
+                    socket1.emit('authenticate', { token }, (response) => {
+                        if (response.success) {
+                            user1Id = response.userId
+                            log(`User 1: Authenticated as ${user1Id}`)
+                        }
+                    })
+                })
+
+                socket1.on('newMessage', (data) => {
+                    log(
+                        `User 1: Received message in conversation ${data.conversation}`
+                    )
+                    displayMessage(
+                        'messages1',
+                        data.message,
+                        data.message.senderId === user1Id
+                    )
+                })
+
+                socket1.on('userStatusChanged', (data) => {
+                    log(`User status changed: ${data.userId} is ${data.status}`)
+                })
+
+                socket1.on('messagesRead', (data) => {
+                    log(`User 1: Messages read by ${data.readBy}`)
+                })
+
+                socket1.on('userTyping', (data) => {
+                    log(
+                        `User 1: ${data.userId} is ${data.isTyping ? 'typing' : 'stopped typing'}`
+                    )
+                })
+
+                socket1.on('disconnect', () => {
+                    document.getElementById('status1').textContent =
+                        'Disconnected'
+                    document.getElementById('status1').classList.add('offline')
+                })
+            }
+
+            function connectUser2() {
+                const token = document.getElementById('token2').value
+
+                socket2 = io('http://localhost:3000/chat', {
+                    transports: ['websocket']
+                })
+
+                socket2.on('connect', () => {
+                    log('User 2: Connected to server')
+                    document.getElementById('status2').textContent = 'Connected'
+                    document
+                        .getElementById('status2')
+                        .classList.remove('offline')
+
+                    // Authenticate
+                    socket2.emit('authenticate', { token }, (response) => {
+                        if (response.success) {
+                            user2Id = response.userId
+                            log(`User 2: Authenticated as ${user2Id}`)
+                        }
+                    })
+                })
+
+                socket2.on('newMessage', (data) => {
+                    log(
+                        `User 2: Received message in conversation ${data.conversation}`
+                    )
+                    displayMessage(
+                        'messages2',
+                        data.message,
+                        data.message.senderId === user2Id
+                    )
+                })
+
+                socket2.on('userStatusChanged', (data) => {
+                    log(`User status changed: ${data.userId} is ${data.status}`)
+                })
+
+                socket2.on('messagesRead', (data) => {
+                    log(`User 2: Messages read by ${data.readBy}`)
+                })
+
+                socket2.on('userTyping', (data) => {
+                    log(
+                        `User 2: ${data.userId} is ${data.isTyping ? 'typing' : 'stopped typing'}`
+                    )
+                })
+
+                socket2.on('disconnect', () => {
+                    document.getElementById('status2').textContent =
+                        'Disconnected'
+                    document.getElementById('status2').classList.add('offline')
+                })
+            }
+
+            function displayMessage(containerId, message, isSent) {
+                const container = document.getElementById(containerId)
+                const messageDiv = document.createElement('div')
+                messageDiv.className = `message ${isSent ? 'sent' : 'received'}`
+                messageDiv.innerHTML = `
+                <strong>${isSent ? 'You' : message.senderId}:</strong> ${message.content}
+                <br><small>${new Date(message.createdAt).toLocaleTimeString()}</small>
+            `
+                container.appendChild(messageDiv)
+                container.scrollTop = container.scrollHeight
+            }
+
+            function sendMessage1() {
+                const content = document.getElementById('message1').value
+                const recipientId = document.getElementById('recipient1').value
+
+                if (!content || !recipientId) return
+
+                socket1.emit(
+                    'sendMessage',
+                    {
+                        recipientId: recipientId,
+                        type: 'text',
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 1: Message sent successfully')
+                            document.getElementById('message1').value = ''
+                        } else {
+                            log(
+                                `User 1: Error sending message: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            function sendMessage2() {
+                const content = document.getElementById('message2').value
+                const recipientId = document.getElementById('recipient2').value
+
+                if (!content || !recipientId) return
+
+                socket2.emit(
+                    'sendMessage',
+                    {
+                        recipientId: recipientId,
+                        type: 'text',
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 2: Message sent successfully')
+                            document.getElementById('message2').value = ''
+                        } else {
+                            log(
+                                `User 2: Error sending message: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Test typing indicator
+            document
+                .getElementById('message1')
+                .addEventListener('input', (e) => {
+                    if (
+                        socket1 &&
+                        document.getElementById('recipient1').value
+                    ) {
+                        socket1.emit('typing', {
+                            conversationId: 'CONVERSATION_ID', // You'll need to get this from the sendMessage response
+                            isTyping: e.target.value.length > 0
+                        })
+                    }
+                })
+
+            document
+                .getElementById('message2')
+                .addEventListener('input', (e) => {
+                    if (
+                        socket2 &&
+                        document.getElementById('recipient2').value
+                    ) {
+                        socket2.emit('typing', {
+                            conversationId: 'CONVERSATION_ID', // You'll need to get this from the sendMessage response
+                            isTyping: e.target.value.length > 0
+                        })
+                    }
+                })
+        </script>
+    </body>
+</html>
