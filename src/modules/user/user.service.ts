@@ -67,17 +67,10 @@ export class UserService {
     }
 
     async findAll(): Promise<User[]> {
-        return await this.userRepository.find({
-            where: { isActive: true },
-            select: [
-                'id',
-                'uuid',
-                'email',
-                'displayName',
-                'avatarUrl',
-                'status',
-                'lastSeen'
-            ]
+        // Instead of using select with potentially incorrect property names,
+        // fetch all users and let TypeORM handle the property mapping
+        return this.userRepository.find({
+            where: { isActive: true }
         })
     }
 
@@ -135,14 +128,17 @@ export class UserService {
     async updateStatus(
         id: string,
         status: 'online' | 'offline' | 'away' | 'busy'
-    ): Promise<void> {
-        await this.userRepository.update(
-            { uuid: id },
-            {
-                status,
-                lastSeen: status === 'offline' ? new Date() : null
-            }
-        )
+    ): Promise<User> {
+        const user = await this.userRepository.findOne({ where: { uuid: id } })
+
+        if (!user) {
+            throw new NotFoundException('User not found')
+        }
+
+        user.status = status
+        user.lastSeenAt = new Date()
+
+        return await this.userRepository.save(user)
     }
 
     async remove(id: string): Promise<void> {
