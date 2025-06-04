@@ -1,6 +1,7 @@
 import { MailerModule } from '@nestjs-modules/mailer'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { MongooseModule } from '@nestjs/mongoose'
 import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { TypeOrmModule } from '@nestjs/typeorm'
@@ -10,6 +11,7 @@ import { AppService } from './app.service'
 import smtpConfig from './config/smtp.config'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
+import { ConversationModule } from './modules/conversation/conversation.module'
 import { EmailService } from './modules/email/services/email.service'
 import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
@@ -59,11 +61,20 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         CloudinaryModule,
         // UploadModule,
         RoomModule, // Add RoomModule to imports
-        GiftModule // Add GiftModule to imports
+        GiftModule, // Add GiftModule to imports
+        ConversationModule,
         // OtpModule // Add OtpModule to imports
-        // MongooseModule.forRoot(
-        //     process.env.MONGODB_URI || 'mongodb://localhost:27017/imo_chat'
-        // )
+        MongooseModule.forRoot('mongodb://localhost:27017/nestjs-chat', {
+            connectionFactory: (connection) => {
+                connection.on('connected', () => {
+                    console.log('MongoDB connected successfully')
+                })
+                connection.on('error', (error) => {
+                    console.error('MongoDB connection error:', error)
+                })
+                return connection
+            }
+        })
     ],
     controllers: [AppController],
     providers: [AppService, EmailService],

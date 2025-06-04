@@ -5,10 +5,14 @@ import {
     VersioningType
 } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
+import { IoAdapter } from '@nestjs/platform-socket.io'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module'
+
 async function bootstrap() {
-    const app = await NestFactory.create(AppModule)
+    const app = await NestFactory.create(AppModule, {
+        logger: ['error', 'warn', 'log', 'debug', 'verbose']
+    })
 
     // Global validation pipe
     app.useGlobalPipes(
@@ -54,17 +58,19 @@ async function bootstrap() {
     // Enable CORS for all origins
     app.enableCors({
         origin: '*',
-        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-        credentials: true
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
     })
+
+    // Configure WebSocket adapter with proper CORS settings
+    app.useWebSocketAdapter(new IoAdapter(app))
 
     const port = process.env.PORT || 3000
     await app.listen(port)
 
-    console.log(`🚀 Application is running on: http://localhost:${port}`)
-    console.log(
-        `📚 API Documentation available at: http://localhost:${port}/docs`
-    )
+    console.log(`Application is running on: http://localhost:${port}`)
+    console.log(`WebSocket endpoints available at: ws://localhost:${port}`)
 }
 
 bootstrap()
