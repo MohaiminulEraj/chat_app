@@ -73,7 +73,7 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         GiftModule, // Add GiftModule to imports
         ConversationModule,
         // OtpModule // Add OtpModule to imports
-        MongooseModule.forRoot('mongodb://localhost:27017/nestjs-chat', {
+        MongooseModule.forRoot(process.env.MONGO_URI, {
             connectionFactory: (connection) => {
                 connection.on('connected', () => {
                     console.log('MongoDB connected successfully')
