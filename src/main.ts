@@ -8,6 +8,7 @@ import { NestFactory } from '@nestjs/core'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module'
+import { PerformanceInterceptor } from './common/interceptors/performance.interceptor'
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule, {
@@ -65,6 +66,9 @@ async function bootstrap() {
 
     // Configure WebSocket adapter with proper CORS settings
     app.useWebSocketAdapter(new IoAdapter(app))
+
+    // Add global interceptors
+    app.useGlobalInterceptors(new PerformanceInterceptor())
 
     const port = process.env.PORT || 3000
     await app.listen(port)

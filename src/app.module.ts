@@ -1,6 +1,12 @@
 import { MailerModule } from '@nestjs-modules/mailer'
-import { Module } from '@nestjs/common'
+import {
+    MiddlewareConsumer,
+    Module,
+    NestModule,
+    RequestMethod
+} from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { APP_INTERCEPTOR } from '@nestjs/core'
 import { MongooseModule } from '@nestjs/mongoose'
 import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule } from '@nestjs/throttler'
@@ -8,6 +14,9 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { UserModule } from 'src/modules/user/user.module'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor'
+import { LoggerMiddleware } from './common/middleware/logger.middleware'
+import { RequestContextMiddleware } from './common/middleware/request-context.middleware'
 import smtpConfig from './config/smtp.config'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
@@ -77,7 +86,24 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         })
     ],
     controllers: [AppController],
-    providers: [AppService, EmailService],
+    providers: [
+        AppService,
+        EmailService,
+        {
+            provide: APP_INTERCEPTOR,
+            useClass: LoggingInterceptor
+        }
+    ],
     exports: [TypeOrmModule]
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+    configure(consumer: MiddlewareConsumer) {
+        consumer
+            .apply(RequestContextMiddleware, LoggerMiddleware)
+            .exclude(
+                { path: 'auth/login', method: RequestMethod.POST },
+                { path: 'auth/registration', method: RequestMethod.POST }
+            )
+            .forRoutes('*') // Apply to all routes
+    }
+}
