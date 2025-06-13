@@ -25,11 +25,15 @@ export class User extends CustomBaseEntity {
     @Column({ nullable: true })
     bio: string
 
-    @Column({ default: 'offline' })
+    @Column({
+        type: 'enum',
+        enum: ['online', 'offline', 'away', 'busy'],
+        default: 'offline'
+    })
     status: 'online' | 'offline' | 'away' | 'busy'
 
     @Column({ type: 'timestamp', nullable: true })
-    lastSeen: Date
+    lastSeenAt: Date
 
     @Column({ default: true })
     isActive: boolean

@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Simple Chat Test</title>
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>WebSocket Connection Test</h1>
+        <div id="status">Not connected</div>
+        <button onclick="connect()">Connect</button>
+        <div id="log"></div>
+
+        <script>
+            let socket
+
+            function log(message) {
+                const logDiv = document.getElementById('log')
+                logDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`
+            }
+
+            function connect() {
+                // First, let's try connecting without namespace
+                const testSocket = io('http://localhost:3000', {
+                    transports: ['websocket', 'polling']
+                })
+
+                testSocket.on('connect', () => {
+                    log('Connected to main namespace')
+                    testSocket.disconnect()
+
+                    // Now try the chat namespace
+                    connectToChat()
+                })
+
+                testSocket.on('connect_error', (err) => {
+                    log(`Connection error to main: ${err.message}`)
+                    // Try chat namespace anyway
+                    connectToChat()
+                })
+            }
+
+            function connectToChat() {
+                socket = io('http://localhost:3000/chat', {
+                    transports: ['websocket', 'polling']
+                })
+
+                socket.on('connect', () => {
+                    log('Connected to /chat namespace')
+                    document.getElementById('status').textContent =
+                        'Connected to /chat'
+
+                    // Now try to authenticate
+                    const token = prompt('Enter JWT token:')
+                    if (token) {
+                        socket.emit('authenticate', { token }, (response) => {
+                            log(
+                                `Authentication response: ${JSON.stringify(response)}`
+                            )
+                        })
+                    }
+                })
+
+                socket.on('connect_error', (err) => {
+                    log(`Connection error to /chat: ${err.message}`)
+                    document.getElementById('status').textContent =
+                        'Failed to connect'
+                })
+
+                socket.on('disconnect', (reason) => {
+                    log(`Disconnected: ${reason}`)
+                    document.getElementById('status').textContent =
+                        'Disconnected'
+                })
+            }
+        </script>
+    </body>
+</html>

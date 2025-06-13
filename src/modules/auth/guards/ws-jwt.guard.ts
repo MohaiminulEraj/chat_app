@@ -9,32 +9,25 @@ export class WsJwtGuard implements CanActivate {
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
         try {
-            const client: Socket = context.switchToWs().getClient<Socket>()
-            const authToken = this.extractTokenFromHandshake(client)
+            const client: Socket = context.switchToWs().getClient()
+            const data = context.switchToWs().getData()
 
-            if (!authToken) {
-                throw new WsException('Unauthorized')
+            // Get token from either the data or handshake auth
+            const token =
+                data.token ||
+                client.handshake.auth?.token ||
+                client.handshake.headers?.authorization?.split(' ')[1]
+
+            if (!token) {
+                throw new WsException('No token provided')
             }
 
-            const payload = await this.jwtService.verifyAsync(authToken)
-            client.data.userId = payload.sub
-            client.data.user = payload
+            const payload = await this.jwtService.verifyAsync(token)
+            client['user'] = payload
 
             return true
         } catch (err) {
-            throw new WsException('Unauthorized')
+            throw new WsException('Invalid token')
         }
-    }
-
-    private extractTokenFromHandshake(client: Socket): string | undefined {
-        const token =
-            client.handshake.auth?.token ||
-            client.handshake.headers?.authorization
-
-        if (token && token.startsWith('Bearer ')) {
-            return token.substring(7)
-        }
-
-        return token
     }
 }

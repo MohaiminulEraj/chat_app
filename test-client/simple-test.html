@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Socket.IO Test</title>
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Socket.IO Connection Test</h1>
+        <div id="status">Disconnected</div>
+        <div id="logs"></div>
+
+        <script>
+            const logs = document.getElementById('logs')
+            function log(msg) {
+                const line = document.createElement('div')
+                line.textContent = `${new Date().toISOString()}: ${msg}`
+                logs.appendChild(line)
+                console.log(msg)
+            }
+
+            // First try connecting to the main namespace
+            log('Trying to connect to main namespace...')
+            const socket1 = io('http://localhost:3000', {
+                transports: ['websocket', 'polling']
+            })
+
+            socket1.on('connect', () => {
+                log('Connected to main namespace!')
+                document.getElementById('status').textContent =
+                    'Connected to main namespace'
+
+                // Now try chat namespace
+                tryConnectToChat()
+            })
+
+            socket1.on('connect_error', (err) => {
+                log(`Error connecting to main namespace: ${err.message}`)
+
+                // Try chat namespace anyway
+                tryConnectToChat()
+            })
+
+            function tryConnectToChat() {
+                log('Trying to connect to chat namespace...')
+                const socket2 = io('http://localhost:3000/chat', {
+                    transports: ['websocket', 'polling']
+                })
+
+                socket2.on('connect', () => {
+                    log('Connected to chat namespace!')
+                    document.getElementById('status').textContent =
+                        'Connected to chat namespace'
+                })
+
+                socket2.on('connect_error', (err) => {
+                    log(`Error connecting to chat namespace: ${err.message}`)
+                })
+
+                socket2.on('connected', (data) => {
+                    log(
+                        `Server acknowledged connection: ${JSON.stringify(data)}`
+                    )
+                })
+            }
+        </script>
+    </body>
+</html>

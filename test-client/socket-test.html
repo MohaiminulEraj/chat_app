@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Socket.IO Test</title>
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Socket.IO Connection Test</h1>
+        <div id="status">Disconnected</div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <div>
+            <input type="text" id="token" placeholder="JWT Token" />
+            <button onclick="authenticate()">Authenticate</button>
+        </div>
+        <pre id="events"></pre>
+
+        <script>
+            let socket
+
+            function log(message) {
+                document.getElementById('events').textContent +=
+                    new Date().toISOString() + ': ' + message + '\n'
+            }
+
+            function connect() {
+                log('Attempting to connect...')
+
+                // Create connection with error handling
+                socket = io('http://localhost:3000/chat', {
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionAttempts: 3,
+                    reconnectionDelay: 1000
+                })
+
+                // Connection events
+                socket.on('connect', () => {
+                    log('Connected! Socket ID: ' + socket.id)
+                    document.getElementById('status').textContent = 'Connected'
+                })
+
+                socket.on('connected', (data) => {
+                    log('Server acknowledgment: ' + JSON.stringify(data))
+                })
+
+                socket.on('connect_error', (error) => {
+                    log('Connection error: ' + error.message)
+                    document.getElementById('status').textContent =
+                        'Error: ' + error.message
+                })
+
+                socket.on('disconnect', (reason) => {
+                    log('Disconnected: ' + reason)
+                    document.getElementById('status').textContent =
+                        'Disconnected'
+                })
+
+                socket.on('error', (error) => {
+                    log('Socket error: ' + error.message)
+                })
+            }
+
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect()
+                    log('Manually disconnected')
+                    document.getElementById('status').textContent =
+                        'Disconnected'
+                }
+            }
+
+            function authenticate() {
+                const token = document.getElementById('token').value
+                if (!token) {
+                    log('No token provided')
+                    return
+                }
+
+                if (!socket || !socket.connected) {
+                    log('Not connected, cannot authenticate')
+                    return
+                }
+
+                log('Sending authentication request...')
+                socket.emit('authenticate', { token }, (response) => {
+                    log('Authentication response: ' + JSON.stringify(response))
+                })
+            }
+        </script>
+    </body>
+</html>
