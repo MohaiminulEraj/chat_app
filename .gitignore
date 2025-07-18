@@ -43,3 +43,8 @@ diff.txt
 # Compiled package-lock.json
 package-lock.json
 yarn.lock
+
+# PM2
+.pm2
+.pm2/*
+ecosystem.config.js.backup

@@ -71,10 +71,37 @@ async function bootstrap() {
     app.useGlobalInterceptors(new PerformanceInterceptor())
 
     const port = process.env.PORT || 3000
-    await app.listen(port)
+
+    // Handle cluster mode properly for PM2
+    // In cluster mode, PM2 handles the port binding
+    const server = await app.listen(port, '0.0.0.0')
+
+    // Signal to PM2 that the app is ready (important for cluster mode)
+    if (process.send) {
+        process.send('ready')
+    }
 
     console.log(`Application is running on: http://localhost:${port}`)
+    console.log(`Process ID: ${process.pid}`)
     console.log(`WebSocket endpoints available at: ws://localhost:${port}`)
+
+    // Graceful shutdown handling for PM2
+    process.on('SIGINT', async () => {
+        console.log('Received SIGINT, shutting down gracefully...')
+        await app.close()
+        process.exit(0)
+    })
+
+    process.on('SIGTERM', async () => {
+        console.log('Received SIGTERM, shutting down gracefully...')
+        await app.close()
+        process.exit(0)
+    })
+
+    return { app, server }
 }
 
-bootstrap()
+bootstrap().catch((error) => {
+    console.error('Error starting application:', error)
+    process.exit(1)
+})
