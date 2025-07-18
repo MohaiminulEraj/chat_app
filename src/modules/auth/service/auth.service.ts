@@ -48,6 +48,12 @@ export class AuthService {
     }
 
     async login(req: any, loginDto: LoginDto) {
+        if (loginDto.password.length < 8) {
+            throw new HttpException(
+                'Password must be at least 8 characters long',
+                HttpStatus.BAD_REQUEST
+            )
+        }
         // Check if the input is email or phone number
         const isEmail = loginDto.emailOrPhone.includes('@')
 
@@ -91,6 +97,12 @@ export class AuthService {
      * @return  {[type]}                            [return description]
      */
     async registration(registrationDto: RegistrationDto) {
+        if (registrationDto.password.length < 8) {
+            throw new HttpException(
+                'Password must be at least 8 characters long',
+                HttpStatus.BAD_REQUEST
+            )
+        }
         if (registrationDto.password != registrationDto.confirmPassword) {
             throw new HttpException(
                 'Password Mismatched',

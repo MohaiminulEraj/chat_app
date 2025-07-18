@@ -31,7 +31,7 @@ export class LoginDto {
     })
     @ApiProperty({
         description: 'User password',
-        example: '123456'
+        example: '12345678'
     })
     password: string
 }
@@ -83,7 +83,7 @@ export class RegistrationDto {
     @MinLength(6)
     @ApiProperty({
         description: 'User password',
-        example: '123456'
+        example: '12345678'
     })
     password: string
 
@@ -96,7 +96,7 @@ export class RegistrationDto {
     @MinLength(6)
     @ApiProperty({
         description: 'Confirm password',
-        example: '123456'
+        example: '12345678'
     })
     confirmPassword: string
 }
