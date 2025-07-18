@@ -6,6 +6,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
 import { Repository } from 'typeorm'
+import {
+    paginate,
+    Pagination,
+    IPaginationOptions
+} from 'nestjs-typeorm-paginate'
 import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { CreateUserDto } from './dto/create-user.dto'
 import { UpdateUserDto } from './dto/update-user.dto'
@@ -149,6 +154,28 @@ export class UserService {
         if (result.affected === 0) {
             throw new NotFoundException(`User with ID ${id} not found`)
         }
+    }
+
+    async getRecommendations(
+        currentUserId: string,
+        options: IPaginationOptions
+    ): Promise<Pagination<User>> {
+        const queryBuilder = this.userRepository
+            .createQueryBuilder('user')
+            .where('user.uuid != :currentUserId', { currentUserId })
+            .andWhere('user.isActive = :isActive', { isActive: true })
+            .select([
+                'user.id',
+                'user.uuid',
+                'user.name',
+                'user.email',
+                'user.displayName',
+                'user.avatarUrl',
+                'user.bio',
+                'user.status'
+            ])
+
+        return await paginate<User>(queryBuilder, options)
     }
 
     async searchUsers(query: string): Promise<User[]> {

@@ -6,6 +6,7 @@ import {
     Get,
     HttpStatus,
     Param,
+    ParseIntPipe,
     Patch,
     Query,
     Request,
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { User } from './entities/user.entity'
 import { UserService } from './user.service'
+import { IPaginationOptions } from 'nestjs-typeorm-paginate'
 
 @ApiTags('👤 Users')
 @Controller('users')
@@ -78,6 +80,107 @@ export class UserController {
             statusCode: HttpStatus.OK,
             message: 'Users fetched successfully',
             data: await this.userService.findAll()
+        }
+    }
+
+    @Get('recommendations')
+    @ApiOperation({
+        summary: 'Get user recommendations',
+        description:
+            'Get paginated list of user recommendations for sending friend requests'
+    })
+    @ApiQuery({
+        name: 'page',
+        description: 'Page number',
+        type: Number,
+        required: false,
+        example: 1
+    })
+    @ApiQuery({
+        name: 'limit',
+        description: 'Number of items per page',
+        type: Number,
+        required: false,
+        example: 10
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'User recommendations retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'User recommendations fetched successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        items: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/User' }
+                        },
+                        meta: {
+                            type: 'object',
+                            properties: {
+                                totalItems: { type: 'number', example: 50 },
+                                itemCount: { type: 'number', example: 10 },
+                                itemsPerPage: { type: 'number', example: 10 },
+                                totalPages: { type: 'number', example: 5 },
+                                currentPage: { type: 'number', example: 1 }
+                            }
+                        },
+                        links: {
+                            type: 'object',
+                            properties: {
+                                first: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3000/users/recommendations?limit=10'
+                                },
+                                previous: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3000/users/recommendations?page=1&limit=10'
+                                },
+                                next: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3000/users/recommendations?page=2&limit=10'
+                                },
+                                last: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3000/users/recommendations?page=5&limit=10'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getRecommendations(
+        @Request() req: any,
+        @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+        @Query('limit', new ParseIntPipe({ optional: true })) limit?: number
+    ) {
+        const options: IPaginationOptions = {
+            page: page || 1,
+            limit: limit || 10,
+            route: req.url
+        }
+
+        const data = await this.userService.getRecommendations(
+            req.user.uuid,
+            options
+        )
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'User recommendations fetched successfully',
+            data
         }
     }
 
