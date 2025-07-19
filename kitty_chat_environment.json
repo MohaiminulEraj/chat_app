@@ -1,51 +1,51 @@
 {
-  "id": "3192e280-4b28-4ae2-9879-dbfe9107e3a1",
-  "name": "Kitty Chat Environment",
-  "values": [
-    {
-      "key": "baseUrl",
-      "value": "localhost:3001",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "jwt_token",
-      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1ODczOSwiZXhwIjoxNzUyODYyMzM5fQ.C8Pr7TYhUSYyaI8zld56C_38hUhmG_Zndll5ktEcO3E",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "auth_status",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "user_id",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "conversation_id",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "recipient_id",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "last_message_id",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    }
-  ],
-  "_postman_variable_scope": "environment",
-  "_postman_exported_at": "2025-07-18T23:14:00.000Z",
-  "_postman_exported_using": "Postman/10.30.0"
+    "id": "3192e280-4b28-4ae2-9879-dbfe9107e3a1",
+    "name": "Kitty Chat Environment",
+    "values": [
+        {
+            "key": "baseUrl",
+            "value": "localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "jwt_token",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1ODczOSwiZXhwIjoxNzUyODYyMzM5fQ.C8Pr7TYhUSYyaI8zld56C_38hUhmG_Zndll5ktEcO3E",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "auth_status",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "conversation_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "recipient_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "last_message_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        }
+    ],
+    "_postman_variable_scope": "environment",
+    "_postman_exported_at": "2025-07-18T23:14:00.000Z",
+    "_postman_exported_using": "Postman/10.30.0"
 }

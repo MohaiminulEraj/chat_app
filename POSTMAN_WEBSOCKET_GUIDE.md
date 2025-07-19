@@ -10,6 +10,7 @@ This guide explains how to use the Postman collection for testing WebSocket chat
 ## WebSocket Connection URL
 
 Use this URL in Postman for WebSocket connection:
+
 ```
 ws://localhost:3000/chat
 ```
@@ -27,9 +28,9 @@ The namespace is `/chat` and the server runs on port 3000.
 
 1. After importing, select the "Kitty Chat Environment" from the environment dropdown in the top right corner
 2. Update the following variables in the environment:
-   - `jwt_token`: Use the most recent token generated from your `generate-test-token.js` script
-   - `recipient_id`: UUID of a user you want to chat with (optional - needed only for direct messaging)
-   - `conversation_id`: UUID of an existing conversation (optional - needed only for messaging in existing conversations)
+    - `jwt_token`: Use the most recent token generated from your `generate-test-token.js` script
+    - `recipient_id`: UUID of a user you want to chat with (optional - needed only for direct messaging)
+    - `conversation_id`: UUID of an existing conversation (optional - needed only for messaging in existing conversations)
 
 ## Using the Collection
 
@@ -95,60 +96,70 @@ Postman's WebSocket interface allows you to monitor incoming events. After conne
 ## Event Examples for Postman
 
 ### 1. Authentication
+
 ```json
 {
-  "token": "your-jwt-token-here"
+    "token": "your-jwt-token-here"
 }
 ```
 
 ### 2. Send Message
+
 ```json
 {
-  "recipientId": "user-uuid-here",
-  "type": "text",
-  "content": "Hello! This is a test message"
+    "recipientId": "user-uuid-here",
+    "type": "text",
+    "content": "Hello! This is a test message"
 }
 ```
+
 OR
+
 ```json
 {
-  "conversationId": "conversation-uuid-here",
-  "type": "text",
-  "content": "Hello! This is a test message"
+    "conversationId": "conversation-uuid-here",
+    "type": "text",
+    "content": "Hello! This is a test message"
 }
 ```
 
 ### 3. Get Conversation History
+
 ```json
 {
-  "conversationId": "conversation-uuid-here",
-  "limit": 50
+    "conversationId": "conversation-uuid-here",
+    "limit": 50
 }
 ```
+
 OR start new conversation:
+
 ```json
 {
-  "recipientId": "user-uuid-here",
-  "limit": 50
+    "recipientId": "user-uuid-here",
+    "limit": 50
 }
 ```
 
 ### 4. Get User Conversations
+
 ```json
 {}
 ```
 
 ### 5. Join Conversation
+
 ```json
 {
-  "conversationId": "conversation-uuid-here"
+    "conversationId": "conversation-uuid-here"
 }
 ```
 
 ### 6. Typing Indicator
+
 ```json
 {
-  "conversationId": "conversation-uuid-here",
-  "isTyping": true
+    "conversationId": "conversation-uuid-here",
+    "isTyping": true
 }
 ```

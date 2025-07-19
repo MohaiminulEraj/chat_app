@@ -1,110 +1,102 @@
 {
-  "info": {
-    "_postman_id": "1fd1b169-fa79-4a0a-9791-f7e7e6f2b86a",
-    "name": "Kitty Chat WebSocket (Fixed)",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Direct Chat Connection",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "// Example test script for WebSocket",
-              "console.log('Connected to direct-chat');",
-              "",
-              "// Listen for initial connection confirmation",
-              "pm.webSocket.on('message', (message) => {",
-              "    console.log('Received message:', message);",
-              "    ",
-              "    // Try to parse as JSON if possible",
-              "    try {",
-              "        const data = JSON.parse(message);",
-              "        console.log('Parsed message:', data);",
-              "        ",
-              "        // If this is the welcome message, authenticate",
-              "        if (data.success && data.message === 'Connected to chat server') {",
-              "            console.log('Authenticating...');",
-              "            ",
-              "            // Get token from environment",
-              "            const token = pm.environment.get('jwt_token');",
-              "            ",
-              "            // Send authentication event",
-              "            pm.webSocket.send(JSON.stringify({",
-              "                event: 'authenticate',",
-              "                data: { token }",
-              "            }));",
-              "        }",
-              "    } catch (e) {",
-              "        // Not JSON, just log the raw message",
-              "        console.log('Raw message (not JSON):', message);",
-              "    }",
-              "});",
-              ""
-            ],
-            "type": "text/javascript"
-          }
-        }
-      ],
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3001/direct-chat",
-          "protocol": "ws",
-          "host": [
-            "localhost"
-          ],
-          "port": "3001",
-          "path": [
-            "direct-chat"
-          ]
-        }
-      },
-      "response": []
+    "info": {
+        "_postman_id": "1fd1b169-fa79-4a0a-9791-f7e7e6f2b86a",
+        "name": "Kitty Chat WebSocket (Fixed)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
-    {
-      "name": "General Connection (with token in URL)",
-      "event": [
+    "item": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "console.log('Connected to general namespace');",
-              "",
-              "pm.webSocket.on('message', (message) => {",
-              "    console.log('Received message:', message);",
-              "});"
+            "name": "Direct Chat Connection",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "// Example test script for WebSocket",
+                            "console.log('Connected to direct-chat');",
+                            "",
+                            "// Listen for initial connection confirmation",
+                            "pm.webSocket.on('message', (message) => {",
+                            "    console.log('Received message:', message);",
+                            "    ",
+                            "    // Try to parse as JSON if possible",
+                            "    try {",
+                            "        const data = JSON.parse(message);",
+                            "        console.log('Parsed message:', data);",
+                            "        ",
+                            "        // If this is the welcome message, authenticate",
+                            "        if (data.success && data.message === 'Connected to chat server') {",
+                            "            console.log('Authenticating...');",
+                            "            ",
+                            "            // Get token from environment",
+                            "            const token = pm.environment.get('jwt_token');",
+                            "            ",
+                            "            // Send authentication event",
+                            "            pm.webSocket.send(JSON.stringify({",
+                            "                event: 'authenticate',",
+                            "                data: { token }",
+                            "            }));",
+                            "        }",
+                            "    } catch (e) {",
+                            "        // Not JSON, just log the raw message",
+                            "        console.log('Raw message (not JSON):', message);",
+                            "    }",
+                            "});",
+                            ""
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
             ],
-            "type": "text/javascript"
-          }
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "ws://localhost:3001/direct-chat",
+                    "protocol": "ws",
+                    "host": ["localhost"],
+                    "port": "3001",
+                    "path": ["direct-chat"]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "General Connection (with token in URL)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "console.log('Connected to general namespace');",
+                            "",
+                            "pm.webSocket.on('message', (message) => {",
+                            "    console.log('Received message:', message);",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
+                    "protocol": "ws",
+                    "host": ["localhost"],
+                    "port": "3001",
+                    "path": ["general"],
+                    "query": [
+                        {
+                            "key": "auth-token",
+                            "value": "{{jwt_token}}"
+                        }
+                    ]
+                }
+            },
+            "response": []
         }
-      ],
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
-          "protocol": "ws",
-          "host": [
-            "localhost"
-          ],
-          "port": "3001",
-          "path": [
-            "general"
-          ],
-          "query": [
-            {
-              "key": "auth-token",
-              "value": "{{jwt_token}}"
-            }
-          ]
-        }
-      },
-      "response": []
-    }
-  ],
-  "event": []
+    ],
+    "event": []
 }

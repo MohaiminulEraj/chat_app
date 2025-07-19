@@ -9,7 +9,7 @@ If you're encountering the "Invalid protocol: ws:" error, follow these steps:
 ## Method 1: Use the Fixed Collection
 
 1. Import the `postman_websocket_fixed.json` file into Postman
-2. Import the `kitty_chat_environment.json` file 
+2. Import the `kitty_chat_environment.json` file
 3. Select "Kitty Chat Environment" from the environment dropdown
 
 ## Method 2: Use HTTP instead of WebSocket Protocol in Request URL
@@ -60,9 +60,9 @@ For command-line testing:
 
 ## Socket.io Events Reference
 
-| Event | Description | Example Payload |
-|-------|-------------|----------------|
-| authenticate | Authenticate with JWT | `{ "token": "your-jwt-token" }` |
-| sendMessage | Send a message | `{ "recipientId": "uuid", "type": "text", "content": "Hello" }` |
+| Event        | Description           | Example Payload                                                 |
+| ------------ | --------------------- | --------------------------------------------------------------- |
+| authenticate | Authenticate with JWT | `{ "token": "your-jwt-token" }`                                 |
+| sendMessage  | Send a message        | `{ "recipientId": "uuid", "type": "text", "content": "Hello" }` |
 
 Remember: When working with Socket.io in Postman, you might need to manually format the events according to Socket.io's protocol rather than using raw WebSocket frames.

@@ -1,8 +1,8 @@
 // Script to generate multiple test JWT tokens for different users
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken')
 
 // This should match the secret used in your server
-const JWT_SECRET = '3QANyH2zMoHrfxqfRWTLbPM';
+const JWT_SECRET = '3QANyH2zMoHrfxqfRWTLbPM'
 
 // Create multiple test users
 const testUsers = [
@@ -30,10 +30,10 @@ const testUsers = [
         email: 'diana@example.com',
         name: 'Diana'
     }
-];
+]
 
-console.log('Generated JWT Tokens for Multiple Test Users:');
-console.log('='.repeat(60));
+console.log('Generated JWT Tokens for Multiple Test Users:')
+console.log('='.repeat(60))
 
 testUsers.forEach((user, index) => {
     const userPayload = {
@@ -41,21 +41,23 @@ testUsers.forEach((user, index) => {
         uuid: user.uuid,
         email: user.email,
         iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // Expires in 24 hours
-    };
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // Expires in 24 hours
+    }
 
-    const token = jwt.sign(userPayload, JWT_SECRET);
+    const token = jwt.sign(userPayload, JWT_SECRET)
 
-    console.log(`\n${index + 1}. ${user.name} (${user.email})`);
-    console.log(`   User ID: ${user.uuid}`);
-    console.log(`   Token: ${token}`);
-});
+    console.log(`\n${index + 1}. ${user.name} (${user.email})`)
+    console.log(`   User ID: ${user.uuid}`)
+    console.log(`   Token: ${token}`)
+})
 
-console.log('\n' + '='.repeat(60));
-console.log('Usage Instructions:');
-console.log('1. Open multiple browser tabs with simple_socketio_client.html');
-console.log('2. Use a different token in each tab');
-console.log('3. Connect and authenticate in each tab');
-console.log('4. Watch the userStatusChanged events flow between tabs');
-console.log('5. Send messages between the different users');
-console.log('\nNote: You can use any user UUID as recipientId when sending messages');
+console.log('\n' + '='.repeat(60))
+console.log('Usage Instructions:')
+console.log('1. Open multiple browser tabs with simple_socketio_client.html')
+console.log('2. Use a different token in each tab')
+console.log('3. Connect and authenticate in each tab')
+console.log('4. Watch the userStatusChanged events flow between tabs')
+console.log('5. Send messages between the different users')
+console.log(
+    '\nNote: You can use any user UUID as recipientId when sending messages'
+)

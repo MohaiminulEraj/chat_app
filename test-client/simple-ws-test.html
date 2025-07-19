@@ -1,256 +1,308 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple WebSocket Test</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            margin-bottom: 20px;
-        }
-        input, button, textarea {
-            margin: 5px;
-            padding: 8px;
-        }
-        #logs {
-            background: #f5f5f5;
-            padding: 10px;
-            border: 1px solid #ddd;
-            height: 300px;
-            overflow-y: auto;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-        .status {
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        .connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    </style>
-</head>
-<body>
-    <h1>Simple WebSocket Test</h1>
-    
-    <div class="container">
-        <div id="status" class="status disconnected">Disconnected</div>
-        
-        <div>
-            <label>Server URL:</label>
-            <input type="text" id="serverUrl" value="http://localhost:3001/direct-chat" style="width: 300px;">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Simple WebSocket Test</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .container {
+                margin-bottom: 20px;
+            }
+            input,
+            button,
+            textarea {
+                margin: 5px;
+                padding: 8px;
+            }
+            #logs {
+                background: #f5f5f5;
+                padding: 10px;
+                border: 1px solid #ddd;
+                height: 300px;
+                overflow-y: auto;
+                font-family: monospace;
+                white-space: pre-wrap;
+            }
+            .status {
+                padding: 10px;
+                border-radius: 4px;
+                margin: 10px 0;
+            }
+            .connected {
+                background: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+            .disconnected {
+                background: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Simple WebSocket Test</h1>
+
+        <div class="container">
+            <div id="status" class="status disconnected">Disconnected</div>
+
+            <div>
+                <label>Server URL:</label>
+                <input
+                    type="text"
+                    id="serverUrl"
+                    value="http://localhost:3001/direct-chat"
+                    style="width: 300px"
+                />
+            </div>
+
+            <div>
+                <label>JWT Token:</label>
+                <input
+                    type="text"
+                    id="jwtToken"
+                    placeholder="Enter your JWT token here"
+                    style="width: 400px"
+                />
+            </div>
+
+            <div>
+                <button onclick="connect()">Connect</button>
+                <button onclick="disconnect()">Disconnect</button>
+                <button onclick="authenticate()">Authenticate</button>
+                <button onclick="clearLogs()">Clear Logs</button>
+            </div>
         </div>
-        
-        <div>
-            <label>JWT Token:</label>
-            <input type="text" id="jwtToken" placeholder="Enter your JWT token here" style="width: 400px;">
+
+        <div class="container">
+            <h3>Test Actions</h3>
+            <div>
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Enter message"
+                    style="width: 300px"
+                />
+                <input
+                    type="text"
+                    id="recipientId"
+                    placeholder="Recipient ID"
+                    style="width: 200px"
+                />
+                <button onclick="sendMessage()">Send Message</button>
+            </div>
         </div>
-        
-        <div>
-            <button onclick="connect()">Connect</button>
-            <button onclick="disconnect()">Disconnect</button>
-            <button onclick="authenticate()">Authenticate</button>
-            <button onclick="clearLogs()">Clear Logs</button>
+
+        <div class="container">
+            <h3>Logs</h3>
+            <div id="logs"></div>
         </div>
-    </div>
 
-    <div class="container">
-        <h3>Test Actions</h3>
-        <div>
-            <input type="text" id="messageInput" placeholder="Enter message" style="width: 300px;">
-            <input type="text" id="recipientId" placeholder="Recipient ID" style="width: 200px;">
-            <button onclick="sendMessage()">Send Message</button>
-        </div>
-    </div>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <script>
+            let socket = null
+            let authenticated = false
 
-    <div class="container">
-        <h3>Logs</h3>
-        <div id="logs"></div>
-    </div>
-
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script>
-        let socket = null;
-        let authenticated = false;
-
-        function log(message, type = 'info') {
-            const logs = document.getElementById('logs');
-            const timestamp = new Date().toLocaleTimeString();
-            const prefix = type === 'error' ? '❌' : type === 'sent' ? '📤' : type === 'received' ? '📥' : 'ℹ️';
-            logs.textContent += `[${timestamp}] ${prefix} ${message}\n`;
-            logs.scrollTop = logs.scrollHeight;
-        }
-
-        function updateStatus(connected) {
-            const status = document.getElementById('status');
-            if (connected) {
-                status.textContent = 'Connected';
-                status.className = 'status connected';
-            } else {
-                status.textContent = 'Disconnected';
-                status.className = 'status disconnected';
-                authenticated = false;
-            }
-        }
-
-        function connect() {
-            const url = document.getElementById('serverUrl').value;
-            
-            if (socket) {
-                log('Disconnecting existing connection...', 'info');
-                socket.disconnect();
+            function log(message, type = 'info') {
+                const logs = document.getElementById('logs')
+                const timestamp = new Date().toLocaleTimeString()
+                const prefix =
+                    type === 'error'
+                        ? '❌'
+                        : type === 'sent'
+                          ? '📤'
+                          : type === 'received'
+                            ? '📥'
+                            : 'ℹ️'
+                logs.textContent += `[${timestamp}] ${prefix} ${message}\n`
+                logs.scrollTop = logs.scrollHeight
             }
 
-            log(`Connecting to ${url}...`, 'info');
-            
-            socket = io(url, {
-                transports: ['websocket', 'polling'],
-                timeout: 20000,
-                autoConnect: false
-            });
-
-            socket.on('connect', () => {
-                log('Connected successfully!', 'info');
-                updateStatus(true);
-            });
-
-            socket.on('disconnect', (reason) => {
-                log(`Disconnected: ${reason}`, 'error');
-                updateStatus(false);
-            });
-
-            socket.on('connect_error', (error) => {
-                log(`Connection error: ${error.message}`, 'error');
-                updateStatus(false);
-            });
-
-            socket.on('connected', (data) => {
-                log(`Server response: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('userStatusChanged', (data) => {
-                log(`User status changed: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('newMessage', (data) => {
-                log(`New message: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('messagesRead', (data) => {
-                log(`Messages read: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('userTyping', (data) => {
-                log(`User typing: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('messageDeleted', (data) => {
-                log(`Message deleted: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('messageEdited', (data) => {
-                log(`Message edited: ${JSON.stringify(data)}`, 'received');
-            });
-
-            socket.on('error', (error) => {
-                log(`Socket error: ${JSON.stringify(error)}`, 'error');
-            });
-
-            socket.connect();
-        }
-
-        function disconnect() {
-            if (socket) {
-                socket.disconnect();
-                socket = null;
-                log('Disconnected by user', 'info');
-                updateStatus(false);
-            }
-        }
-
-        function authenticate() {
-            const token = document.getElementById('jwtToken').value;
-            
-            if (!socket || !socket.connected) {
-                log('Not connected to server', 'error');
-                return;
-            }
-
-            if (!token) {
-                log('Please enter a JWT token', 'error');
-                return;
-            }
-
-            log(`Authenticating with token: ${token.substring(0, 20)}...`, 'sent');
-            
-            socket.emit('authenticate', { token: token }, (response) => {
-                log(`Authentication response: ${JSON.stringify(response)}`, 'received');
-                if (response && response.success) {
-                    authenticated = true;
-                    log('Authentication successful!', 'info');
+            function updateStatus(connected) {
+                const status = document.getElementById('status')
+                if (connected) {
+                    status.textContent = 'Connected'
+                    status.className = 'status connected'
                 } else {
-                    authenticated = false;
-                    log('Authentication failed!', 'error');
+                    status.textContent = 'Disconnected'
+                    status.className = 'status disconnected'
+                    authenticated = false
                 }
-            });
-        }
-
-        function sendMessage() {
-            const message = document.getElementById('messageInput').value;
-            const recipientId = document.getElementById('recipientId').value;
-            
-            if (!socket || !socket.connected) {
-                log('Not connected to server', 'error');
-                return;
             }
 
-            if (!authenticated) {
-                log('Not authenticated. Please authenticate first.', 'error');
-                return;
+            function connect() {
+                const url = document.getElementById('serverUrl').value
+
+                if (socket) {
+                    log('Disconnecting existing connection...', 'info')
+                    socket.disconnect()
+                }
+
+                log(`Connecting to ${url}...`, 'info')
+
+                socket = io(url, {
+                    transports: ['websocket', 'polling'],
+                    timeout: 20000,
+                    autoConnect: false
+                })
+
+                socket.on('connect', () => {
+                    log('Connected successfully!', 'info')
+                    updateStatus(true)
+                })
+
+                socket.on('disconnect', (reason) => {
+                    log(`Disconnected: ${reason}`, 'error')
+                    updateStatus(false)
+                })
+
+                socket.on('connect_error', (error) => {
+                    log(`Connection error: ${error.message}`, 'error')
+                    updateStatus(false)
+                })
+
+                socket.on('connected', (data) => {
+                    log(`Server response: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('userStatusChanged', (data) => {
+                    log(
+                        `User status changed: ${JSON.stringify(data)}`,
+                        'received'
+                    )
+                })
+
+                socket.on('newMessage', (data) => {
+                    log(`New message: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('messagesRead', (data) => {
+                    log(`Messages read: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('userTyping', (data) => {
+                    log(`User typing: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('messageDeleted', (data) => {
+                    log(`Message deleted: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('messageEdited', (data) => {
+                    log(`Message edited: ${JSON.stringify(data)}`, 'received')
+                })
+
+                socket.on('error', (error) => {
+                    log(`Socket error: ${JSON.stringify(error)}`, 'error')
+                })
+
+                socket.connect()
             }
 
-            if (!message) {
-                log('Please enter a message', 'error');
-                return;
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                    log('Disconnected by user', 'info')
+                    updateStatus(false)
+                }
             }
 
-            if (!recipientId) {
-                log('Please enter a recipient ID', 'error');
-                return;
+            function authenticate() {
+                const token = document.getElementById('jwtToken').value
+
+                if (!socket || !socket.connected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
+
+                if (!token) {
+                    log('Please enter a JWT token', 'error')
+                    return
+                }
+
+                log(
+                    `Authenticating with token: ${token.substring(0, 20)}...`,
+                    'sent'
+                )
+
+                socket.emit('authenticate', { token: token }, (response) => {
+                    log(
+                        `Authentication response: ${JSON.stringify(response)}`,
+                        'received'
+                    )
+                    if (response && response.success) {
+                        authenticated = true
+                        log('Authentication successful!', 'info')
+                    } else {
+                        authenticated = false
+                        log('Authentication failed!', 'error')
+                    }
+                })
             }
 
-            const messageData = {
-                recipientId: recipientId,
-                type: 'text',
-                content: message
-            };
+            function sendMessage() {
+                const message = document.getElementById('messageInput').value
+                const recipientId = document.getElementById('recipientId').value
 
-            log(`Sending message: ${JSON.stringify(messageData)}`, 'sent');
-            
-            socket.emit('sendMessage', messageData, (response) => {
-                log(`Send message response: ${JSON.stringify(response)}`, 'received');
-            });
+                if (!socket || !socket.connected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
 
-            document.getElementById('messageInput').value = '';
-        }
+                if (!authenticated) {
+                    log(
+                        'Not authenticated. Please authenticate first.',
+                        'error'
+                    )
+                    return
+                }
 
-        function clearLogs() {
-            document.getElementById('logs').textContent = '';
-        }
+                if (!message) {
+                    log('Please enter a message', 'error')
+                    return
+                }
 
-        // Auto-connect on page load if URL is set
-        window.onload = function() {
-            const url = document.getElementById('serverUrl').value;
-            if (url) {
-                log('Page loaded. Ready to connect.', 'info');
+                if (!recipientId) {
+                    log('Please enter a recipient ID', 'error')
+                    return
+                }
+
+                const messageData = {
+                    recipientId: recipientId,
+                    type: 'text',
+                    content: message
+                }
+
+                log(`Sending message: ${JSON.stringify(messageData)}`, 'sent')
+
+                socket.emit('sendMessage', messageData, (response) => {
+                    log(
+                        `Send message response: ${JSON.stringify(response)}`,
+                        'received'
+                    )
+                })
+
+                document.getElementById('messageInput').value = ''
             }
-        };
-    </script>
-</body>
+
+            function clearLogs() {
+                document.getElementById('logs').textContent = ''
+            }
+
+            // Auto-connect on page load if URL is set
+            window.onload = function () {
+                const url = document.getElementById('serverUrl').value
+                if (url) {
+                    log('Page loaded. Ready to connect.', 'info')
+                }
+            }
+        </script>
+    </body>
 </html>

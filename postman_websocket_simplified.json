@@ -1,64 +1,56 @@
 {
-  "info": {
-    "_postman_id": "574d1daa-5c8a-45d2-b1d9-a5a02efc9580",
-    "name": "Kitty Chat WebSocket API (Simplified)",
-    "description": "A simplified collection for testing the WebSocket chat functionality of the Kitty Backend application.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Direct Chat Connection",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3001/direct-chat",
-          "protocol": "ws",
-          "host": [
-            "localhost"
-          ],
-          "port": "3001",
-          "path": [
-            "direct-chat"
-          ]
-        },
-        "description": "Connect to the WebSocket server for direct chat. After connecting, use the WebSocket interface to send events."
-      },
-      "response": []
+    "info": {
+        "_postman_id": "574d1daa-5c8a-45d2-b1d9-a5a02efc9580",
+        "name": "Kitty Chat WebSocket API (Simplified)",
+        "description": "A simplified collection for testing the WebSocket chat functionality of the Kitty Backend application.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
-    {
-      "name": "General WebSocket Connection",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
-          "protocol": "ws",
-          "host": [
-            "localhost"
-          ],
-          "port": "3001",
-          "path": [
-            "general"
-          ],
-          "query": [
-            {
-              "key": "auth-token",
-              "value": "{{jwt_token}}"
-            }
-          ]
+    "item": [
+        {
+            "name": "Direct Chat Connection",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "ws://localhost:3001/direct-chat",
+                    "protocol": "ws",
+                    "host": ["localhost"],
+                    "port": "3001",
+                    "path": ["direct-chat"]
+                },
+                "description": "Connect to the WebSocket server for direct chat. After connecting, use the WebSocket interface to send events."
+            },
+            "response": []
         },
-        "description": "Connect to the general WebSocket namespace. The auth token is passed as a query parameter."
-      },
-      "response": []
-    }
-  ],
-  "event": [],
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "localhost:3001",
-      "type": "string"
-    }
-  ]
+        {
+            "name": "General WebSocket Connection",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
+                    "protocol": "ws",
+                    "host": ["localhost"],
+                    "port": "3001",
+                    "path": ["general"],
+                    "query": [
+                        {
+                            "key": "auth-token",
+                            "value": "{{jwt_token}}"
+                        }
+                    ]
+                },
+                "description": "Connect to the general WebSocket namespace. The auth token is passed as a query parameter."
+            },
+            "response": []
+        }
+    ],
+    "event": [],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "localhost:3001",
+            "type": "string"
+        }
+    ]
 }

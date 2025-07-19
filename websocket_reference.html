@@ -1,163 +1,195 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kitty Chat WebSocket Reference</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            color: #333;
-        }
-        h1, h2, h3 {
-            color: #0066cc;
-        }
-        pre {
-            background-color: #f5f5f5;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
-            border: 1px solid #ddd;
-        }
-        .event {
-            background-color: #f9f9f9;
-            border-left: 4px solid #0066cc;
-            padding: 10px 15px;
-            margin-bottom: 20px;
-        }
-        .event h3 {
-            margin-top: 0;
-        }
-        .direction {
-            font-weight: bold;
-            color: #555;
-        }
-        .direction.client {
-            color: #0066cc;
-        }
-        .direction.server {
-            color: #cc6600;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        .note {
-            background-color: #fff8dc;
-            padding: 10px;
-            border-radius: 5px;
-            border-left: 4px solid #cc9900;
-        }
-        .code-explanation {
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-size: 16px;
-            margin: 10px 0;
-        }
-        button:hover {
-            background-color: #004c99;
-        }
-        #output {
-            background-color: #f5f5f5;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 20px;
-            min-height: 100px;
-            border: 1px solid #ddd;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
-    <h1>Kitty Chat WebSocket Reference Guide</h1>
-    
-    <div class="note">
-        <strong>Note:</strong> This page provides reference examples for WebSocket events in Postman. It doesn't actually connect to your server.
-    </div>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kitty Chat WebSocket Reference</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                color: #333;
+            }
+            h1,
+            h2,
+            h3 {
+                color: #0066cc;
+            }
+            pre {
+                background-color: #f5f5f5;
+                padding: 10px;
+                border-radius: 5px;
+                overflow-x: auto;
+                border: 1px solid #ddd;
+            }
+            .event {
+                background-color: #f9f9f9;
+                border-left: 4px solid #0066cc;
+                padding: 10px 15px;
+                margin-bottom: 20px;
+            }
+            .event h3 {
+                margin-top: 0;
+            }
+            .direction {
+                font-weight: bold;
+                color: #555;
+            }
+            .direction.client {
+                color: #0066cc;
+            }
+            .direction.server {
+                color: #cc6600;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }
+            th,
+            td {
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            .note {
+                background-color: #fff8dc;
+                padding: 10px;
+                border-radius: 5px;
+                border-left: 4px solid #cc9900;
+            }
+            .code-explanation {
+                margin-bottom: 20px;
+            }
+            button {
+                background-color: #0066cc;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                cursor: pointer;
+                border-radius: 5px;
+                font-size: 16px;
+                margin: 10px 0;
+            }
+            button:hover {
+                background-color: #004c99;
+            }
+            #output {
+                background-color: #f5f5f5;
+                padding: 10px;
+                border-radius: 5px;
+                margin-top: 20px;
+                min-height: 100px;
+                border: 1px solid #ddd;
+                white-space: pre-wrap;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Kitty Chat WebSocket Reference Guide</h1>
 
-    <h2>Connecting to WebSocket</h2>
-    <div class="code-explanation">
-        <p>Two namespaces are available:</p>
-        <ul>
-            <li><code>ws://localhost:3001/direct-chat</code> - For direct messaging</li>
-            <li><code>ws://localhost:3001/general?auth-token=YOUR_TOKEN</code> - For general notifications</li>
-        </ul>
-    </div>
+        <div class="note">
+            <strong>Note:</strong> This page provides reference examples for
+            WebSocket events in Postman. It doesn't actually connect to your
+            server.
+        </div>
 
-    <h2>Authentication Flow</h2>
-    
-    <div class="event">
-        <h3>1. Server Welcome Message</h3>
-        <p class="direction server">← Server to Client:</p>
-        <pre>{
+        <h2>Connecting to WebSocket</h2>
+        <div class="code-explanation">
+            <p>Two namespaces are available:</p>
+            <ul>
+                <li>
+                    <code>ws://localhost:3001/direct-chat</code> - For direct
+                    messaging
+                </li>
+                <li>
+                    <code
+                        >ws://localhost:3001/general?auth-token=YOUR_TOKEN</code
+                    >
+                    - For general notifications
+                </li>
+            </ul>
+        </div>
+
+        <h2>Authentication Flow</h2>
+
+        <div class="event">
+            <h3>1. Server Welcome Message</h3>
+            <p class="direction server">← Server to Client:</p>
+            <pre>
+{
   "success": true,
   "message": "Connected to chat server"
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <div class="event">
-        <h3>2. Client Authentication</h3>
-        <p class="direction client">→ Client to Server: <strong>authenticate</strong> event</p>
-        <pre>{
+        <div class="event">
+            <h3>2. Client Authentication</h3>
+            <p class="direction client">
+                → Client to Server: <strong>authenticate</strong> event
+            </p>
+            <pre>
+{
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1ODczOSwiZXhwIjoxNzUyODYyMzM5fQ.C8Pr7TYhUSYyaI8zld56C_38hUhmG_Zndll5ktEcO3E"
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <div class="event">
-        <h3>3. Server Authentication Response</h3>
-        <p class="direction server">← Server to Client:</p>
-        <pre>{
+        <div class="event">
+            <h3>3. Server Authentication Response</h3>
+            <p class="direction server">← Server to Client:</p>
+            <pre>
+{
   "success": true,
   "userId": "7f60076a-6384-420f-9adc-c5fe33dbecca"
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <h2>Sending Messages</h2>
-    
-    <div class="event">
-        <h3>Send to Specific User</h3>
-        <p class="direction client">→ Client to Server: <strong>sendMessage</strong> event</p>
-        <pre>{
+        <h2>Sending Messages</h2>
+
+        <div class="event">
+            <h3>Send to Specific User</h3>
+            <p class="direction client">
+                → Client to Server: <strong>sendMessage</strong> event
+            </p>
+            <pre>
+{
   "recipientId": "recipient-uuid-here",
   "type": "text",
   "content": "Hello, this is a direct message!"
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <div class="event">
-        <h3>Send to Existing Conversation</h3>
-        <p class="direction client">→ Client to Server: <strong>sendMessage</strong> event</p>
-        <pre>{
+        <div class="event">
+            <h3>Send to Existing Conversation</h3>
+            <p class="direction client">
+                → Client to Server: <strong>sendMessage</strong> event
+            </p>
+            <pre>
+{
   "conversationId": "conversation-uuid-here",
   "type": "text",
   "content": "Hello, this is a message to a conversation!"
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <div class="event">
-        <h3>New Message Event (Receiving)</h3>
-        <p class="direction server">← Server to Client: <strong>newMessage</strong> event</p>
-        <pre>{
+        <div class="event">
+            <h3>New Message Event (Receiving)</h3>
+            <p class="direction server">
+                ← Server to Client: <strong>newMessage</strong> event
+            </p>
+            <pre>
+{
   "conversation": "conversation-uuid",
   "message": {
     "id": "message-id",
@@ -168,76 +200,95 @@
     "createdAt": "2025-07-18T23:20:00.000Z",
     "readBy": []
   }
-}</pre>
-    </div>
+}</pre
+            >
+        </div>
 
-    <h2>Other Useful Events</h2>
-    
-    <table>
-        <tr>
-            <th>Event Name</th>
-            <th>Direction</th>
-            <th>Description</th>
-            <th>Example Payload</th>
-        </tr>
-        <tr>
-            <td>typing</td>
-            <td>Send</td>
-            <td>Indicate typing status</td>
-            <td><pre>{
+        <h2>Other Useful Events</h2>
+
+        <table>
+            <tr>
+                <th>Event Name</th>
+                <th>Direction</th>
+                <th>Description</th>
+                <th>Example Payload</th>
+            </tr>
+            <tr>
+                <td>typing</td>
+                <td>Send</td>
+                <td>Indicate typing status</td>
+                <td>
+                    <pre>
+{
   "conversationId": "uuid",
   "isTyping": true
-}</pre></td>
-        </tr>
-        <tr>
-            <td>markAsRead</td>
-            <td>Send</td>
-            <td>Mark messages as read</td>
-            <td><pre>{
+}</pre
+                    >
+                </td>
+            </tr>
+            <tr>
+                <td>markAsRead</td>
+                <td>Send</td>
+                <td>Mark messages as read</td>
+                <td>
+                    <pre>
+{
   "conversationId": "uuid",
   "messageIds": ["id1", "id2"]
-}</pre></td>
-        </tr>
-        <tr>
-            <td>deleteMessage</td>
-            <td>Send</td>
-            <td>Delete a message</td>
-            <td><pre>{
+}</pre
+                    >
+                </td>
+            </tr>
+            <tr>
+                <td>deleteMessage</td>
+                <td>Send</td>
+                <td>Delete a message</td>
+                <td>
+                    <pre>
+{
   "conversationId": "uuid",
   "messageId": "message-id"
-}</pre></td>
-        </tr>
-        <tr>
-            <td>editMessage</td>
-            <td>Send</td>
-            <td>Edit a message</td>
-            <td><pre>{
+}</pre
+                    >
+                </td>
+            </tr>
+            <tr>
+                <td>editMessage</td>
+                <td>Send</td>
+                <td>Edit a message</td>
+                <td>
+                    <pre>
+{
   "conversationId": "uuid",
   "messageId": "id",
   "newContent": "Updated text"
-}</pre></td>
-        </tr>
-    </table>
+}</pre
+                    >
+                </td>
+            </tr>
+        </table>
 
-    <h2>Generate Test Token</h2>
-    <p>Need a fresh JWT token? Run this command in your terminal:</p>
-    <pre>node generate-test-token.js</pre>
+        <h2>Generate Test Token</h2>
+        <p>Need a fresh JWT token? Run this command in your terminal:</p>
+        <pre>node generate-test-token.js</pre>
 
-    <h2>Sample Token</h2>
-    <div id="token">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1ODczOSwiZXhwIjoxNzUyODYyMzM5fQ.C8Pr7TYhUSYyaI8zld56C_38hUhmG_Zndll5ktEcO3E</div>
-    <button onclick="copyToken()">Copy Token</button>
+        <h2>Sample Token</h2>
+        <div id="token">
+            eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1ODczOSwiZXhwIjoxNzUyODYyMzM5fQ.C8Pr7TYhUSYyaI8zld56C_38hUhmG_Zndll5ktEcO3E
+        </div>
+        <button onclick="copyToken()">Copy Token</button>
 
-    <script>
-        function copyToken() {
-            const tokenElement = document.getElementById('token');
-            const textArea = document.createElement('textarea');
-            textArea.value = tokenElement.textContent;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            alert('Token copied to clipboard');
-        }
-    </script>
-</body>
+        <script>
+            function copyToken() {
+                const tokenElement = document.getElementById('token')
+                const textArea = document.createElement('textarea')
+                textArea.value = tokenElement.textContent
+                document.body.appendChild(textArea)
+                textArea.select()
+                document.execCommand('copy')
+                document.body.removeChild(textArea)
+                alert('Token copied to clipboard')
+            }
+        </script>
+    </body>
 </html>

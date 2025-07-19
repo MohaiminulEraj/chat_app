@@ -94,10 +94,14 @@ export class ConversationGateway
             // Join all user's conversations
             const conversations =
                 await this.conversationService.getUserConversations(userId)
-            this.logger.log(`User ${userId} has ${conversations.length} existing conversations`)
+            this.logger.log(
+                `User ${userId} has ${conversations.length} existing conversations`
+            )
             conversations.forEach((conv) => {
                 client.join(`conversation:${conv.uuid}`)
-                this.logger.log(`User ${userId} joined conversation room: ${conv.uuid}`)
+                this.logger.log(
+                    `User ${userId} joined conversation room: ${conv.uuid}`
+                )
             })
 
             // Update user status to online
@@ -135,22 +139,28 @@ export class ConversationGateway
 
         try {
             this.logger.log(`User ${senderId} attempting to send message`)
-            
+
             // Get or create conversation
             let conversation
             if (data.conversationId) {
-                this.logger.log(`Using existing conversation: ${data.conversationId}`)
+                this.logger.log(
+                    `Using existing conversation: ${data.conversationId}`
+                )
                 conversation = await this.conversationService.getConversation(
                     data.conversationId
                 )
             } else if (data.recipientId) {
-                this.logger.log(`Creating/getting conversation between ${senderId} and ${data.recipientId}`)
+                this.logger.log(
+                    `Creating/getting conversation between ${senderId} and ${data.recipientId}`
+                )
                 conversation =
                     await this.conversationService.getOrCreateDirectConversation(
                         senderId,
                         data.recipientId
                     )
-                this.logger.log(`Conversation resolved: ${conversation.uuid}, participants: ${conversation.participantIds.join(', ')}`)
+                this.logger.log(
+                    `Conversation resolved: ${conversation.uuid}, participants: ${conversation.participantIds.join(', ')}`
+                )
             } else {
                 throw new Error(
                     'Either conversationId or recipientId is required'
@@ -169,18 +179,26 @@ export class ConversationGateway
 
             // Ensure all participants are in the conversation room
             conversation.participantIds.forEach((participantId) => {
-                const participantSocketId = this.userSocketMap.get(participantId)
+                const participantSocketId =
+                    this.userSocketMap.get(participantId)
                 if (participantSocketId) {
-                    const participantSocket = this.server.sockets.sockets.get(participantSocketId)
+                    const participantSocket =
+                        this.server.sockets.sockets.get(participantSocketId)
                     if (participantSocket) {
-                        participantSocket.join(`conversation:${conversation.uuid}`)
-                        this.logger.log(`Added participant ${participantId} to conversation room ${conversation.uuid}`)
+                        participantSocket.join(
+                            `conversation:${conversation.uuid}`
+                        )
+                        this.logger.log(
+                            `Added participant ${participantId} to conversation room ${conversation.uuid}`
+                        )
                     }
                 }
             })
 
             // Emit message to all participants
-            this.logger.log(`Emitting newMessage to conversation room: conversation:${conversation.uuid}`)
+            this.logger.log(
+                `Emitting newMessage to conversation room: conversation:${conversation.uuid}`
+            )
             this.server
                 .to(`conversation:${conversation.uuid}`)
                 .emit('newMessage', {
@@ -192,19 +210,22 @@ export class ConversationGateway
                 })
 
             // Also emit to individual user rooms as fallback
-            this.logger.log(`Emitting newMessage to individual participant rooms`)
+            this.logger.log(
+                `Emitting newMessage to individual participant rooms`
+            )
             conversation.participantIds.forEach((participantId) => {
-                if (participantId !== senderId) { // Don't send to sender
-                    this.logger.log(`Emitting to user room: user:${participantId}`)
-                    this.server
-                        .to(`user:${participantId}`)
-                        .emit('newMessage', {
-                            conversation: conversation.uuid,
-                            message: {
-                                ...message,
-                                senderName: client['user'].email || 'Unknown User'
-                            }
-                        })
+                if (participantId !== senderId) {
+                    // Don't send to sender
+                    this.logger.log(
+                        `Emitting to user room: user:${participantId}`
+                    )
+                    this.server.to(`user:${participantId}`).emit('newMessage', {
+                        conversation: conversation.uuid,
+                        message: {
+                            ...message,
+                            senderName: client['user'].email || 'Unknown User'
+                        }
+                    })
                 }
             })
 
@@ -347,7 +368,7 @@ export class ConversationGateway
         }
     }
 
-        @UseGuards(WsJwtGuard)
+    @UseGuards(WsJwtGuard)
     @SubscribeMessage('joinConversation')
     async handleJoinConversation(
         @ConnectedSocket() client: Socket,
@@ -355,16 +376,20 @@ export class ConversationGateway
     ) {
         try {
             const userId = client['user'].uuid
-            
+
             // Verify user is participant
-            const conversation = await this.conversationService.getConversation(data.conversationId)
+            const conversation = await this.conversationService.getConversation(
+                data.conversationId
+            )
             if (!conversation.participantIds.includes(userId)) {
                 return { success: false, error: 'Access denied' }
             }
-            
+
             client.join(`conversation:${data.conversationId}`)
-            this.logger.log(`User ${userId} joined conversation ${data.conversationId}`)
-            
+            this.logger.log(
+                `User ${userId} joined conversation ${data.conversationId}`
+            )
+
             return { success: true, conversationId: data.conversationId }
         } catch (error) {
             return { success: false, error: error.message }
@@ -380,8 +405,10 @@ export class ConversationGateway
         try {
             const userId = client['user'].uuid
             client.leave(`conversation:${data.conversationId}`)
-            this.logger.log(`User ${userId} left conversation ${data.conversationId}`)
-            
+            this.logger.log(
+                `User ${userId} left conversation ${data.conversationId}`
+            )
+
             return { success: true, conversationId: data.conversationId }
         } catch (error) {
             return { success: false, error: error.message }
@@ -392,11 +419,12 @@ export class ConversationGateway
     @SubscribeMessage('getConversationHistory')
     async handleGetConversationHistory(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { 
+        @MessageBody()
+        data: {
             conversationId?: string
             recipientId?: string
             limit?: number
-            before?: string 
+            before?: string
         }
     ) {
         try {
@@ -405,15 +433,19 @@ export class ConversationGateway
 
             // If no conversationId but recipientId provided, get or create conversation
             if (!conversationId && data.recipientId) {
-                const conversation = await this.conversationService.getOrCreateDirectConversation(
-                    userId,
-                    data.recipientId
-                )
+                const conversation =
+                    await this.conversationService.getOrCreateDirectConversation(
+                        userId,
+                        data.recipientId
+                    )
                 conversationId = conversation.uuid
             }
 
             if (!conversationId) {
-                return { success: false, error: 'conversationId or recipientId required' }
+                return {
+                    success: false,
+                    error: 'conversationId or recipientId required'
+                }
             }
 
             const messages = await this.conversationService.getMessages(
@@ -426,8 +458,8 @@ export class ConversationGateway
             // Auto-join conversation room when fetching history
             client.join(`conversation:${conversationId}`)
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 conversationId,
                 messages,
                 hasMore: messages.length === (data.limit || 50)
@@ -439,21 +471,20 @@ export class ConversationGateway
 
     @UseGuards(WsJwtGuard)
     @SubscribeMessage('getUserConversations')
-    async handleGetUserConversations(
-        @ConnectedSocket() client: Socket
-    ) {
+    async handleGetUserConversations(@ConnectedSocket() client: Socket) {
         try {
             const userId = client['user'].uuid
-            const conversations = await this.conversationService.getUserConversations(userId)
+            const conversations =
+                await this.conversationService.getUserConversations(userId)
 
             // Auto-join all conversation rooms
-            conversations.forEach(conv => {
+            conversations.forEach((conv) => {
                 client.join(`conversation:${conv.uuid}`)
             })
 
-            return { 
-                success: true, 
-                conversations 
+            return {
+                success: true,
+                conversations
             }
         } catch (error) {
             return { success: false, error: error.message }

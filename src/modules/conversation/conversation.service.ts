@@ -41,7 +41,7 @@ export class ConversationService {
             .andWhere('conversation.participantIds IS NOT NULL')
             .andWhere(
                 '(conversation.participantIds = :exactMatch OR ' +
-                'conversation.participantIds = :reverseMatch)',
+                    'conversation.participantIds = :reverseMatch)',
                 {
                     exactMatch: sortedIds.join(','),
                     reverseMatch: [...sortedIds].reverse().join(',')
@@ -82,12 +82,12 @@ export class ConversationService {
         return this.conversationRepository
             .createQueryBuilder('conversation')
             .where('conversation.participantIds IS NOT NULL')
-            .andWhere('conversation.participantIds != \'\'')
+            .andWhere("conversation.participantIds != ''")
             .andWhere(
                 '(conversation.participantIds = :exactUserId OR ' +
-                'conversation.participantIds LIKE :userIdStart OR ' +
-                'conversation.participantIds LIKE :userIdMiddle OR ' +
-                'conversation.participantIds LIKE :userIdEnd)',
+                    'conversation.participantIds LIKE :userIdStart OR ' +
+                    'conversation.participantIds LIKE :userIdMiddle OR ' +
+                    'conversation.participantIds LIKE :userIdEnd)',
                 {
                     exactUserId: userId,
                     userIdStart: `${userId},%`,
@@ -110,7 +110,10 @@ export class ConversationService {
         const conversation = await this.getConversation(data.conversationId)
 
         // Verify sender is participant
-        if (!conversation.participantIds || !conversation.participantIds.includes(data.senderId)) {
+        if (
+            !conversation.participantIds ||
+            !conversation.participantIds.includes(data.senderId)
+        ) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )
@@ -148,7 +151,10 @@ export class ConversationService {
         const conversation = await this.getConversation(conversationId)
 
         // Verify user is participant
-        if (!conversation.participantIds || !conversation.participantIds.includes(userId)) {
+        if (
+            !conversation.participantIds ||
+            !conversation.participantIds.includes(userId)
+        ) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )
@@ -178,7 +184,10 @@ export class ConversationService {
         const conversation = await this.getConversation(conversationId)
 
         // Verify user is participant
-        if (!conversation.participantIds || !conversation.participantIds.includes(userId)) {
+        if (
+            !conversation.participantIds ||
+            !conversation.participantIds.includes(userId)
+        ) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )

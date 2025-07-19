@@ -1,274 +1,590 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-    <title>WebSocket Debug Tester</title>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .user-section { border: 2px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 8px; }
-        .alice { border-color: #e91e63; background: #fce4ec; }
-        .bob { border-color: #2196f3; background: #e3f2fd; }
-        .log { height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin: 10px 0; background: white; font-family: monospace; font-size: 12px; }
-        .status { padding: 10px; margin: 10px 0; border-radius: 4px; font-weight: bold; }
-        .connected { background: #c8e6c9; }
-        .authenticated { background: #bbdefb; }
-        .disconnected { background: #ffcdd2; }
-        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
-        .btn-primary { background: #2196f3; color: white; }
-        .btn-success { background: #4caf50; color: white; }
-        .btn-warning { background: #ff9800; color: white; }
-        .btn-danger { background: #f44336; color: white; }
-        input[type="text"] { width: 300px; padding: 8px; margin: 5px; }
-        .highlight { background: #ffeb3b; padding: 2px 4px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔧 WebSocket Message Debug Tester</h1>
-        <p>This will help debug exactly what's happening with message sending and receiving.</p>
-        
-        <!-- Alice Section -->
-        <div class="user-section alice">
-            <h2>👩 Alice - Sender</h2>
-            <div id="alice-status" class="status disconnected">Status: Disconnected</div>
-            <div class="log" id="alice-log"></div>
-            <div>
-                <button id="alice-connect" class="btn-primary">1. Connect Alice</button>
-                <button id="alice-auth" class="btn-success" disabled>2. Authenticate Alice</button>
-                <button id="alice-send" class="btn-warning" disabled>3. Send Message to Bob</button>
-            </div>
-            <div>
-                <input type="text" id="alice-message" placeholder="Message from Alice" value="Hi Bob! This is Alice." disabled>
-            </div>
-        </div>
-        
-        <!-- Bob Section -->
-        <div class="user-section bob">
-            <h2>👨 Bob - Receiver</h2>
-            <div id="bob-status" class="status disconnected">Status: Disconnected</div>
-            <div class="log" id="bob-log"></div>
-            <div>
-                <button id="bob-connect" class="btn-primary">1. Connect Bob</button>
-                <button id="bob-auth" class="btn-success" disabled>2. Authenticate Bob</button>
-                <button id="bob-reply" class="btn-warning" disabled>3. Send Reply to Alice</button>
-            </div>
-            <div>
-                <input type="text" id="bob-message" placeholder="Reply from Bob" value="Hi Alice! I got your message." disabled>
-            </div>
-        </div>
-        
-        <div style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 8px;">
-            <h3>🎯 Testing Steps:</h3>
-            <ol>
-                <li>Click <span class="highlight">"Connect Alice"</span> and wait for connection</li>
-                <li>Click <span class="highlight">"Authenticate Alice"</span> and wait for success</li>
-                <li>Click <span class="highlight">"Connect Bob"</span> and wait for connection</li>
-                <li>Click <span class="highlight">"Authenticate Bob"</span> and wait for success</li>
-                <li>Click <span class="highlight">"Send Message to Bob"</span> - Alice sends message</li>
-                <li>Check Bob's log - <strong>Bob should see "📨 NEW MESSAGE RECEIVED!"</strong></li>
-                <li>Click <span class="highlight">"Send Reply to Alice"</span> - Bob replies</li>
-                <li>Check Alice's log - <strong>Alice should see Bob's reply</strong></li>
-            </ol>
-            <p><strong>Expected Result:</strong> Both users should see each other's messages with sender information!</p>
-        </div>
-    </div>
+    <head>
+        <title>WebSocket Debug Tester</title>
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            .user-section {
+                border: 2px solid #ddd;
+                margin: 20px 0;
+                padding: 20px;
+                border-radius: 8px;
+            }
+            .alice {
+                border-color: #e91e63;
+                background: #fce4ec;
+            }
+            .bob {
+                border-color: #2196f3;
+                background: #e3f2fd;
+            }
+            .log {
+                height: 200px;
+                overflow-y: scroll;
+                border: 1px solid #ccc;
+                padding: 10px;
+                margin: 10px 0;
+                background: white;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            .connected {
+                background: #c8e6c9;
+            }
+            .authenticated {
+                background: #bbdefb;
+            }
+            .disconnected {
+                background: #ffcdd2;
+            }
+            button {
+                padding: 10px 15px;
+                margin: 5px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .btn-primary {
+                background: #2196f3;
+                color: white;
+            }
+            .btn-success {
+                background: #4caf50;
+                color: white;
+            }
+            .btn-warning {
+                background: #ff9800;
+                color: white;
+            }
+            .btn-danger {
+                background: #f44336;
+                color: white;
+            }
+            input[type='text'] {
+                width: 300px;
+                padding: 8px;
+                margin: 5px;
+            }
+            .highlight {
+                background: #ffeb3b;
+                padding: 2px 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔧 WebSocket Message Debug Tester</h1>
+            <p>
+                This will help debug exactly what's happening with message
+                sending and receiving.
+            </p>
 
-    <script>
-        // User tokens (fresh ones)
-        const ALICE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjE4YTAwOGIwLWQzMzktNDYyOS05OWQ4LWY1NjVjZDhjZjNlMiIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NjI1NTMsImV4cCI6MTc1Mjk0ODk1M30.-02P4vnPEG2Sgcu-_ZX1yeX7zBoy5thOhqVj6DiNcvg';
-        const BOB_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXVpZCI6IjhiYzJhYmJmLTNkZGUtNGI0Mi1hZWQ0LTU2NDc5ZDUxMDI0OSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODYyNTUzLCJleHAiOjE3NTI5NDg5NTN9.Erk2QF1oFUKz8qBXyEfeSYe31cjHxJxZo1YGnZGVgpw';
-        
-        const ALICE_ID = '18a008b0-d339-4629-99d8-f565cd8cf3e2';
-        const BOB_ID = '8bc2abbf-3dde-4b42-aed4-56479d510249';
-        
-        let aliceSocket = null;
-        let bobSocket = null;
-        let conversationId = null;
-        
-        // Logging function
-        function addLog(user, message, type = 'info') {
-            const log = document.getElementById(`${user}-log`);
-            const timestamp = new Date().toLocaleTimeString();
-            const colors = {
-                info: '#2196f3',
-                success: '#4caf50', 
-                error: '#f44336',
-                sent: '#ff9800',
-                received: '#9c27b0'
-            };
-            
-            const div = document.createElement('div');
-            div.style.color = colors[type] || '#333';
-            div.style.marginBottom = '4px';
-            div.innerHTML = `[${timestamp}] ${message}`;
-            
-            log.appendChild(div);
-            log.scrollTop = log.scrollHeight;
-        }
-        
-        // Update status
-        function updateStatus(user, status, className = 'connected') {
-            const statusEl = document.getElementById(`${user}-status`);
-            statusEl.textContent = `Status: ${status}`;
-            statusEl.className = `status ${className}`;
-        }
-        
-        // Alice Connection
-        document.getElementById('alice-connect').addEventListener('click', function() {
-            addLog('alice', '🔌 Connecting to WebSocket server...', 'info');
-            
-            aliceSocket = io('http://localhost:3001/direct-chat', {
-                transports: ['websocket', 'polling']
-            });
-            
-            aliceSocket.on('connect', function() {
-                updateStatus('alice', 'Connected', 'connected');
-                addLog('alice', '✅ Connected successfully!', 'success');
-                document.getElementById('alice-auth').disabled = false;
-                document.getElementById('alice-connect').disabled = true;
-            });
-            
-            aliceSocket.on('disconnect', function() {
-                updateStatus('alice', 'Disconnected', 'disconnected');
-                addLog('alice', '❌ Disconnected', 'error');
-            });
-            
-            aliceSocket.on('connected', function(data) {
-                addLog('alice', `📨 Server welcome: ${JSON.stringify(data)}`, 'received');
-            });
-            
-            aliceSocket.on('newMessage', function(data) {
-                addLog('alice', '📨 NEW MESSAGE RECEIVED!', 'received');
-                addLog('alice', `👤 From: ${data.message.senderName || 'Unknown'} (${data.message.senderId.substring(0, 8)}...)`, 'received');
-                addLog('alice', `💬 Content: "${data.message.content}"`, 'received');
-                addLog('alice', `🔗 Conversation: ${data.conversation.substring(0, 8)}...`, 'received');
-                if (!conversationId) conversationId = data.conversation;
-            });
-            
-            aliceSocket.on('userStatusChanged', function(data) {
-                addLog('alice', `👤 User status: ${data.userId.substring(0, 8)}... is ${data.status}`, 'info');
-            });
-        });
-        
-        // Alice Authentication
-        document.getElementById('alice-auth').addEventListener('click', function() {
-            addLog('alice', '🔐 Authenticating...', 'info');
-            
-            aliceSocket.emit('authenticate', { token: ALICE_TOKEN }, function(response) {
-                addLog('alice', `🔐 Auth response: ${JSON.stringify(response)}`, 'received');
-                if (response && response.success) {
-                    updateStatus('alice', 'Authenticated as Alice', 'authenticated');
-                    addLog('alice', '✅ Authentication successful!', 'success');
-                    document.getElementById('alice-send').disabled = false;
-                    document.getElementById('alice-message').disabled = false;
-                    document.getElementById('alice-auth').disabled = true;
+            <!-- Alice Section -->
+            <div class="user-section alice">
+                <h2>👩 Alice - Sender</h2>
+                <div id="alice-status" class="status disconnected">
+                    Status: Disconnected
+                </div>
+                <div class="log" id="alice-log"></div>
+                <div>
+                    <button id="alice-connect" class="btn-primary">
+                        1. Connect Alice
+                    </button>
+                    <button id="alice-auth" class="btn-success" disabled>
+                        2. Authenticate Alice
+                    </button>
+                    <button id="alice-send" class="btn-warning" disabled>
+                        3. Send Message to Bob
+                    </button>
+                </div>
+                <div>
+                    <input
+                        type="text"
+                        id="alice-message"
+                        placeholder="Message from Alice"
+                        value="Hi Bob! This is Alice."
+                        disabled
+                    />
+                </div>
+            </div>
+
+            <!-- Bob Section -->
+            <div class="user-section bob">
+                <h2>👨 Bob - Receiver</h2>
+                <div id="bob-status" class="status disconnected">
+                    Status: Disconnected
+                </div>
+                <div class="log" id="bob-log"></div>
+                <div>
+                    <button id="bob-connect" class="btn-primary">
+                        1. Connect Bob
+                    </button>
+                    <button id="bob-auth" class="btn-success" disabled>
+                        2. Authenticate Bob
+                    </button>
+                    <button id="bob-reply" class="btn-warning" disabled>
+                        3. Send Reply to Alice
+                    </button>
+                </div>
+                <div>
+                    <input
+                        type="text"
+                        id="bob-message"
+                        placeholder="Reply from Bob"
+                        value="Hi Alice! I got your message."
+                        disabled
+                    />
+                </div>
+            </div>
+
+            <div
+                style="
+                    margin-top: 30px;
+                    padding: 20px;
+                    background: #f5f5f5;
+                    border-radius: 8px;
+                "
+            >
+                <h3>🎯 Testing Steps:</h3>
+                <ol>
+                    <li>
+                        Click <span class="highlight">"Connect Alice"</span> and
+                        wait for connection
+                    </li>
+                    <li>
+                        Click
+                        <span class="highlight">"Authenticate Alice"</span> and
+                        wait for success
+                    </li>
+                    <li>
+                        Click <span class="highlight">"Connect Bob"</span> and
+                        wait for connection
+                    </li>
+                    <li>
+                        Click
+                        <span class="highlight">"Authenticate Bob"</span> and
+                        wait for success
+                    </li>
+                    <li>
+                        Click
+                        <span class="highlight">"Send Message to Bob"</span> -
+                        Alice sends message
+                    </li>
+                    <li>
+                        Check Bob's log -
+                        <strong
+                            >Bob should see "📨 NEW MESSAGE RECEIVED!"</strong
+                        >
+                    </li>
+                    <li>
+                        Click
+                        <span class="highlight">"Send Reply to Alice"</span> -
+                        Bob replies
+                    </li>
+                    <li>
+                        Check Alice's log -
+                        <strong>Alice should see Bob's reply</strong>
+                    </li>
+                </ol>
+                <p>
+                    <strong>Expected Result:</strong> Both users should see each
+                    other's messages with sender information!
+                </p>
+            </div>
+        </div>
+
+        <script>
+            // User tokens (fresh ones)
+            const ALICE_TOKEN =
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjE4YTAwOGIwLWQzMzktNDYyOS05OWQ4LWY1NjVjZDhjZjNlMiIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NjI1NTMsImV4cCI6MTc1Mjk0ODk1M30.-02P4vnPEG2Sgcu-_ZX1yeX7zBoy5thOhqVj6DiNcvg'
+            const BOB_TOKEN =
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXVpZCI6IjhiYzJhYmJmLTNkZGUtNGI0Mi1hZWQ0LTU2NDc5ZDUxMDI0OSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODYyNTUzLCJleHAiOjE3NTI5NDg5NTN9.Erk2QF1oFUKz8qBXyEfeSYe31cjHxJxZo1YGnZGVgpw'
+
+            const ALICE_ID = '18a008b0-d339-4629-99d8-f565cd8cf3e2'
+            const BOB_ID = '8bc2abbf-3dde-4b42-aed4-56479d510249'
+
+            let aliceSocket = null
+            let bobSocket = null
+            let conversationId = null
+
+            // Logging function
+            function addLog(user, message, type = 'info') {
+                const log = document.getElementById(`${user}-log`)
+                const timestamp = new Date().toLocaleTimeString()
+                const colors = {
+                    info: '#2196f3',
+                    success: '#4caf50',
+                    error: '#f44336',
+                    sent: '#ff9800',
+                    received: '#9c27b0'
                 }
-            });
-        });
-        
-        // Alice Send Message
-        document.getElementById('alice-send').addEventListener('click', function() {
-            const message = document.getElementById('alice-message').value;
-            addLog('alice', `📤 Sending message to Bob: "${message}"`, 'sent');
-            
-            const messageData = conversationId ? 
-                { conversationId: conversationId, type: 'text', content: message } :
-                { recipientId: BOB_ID, type: 'text', content: message };
-            
-            addLog('alice', `📤 Message data: ${JSON.stringify(messageData)}`, 'sent');
-            
-            aliceSocket.emit('sendMessage', messageData, function(response) {
-                addLog('alice', `📤 Send response: ${JSON.stringify(response)}`, 'received');
-                if (response && response.success) {
-                    addLog('alice', '✅ Message sent successfully!', 'success');
-                    if (response.message && response.message.conversationId) {
-                        conversationId = response.message.conversationId;
-                        addLog('alice', `🔗 Conversation ID: ${conversationId}`, 'info');
-                    }
-                } else {
-                    addLog('alice', `❌ Send failed: ${response ? response.error : 'Unknown error'}`, 'error');
-                }
-            });
-        });
-        
-        // Bob Connection  
-        document.getElementById('bob-connect').addEventListener('click', function() {
-            addLog('bob', '🔌 Connecting to WebSocket server...', 'info');
-            
-            bobSocket = io('http://localhost:3001/direct-chat', {
-                transports: ['websocket', 'polling']
-            });
-            
-            bobSocket.on('connect', function() {
-                updateStatus('bob', 'Connected', 'connected');
-                addLog('bob', '✅ Connected successfully!', 'success');
-                document.getElementById('bob-auth').disabled = false;
-                document.getElementById('bob-connect').disabled = true;
-            });
-            
-            bobSocket.on('disconnect', function() {
-                updateStatus('bob', 'Disconnected', 'disconnected');
-                addLog('bob', '❌ Disconnected', 'error');
-            });
-            
-            bobSocket.on('connected', function(data) {
-                addLog('bob', `📨 Server welcome: ${JSON.stringify(data)}`, 'received');
-            });
-            
-            bobSocket.on('newMessage', function(data) {
-                addLog('bob', '📨 NEW MESSAGE RECEIVED!', 'received');
-                addLog('bob', `👤 From: ${data.message.senderName || 'Unknown'} (${data.message.senderId.substring(0, 8)}...)`, 'received');
-                addLog('bob', `💬 Content: "${data.message.content}"`, 'received');
-                addLog('bob', `🔗 Conversation: ${data.conversation.substring(0, 8)}...`, 'received');
-                if (!conversationId) conversationId = data.conversation;
-            });
-            
-            bobSocket.on('userStatusChanged', function(data) {
-                addLog('bob', `👤 User status: ${data.userId.substring(0, 8)}... is ${data.status}`, 'info');
-            });
-        });
-        
-        // Bob Authentication
-        document.getElementById('bob-auth').addEventListener('click', function() {
-            addLog('bob', '🔐 Authenticating...', 'info');
-            
-            bobSocket.emit('authenticate', { token: BOB_TOKEN }, function(response) {
-                addLog('bob', `🔐 Auth response: ${JSON.stringify(response)}`, 'received');
-                if (response && response.success) {
-                    updateStatus('bob', 'Authenticated as Bob', 'authenticated');
-                    addLog('bob', '✅ Authentication successful!', 'success');
-                    document.getElementById('bob-reply').disabled = false;
-                    document.getElementById('bob-message').disabled = false;
-                    document.getElementById('bob-auth').disabled = true;
-                }
-            });
-        });
-        
-        // Bob Reply
-        document.getElementById('bob-reply').addEventListener('click', function() {
-            const message = document.getElementById('bob-message').value;
-            addLog('bob', `📤 Sending reply to Alice: "${message}"`, 'sent');
-            
-            const messageData = conversationId ? 
-                { conversationId: conversationId, type: 'text', content: message } :
-                { recipientId: ALICE_ID, type: 'text', content: message };
-            
-            addLog('bob', `📤 Message data: ${JSON.stringify(messageData)}`, 'sent');
-            
-            bobSocket.emit('sendMessage', messageData, function(response) {
-                addLog('bob', `📤 Send response: ${JSON.stringify(response)}`, 'received');
-                if (response && response.success) {
-                    addLog('bob', '✅ Reply sent successfully!', 'success');
-                    if (response.message && response.message.conversationId) {
-                        conversationId = response.message.conversationId;
-                        addLog('bob', `🔗 Conversation ID: ${conversationId}`, 'info');
-                    }
-                } else {
-                    addLog('bob', `❌ Send failed: ${response ? response.error : 'Unknown error'}`, 'error');
-                }
-            });
-        });
-    </script>
-</body>
+
+                const div = document.createElement('div')
+                div.style.color = colors[type] || '#333'
+                div.style.marginBottom = '4px'
+                div.innerHTML = `[${timestamp}] ${message}`
+
+                log.appendChild(div)
+                log.scrollTop = log.scrollHeight
+            }
+
+            // Update status
+            function updateStatus(user, status, className = 'connected') {
+                const statusEl = document.getElementById(`${user}-status`)
+                statusEl.textContent = `Status: ${status}`
+                statusEl.className = `status ${className}`
+            }
+
+            // Alice Connection
+            document
+                .getElementById('alice-connect')
+                .addEventListener('click', function () {
+                    addLog(
+                        'alice',
+                        '🔌 Connecting to WebSocket server...',
+                        'info'
+                    )
+
+                    aliceSocket = io('http://localhost:3001/direct-chat', {
+                        transports: ['websocket', 'polling']
+                    })
+
+                    aliceSocket.on('connect', function () {
+                        updateStatus('alice', 'Connected', 'connected')
+                        addLog('alice', '✅ Connected successfully!', 'success')
+                        document.getElementById('alice-auth').disabled = false
+                        document.getElementById('alice-connect').disabled = true
+                    })
+
+                    aliceSocket.on('disconnect', function () {
+                        updateStatus('alice', 'Disconnected', 'disconnected')
+                        addLog('alice', '❌ Disconnected', 'error')
+                    })
+
+                    aliceSocket.on('connected', function (data) {
+                        addLog(
+                            'alice',
+                            `📨 Server welcome: ${JSON.stringify(data)}`,
+                            'received'
+                        )
+                    })
+
+                    aliceSocket.on('newMessage', function (data) {
+                        addLog('alice', '📨 NEW MESSAGE RECEIVED!', 'received')
+                        addLog(
+                            'alice',
+                            `👤 From: ${data.message.senderName || 'Unknown'} (${data.message.senderId.substring(0, 8)}...)`,
+                            'received'
+                        )
+                        addLog(
+                            'alice',
+                            `💬 Content: "${data.message.content}"`,
+                            'received'
+                        )
+                        addLog(
+                            'alice',
+                            `🔗 Conversation: ${data.conversation.substring(0, 8)}...`,
+                            'received'
+                        )
+                        if (!conversationId) conversationId = data.conversation
+                    })
+
+                    aliceSocket.on('userStatusChanged', function (data) {
+                        addLog(
+                            'alice',
+                            `👤 User status: ${data.userId.substring(0, 8)}... is ${data.status}`,
+                            'info'
+                        )
+                    })
+                })
+
+            // Alice Authentication
+            document
+                .getElementById('alice-auth')
+                .addEventListener('click', function () {
+                    addLog('alice', '🔐 Authenticating...', 'info')
+
+                    aliceSocket.emit(
+                        'authenticate',
+                        { token: ALICE_TOKEN },
+                        function (response) {
+                            addLog(
+                                'alice',
+                                `🔐 Auth response: ${JSON.stringify(response)}`,
+                                'received'
+                            )
+                            if (response && response.success) {
+                                updateStatus(
+                                    'alice',
+                                    'Authenticated as Alice',
+                                    'authenticated'
+                                )
+                                addLog(
+                                    'alice',
+                                    '✅ Authentication successful!',
+                                    'success'
+                                )
+                                document.getElementById('alice-send').disabled =
+                                    false
+                                document.getElementById(
+                                    'alice-message'
+                                ).disabled = false
+                                document.getElementById('alice-auth').disabled =
+                                    true
+                            }
+                        }
+                    )
+                })
+
+            // Alice Send Message
+            document
+                .getElementById('alice-send')
+                .addEventListener('click', function () {
+                    const message =
+                        document.getElementById('alice-message').value
+                    addLog(
+                        'alice',
+                        `📤 Sending message to Bob: "${message}"`,
+                        'sent'
+                    )
+
+                    const messageData = conversationId
+                        ? {
+                              conversationId: conversationId,
+                              type: 'text',
+                              content: message
+                          }
+                        : {
+                              recipientId: BOB_ID,
+                              type: 'text',
+                              content: message
+                          }
+
+                    addLog(
+                        'alice',
+                        `📤 Message data: ${JSON.stringify(messageData)}`,
+                        'sent'
+                    )
+
+                    aliceSocket.emit(
+                        'sendMessage',
+                        messageData,
+                        function (response) {
+                            addLog(
+                                'alice',
+                                `📤 Send response: ${JSON.stringify(response)}`,
+                                'received'
+                            )
+                            if (response && response.success) {
+                                addLog(
+                                    'alice',
+                                    '✅ Message sent successfully!',
+                                    'success'
+                                )
+                                if (
+                                    response.message &&
+                                    response.message.conversationId
+                                ) {
+                                    conversationId =
+                                        response.message.conversationId
+                                    addLog(
+                                        'alice',
+                                        `🔗 Conversation ID: ${conversationId}`,
+                                        'info'
+                                    )
+                                }
+                            } else {
+                                addLog(
+                                    'alice',
+                                    `❌ Send failed: ${response ? response.error : 'Unknown error'}`,
+                                    'error'
+                                )
+                            }
+                        }
+                    )
+                })
+
+            // Bob Connection
+            document
+                .getElementById('bob-connect')
+                .addEventListener('click', function () {
+                    addLog(
+                        'bob',
+                        '🔌 Connecting to WebSocket server...',
+                        'info'
+                    )
+
+                    bobSocket = io('http://localhost:3001/direct-chat', {
+                        transports: ['websocket', 'polling']
+                    })
+
+                    bobSocket.on('connect', function () {
+                        updateStatus('bob', 'Connected', 'connected')
+                        addLog('bob', '✅ Connected successfully!', 'success')
+                        document.getElementById('bob-auth').disabled = false
+                        document.getElementById('bob-connect').disabled = true
+                    })
+
+                    bobSocket.on('disconnect', function () {
+                        updateStatus('bob', 'Disconnected', 'disconnected')
+                        addLog('bob', '❌ Disconnected', 'error')
+                    })
+
+                    bobSocket.on('connected', function (data) {
+                        addLog(
+                            'bob',
+                            `📨 Server welcome: ${JSON.stringify(data)}`,
+                            'received'
+                        )
+                    })
+
+                    bobSocket.on('newMessage', function (data) {
+                        addLog('bob', '📨 NEW MESSAGE RECEIVED!', 'received')
+                        addLog(
+                            'bob',
+                            `👤 From: ${data.message.senderName || 'Unknown'} (${data.message.senderId.substring(0, 8)}...)`,
+                            'received'
+                        )
+                        addLog(
+                            'bob',
+                            `💬 Content: "${data.message.content}"`,
+                            'received'
+                        )
+                        addLog(
+                            'bob',
+                            `🔗 Conversation: ${data.conversation.substring(0, 8)}...`,
+                            'received'
+                        )
+                        if (!conversationId) conversationId = data.conversation
+                    })
+
+                    bobSocket.on('userStatusChanged', function (data) {
+                        addLog(
+                            'bob',
+                            `👤 User status: ${data.userId.substring(0, 8)}... is ${data.status}`,
+                            'info'
+                        )
+                    })
+                })
+
+            // Bob Authentication
+            document
+                .getElementById('bob-auth')
+                .addEventListener('click', function () {
+                    addLog('bob', '🔐 Authenticating...', 'info')
+
+                    bobSocket.emit(
+                        'authenticate',
+                        { token: BOB_TOKEN },
+                        function (response) {
+                            addLog(
+                                'bob',
+                                `🔐 Auth response: ${JSON.stringify(response)}`,
+                                'received'
+                            )
+                            if (response && response.success) {
+                                updateStatus(
+                                    'bob',
+                                    'Authenticated as Bob',
+                                    'authenticated'
+                                )
+                                addLog(
+                                    'bob',
+                                    '✅ Authentication successful!',
+                                    'success'
+                                )
+                                document.getElementById('bob-reply').disabled =
+                                    false
+                                document.getElementById(
+                                    'bob-message'
+                                ).disabled = false
+                                document.getElementById('bob-auth').disabled =
+                                    true
+                            }
+                        }
+                    )
+                })
+
+            // Bob Reply
+            document
+                .getElementById('bob-reply')
+                .addEventListener('click', function () {
+                    const message = document.getElementById('bob-message').value
+                    addLog(
+                        'bob',
+                        `📤 Sending reply to Alice: "${message}"`,
+                        'sent'
+                    )
+
+                    const messageData = conversationId
+                        ? {
+                              conversationId: conversationId,
+                              type: 'text',
+                              content: message
+                          }
+                        : {
+                              recipientId: ALICE_ID,
+                              type: 'text',
+                              content: message
+                          }
+
+                    addLog(
+                        'bob',
+                        `📤 Message data: ${JSON.stringify(messageData)}`,
+                        'sent'
+                    )
+
+                    bobSocket.emit(
+                        'sendMessage',
+                        messageData,
+                        function (response) {
+                            addLog(
+                                'bob',
+                                `📤 Send response: ${JSON.stringify(response)}`,
+                                'received'
+                            )
+                            if (response && response.success) {
+                                addLog(
+                                    'bob',
+                                    '✅ Reply sent successfully!',
+                                    'success'
+                                )
+                                if (
+                                    response.message &&
+                                    response.message.conversationId
+                                ) {
+                                    conversationId =
+                                        response.message.conversationId
+                                    addLog(
+                                        'bob',
+                                        `🔗 Conversation ID: ${conversationId}`,
+                                        'info'
+                                    )
+                                }
+                            } else {
+                                addLog(
+                                    'bob',
+                                    `❌ Send failed: ${response ? response.error : 'Unknown error'}`,
+                                    'error'
+                                )
+                            }
+                        }
+                    )
+                })
+        </script>
+    </body>
 </html>
