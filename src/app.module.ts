@@ -26,7 +26,7 @@ import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
 import { GroupModule } from './modules/group/group.module'
 import { RoomModule } from './modules/room/room.module'
-import { WebsocketModule } from './modules/websocket/websocket.module'
+// import { WebsocketModule } from './modules/websocket/websocket.module' // Temporarily disabled to fix WebSocket conflicts
 @Module({
     imports: [
         ConfigModule.forRoot({
