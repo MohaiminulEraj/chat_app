@@ -6,17 +6,21 @@ This guide explains how to use Postman for WebSocket testing with the Kitty Chat
 
 1. Open Postman
 2. Click "Import" in the top-left corner
-3. Import both files:
+3. Import the collection:
     - `kitty_chat_websocket_updated.json` (Collection)
-    - `kitty_chat_environment_updated.json` (Environment)
-4. Select the "Kitty Chat Environment - Updated" from the environment dropdown (top-right)
+4. Import the appropriate environment:
+    - **For Local Testing**: `kitty_chat_environment_updated.json`
+    - **For Live Server**: `kitty_chat_live_environment.json`
+5. Select the appropriate environment from the dropdown (top-right)
 
 ## Step 2: Connect to WebSocket
 
 1. In the collection, click on "Chat WebSocket Connection"
 2. Click the blue "Connect" button (not "Send") in the request panel
 3. You should see "Connected" status in the WebSocket interface
-4. The connection URL is: `ws://localhost:3001/socket.io/?EIO=4&transport=websocket&ns=/chat`
+4. The connection URLs are:
+    - **Local**: `ws://localhost:3001/socket.io/?EIO=4&transport=websocket&ns=/chat`
+    - **Live Server**: `ws://103.190.136.200:3000/socket.io/?EIO=4&transport=websocket&ns=/chat`
 
 ## Step 3: Authenticate
 
@@ -116,10 +120,20 @@ Both requests automatically save the JWT token to the `{{jwt_token}}` environmen
 
 ## Environment Variables
 
-The environment includes these pre-configured variables:
+The environments include these pre-configured variables:
+
+**Local Environment:**
 
 - `{{base_url}}`: http://localhost:3001
 - `{{websocket_url}}`: ws://localhost:3001
+
+**Live Server Environment:**
+
+- `{{base_url}}`: http://103.190.136.200:3000
+- `{{websocket_url}}`: ws://103.190.136.200:3000
+
+**Common Variables:**
+
 - `{{jwt_token}}`: Your authentication token
 - `{{user_uuid}}`: Your user ID
 - `{{recipient_uuid}}`: ID of user to chat with
