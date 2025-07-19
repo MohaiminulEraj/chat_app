@@ -14,6 +14,7 @@ import { CreateMessageDto } from './dto/create-message.dto'
 import { MessageService } from './message.service'
 
 @WebSocketGateway({
+    namespace: 'messages',
     cors: {
         origin: '*'
     }

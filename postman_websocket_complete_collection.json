@@ -1,0 +1,354 @@
+{
+  "info": {
+    "name": "Kitty Chat WebSocket API - Complete Collection",
+    "description": "Complete WebSocket collection for testing chat functionality with multiple users. Works with Postman v10.0+ that supports WebSocket.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Alice - Connect & Authenticate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Set Alice's details as environment variables",
+              "pm.environment.set('alice_user_id', '18a008b0-d339-4629-99d8-f565cd8cf3e2');",
+              "pm.environment.set('alice_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjE4YTAwOGIwLWQzMzktNDYyOS05OWQ4LWY1NjVjZDhjZjNlMiIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NjI1NTMsImV4cCI6MTc1Mjk0ODk1M30.-02P4vnPEG2Sgcu-_ZX1yeX7zBoy5thOhqVj6DiNcvg');",
+              "",
+              "// Test for connection",
+              "pm.test('Alice connected successfully', function() {",
+              "    pm.expect(pm.response.text()).to.include('connected');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Connect Alice to the direct-chat namespace"
+      }
+    },
+    {
+      "name": "2. Alice - Send Authentication",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Alice authenticated successfully', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.success).to.be.true;",
+              "    pm.expect(response.userId).to.equal(pm.environment.get('alice_user_id'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{alice_token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Send authentication event for Alice"
+      }
+    },
+    {
+      "name": "3. Bob - Connect & Authenticate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Set Bob's details as environment variables",
+              "pm.environment.set('bob_user_id', '8bc2abbf-3dde-4b42-aed4-56479d510249');",
+              "pm.environment.set('bob_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXVpZCI6IjhiYzJhYmJmLTNkZGUtNGI0Mi1hZWQ0LTU2NDc5ZDUxMDI0OSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODYyNTUzLCJleHAiOjE3NTI5NDg5NTN9.Erk2QF1oFUKz8qBXyEfeSYe31cjHxJxZo1YGnZGVgpw');",
+              "",
+              "pm.test('Bob connected successfully', function() {",
+              "    pm.expect(pm.response.text()).to.include('connected');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Connect Bob to the direct-chat namespace"
+      }
+    },
+    {
+      "name": "4. Bob - Send Authentication",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Bob authenticated successfully', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.success).to.be.true;",
+              "    pm.expect(response.userId).to.equal(pm.environment.get('bob_user_id'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{bob_token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Send authentication event for Bob"
+      }
+    },
+    {
+      "name": "5. Alice sends message to Bob",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Message sent successfully', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.success).to.be.true;",
+              "    pm.expect(response.message).to.exist;",
+              "    ",
+              "    // Store conversation ID for future use",
+              "    if (response.message && response.message.conversationId) {",
+              "        pm.environment.set('conversation_id', response.message.conversationId);",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipientId\": \"{{bob_user_id}}\",\n  \"type\": \"text\",\n  \"content\": \"Hi Bob! This is Alice sending a message via Postman WebSocket.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Alice sends a message to Bob using recipientId"
+      }
+    },
+    {
+      "name": "6. Bob sends reply to Alice",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Reply sent successfully', function() {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.success).to.be.true;",
+              "    pm.expect(response.message).to.exist;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"type\": \"text\",\n  \"content\": \"Hi Alice! I received your message. This is Bob replying via Postman WebSocket.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Bob replies to Alice using the conversation ID"
+      }
+    },
+    {
+      "name": "7. Alice - Typing Indicator",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"isTyping\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Alice sends typing indicator to show she's typing"
+      }
+    },
+    {
+      "name": "8. Alice - Mark Messages as Read",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversationId\": \"{{conversation_id}}\",\n  \"messageIds\": [\"message_id_here\"]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "ws://localhost:3001/direct-chat",
+          "protocol": "ws",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "direct-chat"
+          ]
+        },
+        "description": "Alice marks messages as read (replace message_id_here with actual message ID from previous responses)"
+      }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set base server URL",
+          "pm.environment.set('base_ws_url', 'ws://localhost:3001');",
+          "",
+          "// Set current timestamp for message content",
+          "pm.environment.set('timestamp', new Date().toISOString());"
+        ]
+      }
+    }
+  ]
+}

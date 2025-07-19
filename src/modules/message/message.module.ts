@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common'
 import { MongooseModule } from '@nestjs/mongoose'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { Conversation } from './entities/conversation.entity'
-import { MessageGateway } from './message.gateway'
+// import { MessageGateway } from './message.gateway' // Temporarily disabled to fix WebSocket conflicts
 import { MessageService } from './message.service'
 import { Message, MessageSchema } from './schemas/message.schema'
 
@@ -13,7 +13,10 @@ import { Message, MessageSchema } from './schemas/message.schema'
             { name: Message.name, schema: MessageSchema }
         ])
     ],
-    providers: [MessageService, MessageGateway],
+    providers: [
+        MessageService
+        // MessageGateway // Temporarily disabled to fix WebSocket conflicts
+    ],
     exports: [MessageService]
 })
 export class MessageModule {}

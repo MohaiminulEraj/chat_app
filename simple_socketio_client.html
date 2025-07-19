@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.io Client Test</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        h2 { margin-top: 20px; color: #333; }
+        #log { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; }
+        #log p { margin: 5px 0; }
+        .timestamp { color: #999; font-size: 0.8em; }
+        .info { color: #0066cc; }
+        .success { color: #009900; }
+        .error { color: #cc0000; }
+        .sent { background-color: #f0f0f0; padding: 5px; }
+        .received { background-color: #f9f9f9; padding: 5px; border-left: 3px solid #0066cc; }
+        textarea { width: 100%; height: 100px; margin-bottom: 10px; font-family: monospace; }
+        button { padding: 8px 15px; background: #0066cc; color: white; border: none; cursor: pointer; margin-right: 10px; }
+        button:hover { background: #0052a3; }
+        input[type=text] { padding: 8px; width: 60%; margin-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kitty Chat Socket.io Test Client</h1>
+        <div class="form-group">
+            <label for="namespace">Namespace:</label>
+            <select id="namespace">
+                <option value="direct-chat">direct-chat</option>
+                <option value="general">general</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <input type="text" id="token" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsImlhdCI6MTc1Mjg1OTY3NywiZXhwIjoxNzUyODYzMjc3fQ.FzWsMlWomiiBlEf3PY_lhpwCdWOsGgcTivVxuJaF3t0" style="width:90%;">
+        </div>
+        <div class="form-group">
+            <button id="connect">Connect</button>
+            <button id="disconnect" disabled>Disconnect</button>
+            <span id="status">Disconnected</span>
+        </div>
+
+        <h2>Event Log</h2>
+        <div id="log"></div>
+
+        <h2>Send Message</h2>
+        <div class="form-group">
+            <label for="eventName">Event Name:</label>
+            <select id="eventName">
+                <option value="authenticate">authenticate</option>
+                <option value="sendMessage">sendMessage</option>
+                <option value="joinConversation">joinConversation</option>
+                <option value="typing">typing</option>
+                <option value="markAsRead">markAsRead</option>
+                <option value="deleteMessage">deleteMessage</option>
+                <option value="editMessage">editMessage</option>
+                <option value="activity">activity</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="eventData">Event Data (JSON):</label>
+            <textarea id="eventData"></textarea>
+        </div>
+        <button id="send" disabled>Send Event</button>
+
+        <h2>Quick Actions</h2>
+        <button id="authenticate" disabled>Authenticate</button>
+        <button id="sendTextMessage" disabled>Send Text Message</button>
+
+        <h2>Templates</h2>
+        <select id="templates" onchange="loadTemplate()">
+            <option value="">Select a template...</option>
+            <option value="auth">Authentication</option>
+            <option value="join-conversation">Join Conversation</option>
+            <option value="message-user">Message to User</option>
+            <option value="message-conversation">Message to Conversation</option>
+            <option value="typing">Typing Status</option>
+            <option value="read">Mark as Read</option>
+            <option value="delete">Delete Message</option>
+            <option value="edit">Edit Message</option>
+        </select>
+    </div>
+
+    <script>
+        let socket = null;
+        const logElement = document.getElementById('log');
+        const statusElement = document.getElementById('status');
+        const namespaceSelect = document.getElementById('namespace');
+        const tokenInput = document.getElementById('token');
+        const eventNameSelect = document.getElementById('eventName');
+        const eventDataTextarea = document.getElementById('eventData');
+        
+        // Buttons
+        const connectButton = document.getElementById('connect');
+        const disconnectButton = document.getElementById('disconnect');
+        const sendButton = document.getElementById('send');
+        const authenticateButton = document.getElementById('authenticate');
+        const sendTextMessageButton = document.getElementById('sendTextMessage');
+        
+        // Current state
+        const state = {
+            connected: false,
+            authenticated: false,
+            userId: null,
+            conversationId: null
+        };
+        
+        // Templates for quick JSON data
+        const templates = {
+            'auth': {
+                event: 'authenticate',
+                data: {
+                    token: ''  // Will be filled from token input
+                }
+            },
+            'join-conversation': {
+                event: 'joinConversation',
+                data: {
+                    conversationId: ''  // Need to be filled
+                }
+            },
+            'message-user': {
+                event: 'sendMessage',
+                data: {
+                    recipientId: '',  // Need to be filled
+                    type: 'text',
+                    content: 'Hello from test client!'
+                }
+            },
+            'message-conversation': {
+                event: 'sendMessage',
+                data: {
+                    conversationId: '',  // Need to be filled
+                    type: 'text',
+                    content: 'Hello from test client!'
+                }
+            },
+            'typing': {
+                event: 'typing',
+                data: {
+                    conversationId: '',  // Need to be filled
+                    isTyping: true
+                }
+            },
+            'read': {
+                event: 'markAsRead',
+                data: {
+                    conversationId: '',  // Need to be filled
+                    messageIds: ['']  // Need to be filled
+                }
+            },
+            'delete': {
+                event: 'deleteMessage',
+                data: {
+                    conversationId: '',  // Need to be filled
+                    messageId: ''  // Need to be filled
+                }
+            },
+            'edit': {
+                event: 'editMessage',
+                data: {
+                    conversationId: '',  // Need to be filled
+                    messageId: '',  // Need to be filled
+                    newContent: 'Edited message content'
+                }
+            }
+        };
+        
+        // Load a template into the event fields
+        function loadTemplate() {
+            const templateSelect = document.getElementById('templates');
+            const selectedTemplate = templateSelect.value;
+            
+            if (!selectedTemplate) return;
+            
+            const template = templates[selectedTemplate];
+            
+            // Fill the token if needed
+            if (template.event === 'authenticate') {
+                template.data.token = tokenInput.value;
+            }
+            
+            // Fill conversation ID if available
+            if (state.conversationId && template.data.conversationId !== undefined) {
+                template.data.conversationId = state.conversationId;
+            }
+            
+            eventNameSelect.value = template.event;
+            eventDataTextarea.value = JSON.stringify(template.data, null, 2);
+        }
+        
+        // Add message to log
+        function log(message, type = 'info') {
+            const p = document.createElement('p');
+            p.className = type;
+            
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = new Date().toLocaleTimeString() + ' ';
+            
+            p.appendChild(timestamp);
+            
+            if (typeof message === 'object') {
+                p.appendChild(document.createTextNode(JSON.stringify(message, null, 2)));
+            } else {
+                p.appendChild(document.createTextNode(message));
+            }
+            
+            logElement.appendChild(p);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // Connect to socket.io server
+        connectButton.addEventListener('click', function() {
+            const namespace = namespaceSelect.value;
+            const url = `http://localhost:3001/${namespace}`;
+            
+            try {
+                log(`Connecting to ${url}...`);
+                
+                // For general namespace, include token in query params
+                const options = {
+                    transports: ['websocket', 'polling']
+                };
+                
+                if (namespace === 'general') {
+                    options.query = {
+                        'auth-token': tokenInput.value
+                    };
+                }
+                
+                // Create socket
+                socket = io(url, options);
+                
+                // Set up event listeners
+                socket.on('connect', function() {
+                    state.connected = true;
+                    statusElement.textContent = 'Connected';
+                    statusElement.style.color = 'green';
+                    
+                    connectButton.disabled = true;
+                    disconnectButton.disabled = false;
+                    sendButton.disabled = false;
+                    authenticateButton.disabled = false;
+                    
+                    log(`Connected to ${url} (ID: ${socket.id})`, 'success');
+                });
+                
+                socket.on('disconnect', function() {
+                    state.connected = false;
+                    state.authenticated = false;
+                    statusElement.textContent = 'Disconnected';
+                    statusElement.style.color = 'red';
+                    
+                    connectButton.disabled = false;
+                    disconnectButton.disabled = true;
+                    sendButton.disabled = true;
+                    authenticateButton.disabled = true;
+                    sendTextMessageButton.disabled = true;
+                    
+                    log('Disconnected from server', 'error');
+                });
+                
+                socket.on('error', function(err) {
+                    log('Error: ' + err, 'error');
+                });
+                
+                // Handle welcome message
+                socket.on('connected', function(data) {
+                    log('Server welcome: ' + JSON.stringify(data), 'received');
+                });
+                
+                // Handle various message types
+                ['newMessage', 'messagesRead', 'userTyping', 'messageDeleted', 'messageEdited', 'userStatusChanged'].forEach(function(event) {
+                    socket.on(event, function(data) {
+                        log(`Received ${event}: ${JSON.stringify(data)}`, 'received');
+                        
+                        // If we receive a message with conversationId, store it and join the room
+                        if (data.conversation) {
+                            if (state.conversationId !== data.conversation) {
+                                state.conversationId = data.conversation;
+                                log(`Conversation ID set to: ${state.conversationId}`, 'info');
+                                
+                                // Auto-join the conversation room
+                                socket.emit('joinConversation', { conversationId: state.conversationId }, function(response) {
+                                    if (response && response.success) {
+                                        log(`Automatically joined conversation room: ${state.conversationId}`, 'success');
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // Special handling for new messages to highlight them
+                        if (event === 'newMessage') {
+                            const messageInfo = data.message ? 
+                                `From: ${data.message.senderId}, Content: "${data.message.content}"` : 
+                                'Message details not available';
+                            log(`📨 NEW MESSAGE: ${messageInfo}`, 'received');
+                        }
+                    });
+                });
+            } catch (error) {
+                log('Connection error: ' + error.message, 'error');
+            }
+        });
+        
+        // Disconnect
+        disconnectButton.addEventListener('click', function() {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+        
+        // Send custom event
+        sendButton.addEventListener('click', function() {
+            if (!socket || !state.connected) {
+                log('Not connected', 'error');
+                return;
+            }
+            
+            const eventName = eventNameSelect.value;
+            let eventData;
+            
+            try {
+                eventData = JSON.parse(eventDataTextarea.value);
+                log(`Sending ${eventName}: ${JSON.stringify(eventData)}`, 'sent');
+                
+                socket.emit(eventName, eventData, function(response) {
+                    log(`Response for ${eventName}: ${JSON.stringify(response)}`, 'received');
+                    
+                    // If authentication was successful
+                    if (eventName === 'authenticate' && response && response.success) {
+                        state.authenticated = true;
+                        state.userId = response.userId;
+                        statusElement.textContent = `Connected (User: ${state.userId})`;
+                        sendTextMessageButton.disabled = false;
+                        
+                        log(`Authenticated as user ${state.userId}`, 'success');
+                        log(`Server automatically joins user to their conversations`, 'info');
+                    }
+                    
+                    // If message was sent successfully and contains a conversation ID
+                    if (eventName === 'sendMessage' && response && response.success && response.message && response.message.conversationId) {
+                        const newConversationId = response.message.conversationId;
+                        
+                        if (state.conversationId !== newConversationId) {
+                            state.conversationId = newConversationId;
+                            log(`Conversation ID set to: ${state.conversationId}`, 'info');
+                            
+                            // Ensure we're joined to this conversation room
+                            socket.emit('joinConversation', { conversationId: state.conversationId }, function(joinResponse) {
+                                if (joinResponse && joinResponse.success) {
+                                    log(`Joined conversation room: ${state.conversationId}`, 'success');
+                                } else {
+                                    log(`Failed to join conversation room: ${joinResponse ? joinResponse.error : 'Unknown error'}`, 'error');
+                                }
+                            });
+                        }
+                    }
+                });
+            } catch (error) {
+                log('Invalid JSON: ' + error.message, 'error');
+            }
+        });
+        
+        // Quick authenticate
+        authenticateButton.addEventListener('click', function() {
+            if (!socket || !state.connected) {
+                log('Not connected', 'error');
+                return;
+            }
+            
+            const token = tokenInput.value;
+            
+            if (!token) {
+                log('Token is required', 'error');
+                return;
+            }
+            
+            const authData = { token };
+            log(`Authenticating: ${JSON.stringify(authData)}`, 'sent');
+            
+            socket.emit('authenticate', authData, function(response) {
+                log(`Authentication response: ${JSON.stringify(response)}`, 'received');
+                
+                if (response && response.success) {
+                    state.authenticated = true;
+                    state.userId = response.userId;
+                    statusElement.textContent = `Connected (User: ${state.userId})`;
+                    sendTextMessageButton.disabled = false;
+                    
+                    log(`Authenticated as user ${state.userId}`, 'success');
+                    log(`Server automatically joins user to their conversations`, 'info');
+                }
+            });
+        });
+        
+        // Quick send text message
+        sendTextMessageButton.addEventListener('click', function() {
+            if (!socket || !state.connected || !state.authenticated) {
+                log('Not connected or not authenticated', 'error');
+                return;
+            }
+            
+            // Prompt for recipient or use existing conversation
+            let messageData;
+            
+            if (state.conversationId) {
+                if (confirm('Use existing conversation? Press OK for yes, Cancel to specify a recipient.')) {
+                    messageData = {
+                        conversationId: state.conversationId,
+                        type: 'text',
+                        content: prompt('Enter message:', 'Hello from test client!')
+                    };
+                } else {
+                    const recipientId = prompt('Enter recipient ID:');
+                    if (!recipientId) return;
+                    
+                    messageData = {
+                        recipientId: recipientId,
+                        type: 'text',
+                        content: prompt('Enter message:', 'Hello from test client!')
+                    };
+                }
+            } else {
+                const recipientId = prompt('Enter recipient ID:');
+                if (!recipientId) return;
+                
+                messageData = {
+                    recipientId: recipientId,
+                    type: 'text',
+                    content: prompt('Enter message:', 'Hello from test client!')
+                };
+            }
+            
+            if (!messageData.content) return;
+            
+            log(`Sending message: ${JSON.stringify(messageData)}`, 'sent');
+            
+            socket.emit('sendMessage', messageData, function(response) {
+                log(`Send message response: ${JSON.stringify(response)}`, 'received');
+                
+                if (response && response.success && response.message && response.message.conversationId) {
+                    const newConversationId = response.message.conversationId;
+                    
+                    if (state.conversationId !== newConversationId) {
+                        state.conversationId = newConversationId;
+                        log(`Conversation ID set to: ${state.conversationId}`, 'info');
+                        
+                        // Ensure we're joined to this conversation room
+                        socket.emit('joinConversation', { conversationId: state.conversationId }, function(joinResponse) {
+                            if (joinResponse && joinResponse.success) {
+                                log(`Joined conversation room: ${state.conversationId}`, 'success');
+                            } else {
+                                log(`Failed to join conversation room: ${joinResponse ? joinResponse.error : 'Unknown error'}`, 'error');
+                            }
+                        });
+                    }
+                }
+            });
+        });
+        
+        // Set initial template when event type changes
+        eventNameSelect.addEventListener('change', function() {
+            const eventName = eventNameSelect.value;
+            
+            // Find a matching template
+            for (const [key, template] of Object.entries(templates)) {
+                if (template.event === eventName) {
+                    // Fill the token if needed
+                    if (eventName === 'authenticate') {
+                        template.data.token = tokenInput.value;
+                    }
+                    
+                    // Fill conversation ID if available
+                    if (state.conversationId && template.data.conversationId !== undefined) {
+                        template.data.conversationId = state.conversationId;
+                    }
+                    
+                    eventDataTextarea.value = JSON.stringify(template.data, null, 2);
+                    return;
+                }
+            }
+            
+            // Default empty object if no template found
+            eventDataTextarea.value = '{}';
+        });
+    </script>
+</body>
+</html>

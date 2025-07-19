@@ -1,0 +1,453 @@
+{
+  "info": {
+    "_postman_id": "92d17fd2-bd17-4338-9bfa-4ccf65c5e701",
+    "name": "Kitty Chat WebSocket API",
+    "description": "A collection for testing the WebSocket chat functionality of the Kitty Backend application.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Direct Chat",
+      "description": "WebSocket endpoints for direct conversations between users",
+      "item": [
+        {
+          "name": "Connect",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Connect to the WebSocket server for direct chat"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Connection successful');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Authenticate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Authenticate with the WebSocket server"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Wait for successful connection",
+                  "socket.on('connect', () => {",
+                  "    console.log('Connected to WebSocket server');",
+                  "    ",
+                  "    // Emit authentication event with JWT token",
+                  "    socket.emit('authenticate', {",
+                  "        token: pm.environment.get('jwt_token')",
+                  "    });",
+                  "});",
+                  "",
+                  "// Handle authentication response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Authentication response:', data);",
+                  "    pm.environment.set('auth_status', data.success);",
+                  "    if (data.userId) {",
+                  "        pm.environment.set('user_id', data.userId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Send a message to a conversation or recipient"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// First ensure you're authenticated",
+                  "if (!pm.environment.get('auth_status')) {",
+                  "    console.error('You must authenticate first!');",
+                  "    return;",
+                  "}",
+                  "",
+                  "// Send message to a specific conversation or recipient",
+                  "// Option 1: Send to a conversation",
+                  "socket.emit('sendMessage', {",
+                  "    conversationId: pm.environment.get('conversation_id'), // Use if you have a conversation ID",
+                  "    type: 'text', // Options: text, image, video, file, audio",
+                  "    content: 'Hello, this is a test message!'",
+                  "});",
+                  "",
+                  "// Option 2: Send to a recipient directly (creates/uses direct conversation)",
+                  "/*",
+                  "socket.emit('sendMessage', {",
+                  "    recipientId: pm.environment.get('recipient_id'), // UUID of recipient user",
+                  "    type: 'text',",
+                  "    content: 'Hello, this is a direct message!'",
+                  "});",
+                  "*/",
+                  "",
+                  "// Handle response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Send message response:', data);",
+                  "    if (data.success && data.message) {",
+                  "        pm.environment.set('last_message_id', data.message.id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Mark messages as read in a conversation"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure you're authenticated",
+                  "if (!pm.environment.get('auth_status')) {",
+                  "    console.error('You must authenticate first!');",
+                  "    return;",
+                  "}",
+                  "",
+                  "// Mark messages as read",
+                  "socket.emit('markAsRead', {",
+                  "    conversationId: pm.environment.get('conversation_id'),",
+                  "    messageIds: [pm.environment.get('last_message_id')] // Array of message IDs to mark as read",
+                  "});",
+                  "",
+                  "// Handle response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Mark as read response:', data);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Typing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Indicate typing status in a conversation"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure you're authenticated",
+                  "if (!pm.environment.get('auth_status')) {",
+                  "    console.error('You must authenticate first!');",
+                  "    return;",
+                  "}",
+                  "",
+                  "// Send typing status",
+                  "socket.emit('typing', {",
+                  "    conversationId: pm.environment.get('conversation_id'),",
+                  "    isTyping: true // true when typing starts, false when stops",
+                  "});",
+                  "",
+                  "// Handle response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Typing status response:', data);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Delete a message from a conversation"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure you're authenticated",
+                  "if (!pm.environment.get('auth_status')) {",
+                  "    console.error('You must authenticate first!');",
+                  "    return;",
+                  "}",
+                  "",
+                  "// Delete message",
+                  "socket.emit('deleteMessage', {",
+                  "    conversationId: pm.environment.get('conversation_id'),",
+                  "    messageId: pm.environment.get('last_message_id')",
+                  "});",
+                  "",
+                  "// Handle response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Delete message response:', data);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Edit a message in a conversation"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure you're authenticated",
+                  "if (!pm.environment.get('auth_status')) {",
+                  "    console.error('You must authenticate first!');",
+                  "    return;",
+                  "}",
+                  "",
+                  "// Edit message",
+                  "socket.emit('editMessage', {",
+                  "    conversationId: pm.environment.get('conversation_id'),",
+                  "    messageId: pm.environment.get('last_message_id'),",
+                  "    newContent: 'This is an edited message.'",
+                  "});",
+                  "",
+                  "// Handle response",
+                  "socket.on('message', (data) => {",
+                  "    console.log('Edit message response:', data);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "General WebSocket",
+      "description": "WebSocket endpoints for general app notifications and updates",
+      "item": [
+        {
+          "name": "Connect to General",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "general"
+              ],
+              "query": [
+                {
+                  "key": "auth-token",
+                  "value": "{{jwt_token}}"
+                }
+              ]
+            },
+            "description": "Connect to the general WebSocket namespace"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Connected to general websocket namespace');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/general?auth-token={{jwt_token}}",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "general"
+              ],
+              "query": [
+                {
+                  "key": "auth-token",
+                  "value": "{{jwt_token}}"
+                }
+              ]
+            },
+            "description": "Send user activity to the general namespace"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Send activity to general namespace",
+                  "socket.emit('activity', 'User is active');",
+                  "",
+                  "// Handle any errors",
+                  "socket.on('error', (error) => {",
+                  "    console.error('Error:', error);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "localhost:3001",
+      "type": "string"
+    }
+  ]
+}

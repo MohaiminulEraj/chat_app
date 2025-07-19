@@ -10,7 +10,8 @@ import { Server, Socket } from 'socket.io'
 import { WebsocketService } from './websocket.service'
 
 @Injectable()
-@WebSocketGateway(3001, {
+@WebSocketGateway({
+    namespace: 'general',
     transports: ['websocket'],
     cors: {
         origin: '*', // Enable CORS for all origins

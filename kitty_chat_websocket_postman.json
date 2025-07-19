@@ -1,0 +1,267 @@
+{
+  "info": {
+    "name": "Kitty Chat WebSocket Collection",
+    "description": "WebSocket testing for Kitty Chat API - Direct chat functionality",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Direct Chat Namespace",
+      "item": [
+        {
+          "name": "Connect to WebSocket",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Initial WebSocket connection to direct-chat namespace"
+          }
+        },
+        {
+          "name": "Alice Authentication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type", 
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjE4YTAwOGIwLWQzMzktNDYyOS05OWQ4LWY1NjVjZDhjZjNlMiIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NjI1NTMsImV4cCI6MTc1Mjk0ODk1M30.-02P4vnPEG2Sgcu-_ZX1yeX7zBoy5thOhqVj6DiNcvg\"\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Authenticate Alice with JWT token. Expected response: {\"success\": true, \"userId\": \"18a008b0-d339-4629-99d8-f565cd8cf3e2\"}"
+          }
+        },
+        {
+          "name": "Bob Authentication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXVpZCI6IjhiYzJhYmJmLTNkZGUtNGI0Mi1hZWQ0LTU2NDc5ZDUxMDI0OSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODYyNTUzLCJleHAiOjE3NTI5NDg5NTN9.Erk2QF1oFUKz8qBXyEfeSYe31cjHxJxZo1YGnZGVgpw\"\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Authenticate Bob with JWT token. Expected response: {\"success\": true, \"userId\": \"8bc2abbf-3dde-4b42-aed4-56479d510249\"}"
+          }
+        },
+        {
+          "name": "Alice Send Message to Bob",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"8bc2abbf-3dde-4b42-aed4-56479d510249\",\n  \"type\": \"text\",\n  \"content\": \"Hi Bob! This is Alice sending you a message through Postman WebSocket.\"\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Alice sends a message to Bob using recipientId. This will create a new conversation."
+          }
+        },
+        {
+          "name": "Bob Reply to Alice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"REPLACE_WITH_CONVERSATION_ID_FROM_PREVIOUS_RESPONSE\",\n  \"type\": \"text\",\n  \"content\": \"Hi Alice! I received your message. This is Bob replying through Postman WebSocket.\"\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Bob replies to Alice using the conversationId from the previous message response."
+          }
+        },
+        {
+          "name": "Send Typing Indicator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"REPLACE_WITH_CONVERSATION_ID\",\n  \"isTyping\": true\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Send typing indicator to show user is typing"
+          }
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"REPLACE_WITH_CONVERSATION_ID\",\n  \"messageIds\": [\"REPLACE_WITH_MESSAGE_ID\"]\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Mark specific messages as read by providing message IDs"
+          }
+        },
+        {
+          "name": "Join Conversation Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"REPLACE_WITH_CONVERSATION_ID\"\n}"
+            },
+            "url": {
+              "raw": "ws://localhost:3001/direct-chat",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "direct-chat"
+              ]
+            },
+            "description": "Manually join a conversation room to receive messages"
+          }
+        }
+      ],
+      "description": "All WebSocket operations for the direct-chat namespace"
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_ws_url",
+      "value": "ws://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "alice_user_id",
+      "value": "18a008b0-d339-4629-99d8-f565cd8cf3e2",
+      "type": "string"
+    },
+    {
+      "key": "bob_user_id", 
+      "value": "8bc2abbf-3dde-4b42-aed4-56479d510249",
+      "type": "string"
+    },
+    {
+      "key": "charlie_user_id",
+      "value": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "type": "string"
+    },
+    {
+      "key": "diana_user_id",
+      "value": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "string"
+    },
+    {
+      "key": "alice_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6IjE4YTAwOGIwLWQzMzktNDYyOS05OWQ4LWY1NjVjZDhjZjNlMiIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NjI1NTMsImV4cCI6MTc1Mjk0ODk1M30.-02P4vnPEG2Sgcu-_ZX1yeX7zBoy5thOhqVj6DiNcvg",
+      "type": "string"
+    },
+    {
+      "key": "bob_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXVpZCI6IjhiYzJhYmJmLTNkZGUtNGI0Mi1hZWQ0LTU2NDc5ZDUxMDI0OSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODYyNTUzLCJleHAiOjE3NTI5NDg5NTN9.Erk2QF1oFUKz8qBXyEfeSYe31cjHxJxZo1YGnZGVgpw",
+      "type": "string"
+    }
+  ]
+}

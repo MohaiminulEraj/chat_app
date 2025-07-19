@@ -66,7 +66,7 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
         UserModule,
         FriendshipModule,
         GroupModule,
-        WebsocketModule,
+        // WebsocketModule, // Temporarily disabled to fix conflict
         CloudinaryModule,
         // UploadModule,
         RoomModule, // Add RoomModule to imports

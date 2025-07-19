@@ -6,7 +6,7 @@ import { User } from '../user/entities/user.entity'
 import { GiftTransaction } from './entities/gift-transaction.entity'
 import { Gift } from './entities/gift.entity'
 import { GiftController } from './gift.controller'
-import { GiftGateway } from './gift.gateway'
+// import { GiftGateway } from './gift.gateway' // Temporarily disabled to fix WebSocket conflicts
 import { GiftService } from './gift.service'
 
 @Module({
@@ -20,7 +20,10 @@ import { GiftService } from './gift.service'
         AuthModule // Add AuthModule to imports to provide JwtService for WsJwtGuard
     ],
     controllers: [GiftController],
-    providers: [GiftService, GiftGateway],
+    providers: [
+        GiftService
+        // GiftGateway // Temporarily disabled to fix WebSocket conflicts
+    ],
     exports: [GiftService]
 })
 export class GiftModule {}

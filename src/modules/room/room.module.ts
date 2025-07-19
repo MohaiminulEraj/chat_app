@@ -6,7 +6,7 @@ import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 import { RoomController } from './room.controller'
-import { RoomGateway } from './room.gateway'
+// import { RoomGateway } from './room.gateway' // Temporarily disabled to fix WebSocket conflicts
 import { RoomService } from './room.service'
 
 @Module({
@@ -20,7 +20,10 @@ import { RoomService } from './room.service'
         AuthModule // Add AuthModule to provide JwtService for WsJwtGuard
     ],
     controllers: [RoomController],
-    providers: [RoomService, RoomGateway],
+    providers: [
+        RoomService
+        // RoomGateway  // Temporarily disabled to fix WebSocket conflicts
+    ],
     exports: [RoomService]
 })
 export class RoomModule {}

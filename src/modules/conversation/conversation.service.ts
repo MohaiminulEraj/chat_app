@@ -38,8 +38,15 @@ export class ConversationService {
             .where('conversation.type = :type', {
                 type: ConversationType.DIRECT
             })
-            .andWhere('conversation.participantIds @> :ids', { ids: sortedIds })
-            .andWhere('array_length(conversation.participantIds, 1) = 2')
+            .andWhere('conversation.participantIds IS NOT NULL')
+            .andWhere(
+                '(conversation.participantIds = :exactMatch OR ' +
+                'conversation.participantIds = :reverseMatch)',
+                {
+                    exactMatch: sortedIds.join(','),
+                    reverseMatch: [...sortedIds].reverse().join(',')
+                }
+            )
             .getOne()
 
         if (!conversation) {
@@ -74,7 +81,20 @@ export class ConversationService {
     async getUserConversations(userId: string): Promise<Conversation[]> {
         return this.conversationRepository
             .createQueryBuilder('conversation')
-            .where(':userId = ANY(conversation.participantIds)', { userId })
+            .where('conversation.participantIds IS NOT NULL')
+            .andWhere('conversation.participantIds != \'\'')
+            .andWhere(
+                '(conversation.participantIds = :exactUserId OR ' +
+                'conversation.participantIds LIKE :userIdStart OR ' +
+                'conversation.participantIds LIKE :userIdMiddle OR ' +
+                'conversation.participantIds LIKE :userIdEnd)',
+                {
+                    exactUserId: userId,
+                    userIdStart: `${userId},%`,
+                    userIdMiddle: `%,${userId},%`,
+                    userIdEnd: `%,${userId}`
+                }
+            )
             .orderBy('conversation.lastMessageAt', 'DESC')
             .getMany()
     }
@@ -90,7 +110,7 @@ export class ConversationService {
         const conversation = await this.getConversation(data.conversationId)
 
         // Verify sender is participant
-        if (!conversation.participantIds.includes(data.senderId)) {
+        if (!conversation.participantIds || !conversation.participantIds.includes(data.senderId)) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )
@@ -128,7 +148,7 @@ export class ConversationService {
         const conversation = await this.getConversation(conversationId)
 
         // Verify user is participant
-        if (!conversation.participantIds.includes(userId)) {
+        if (!conversation.participantIds || !conversation.participantIds.includes(userId)) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )
@@ -158,7 +178,7 @@ export class ConversationService {
         const conversation = await this.getConversation(conversationId)
 
         // Verify user is participant
-        if (!conversation.participantIds.includes(userId)) {
+        if (!conversation.participantIds || !conversation.participantIds.includes(userId)) {
             throw new ForbiddenException(
                 'You are not a participant of this conversation'
             )
@@ -242,7 +262,7 @@ export class ConversationService {
     ): Promise<User[]> {
         const conversation = await this.getConversation(conversationId)
 
-        const offlineUserIds = conversation.participantIds.filter(
+        const offlineUserIds = (conversation.participantIds || []).filter(
             (id) => id !== excludeUserId
         )
 
