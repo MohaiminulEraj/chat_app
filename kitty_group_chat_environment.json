@@ -1,0 +1,94 @@
+{
+    "id": "kitty-group-chat-environment",
+    "name": "Kitty Group Chat Environment",
+    "values": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "live_base_url",
+            "value": "http://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "live_websocket_url",
+            "value": "ws://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "group_chat_namespace",
+            "value": "/group-chat",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "jwt_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true,
+            "description": "JWT token from login/register"
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "group_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "UUID of the group to test chat with"
+        },
+        {
+            "key": "message_id",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "ID of a message for edit/delete operations"
+        },
+        {
+            "key": "user_name",
+            "value": "Group Test User",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_email",
+            "value": "grouptest@example.com",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_phone",
+            "value": "01891234571",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_password",
+            "value": "password123",
+            "type": "secret",
+            "enabled": true
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}
