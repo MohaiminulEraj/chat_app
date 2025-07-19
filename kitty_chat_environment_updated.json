@@ -1,0 +1,68 @@
+{
+    "id": "kitty-chat-environment-updated",
+    "name": "Kitty Chat Environment - Updated",
+    "values": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "jwt_token",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NywidXVpZCI6IjQ4M2ViMjM3LTNkZTctNDE5YS04NmYxLWQxNDNjNDI2YjJkOCIsImVtYWlsIjoidGVzdHVzZXIyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyOTA0OTIzLCJleHAiOjE3NTI5MDg1MjN9.m7WiSdQ5gtXbzTB2uR-xNR6aqyJDM2N36PR_oidblDU",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "user_id",
+            "value": "7",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_uuid",
+            "value": "483eb237-3de7-419a-86f1-d143c426b2d8",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_name",
+            "value": "Test User 3",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_email",
+            "value": "testuser3@example.com",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_phone",
+            "value": "01891234569",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_password",
+            "value": "password123",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "recipient_uuid",
+            "value": "483eb237-3de7-419a-86f1-d143c426b2d8",
+            "type": "default",
+            "enabled": true,
+            "description": "UUID of the user to send messages to"
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}
