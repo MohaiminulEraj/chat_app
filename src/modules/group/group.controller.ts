@@ -63,6 +63,10 @@ export class GroupController {
                     type: 'string',
                     example: 'A group for discussing study materials'
                 },
+                tag: {
+                    type: 'string',
+                    example: 'education'
+                },
                 isPublic: { type: 'boolean', example: false },
                 memberIds: {
                     type: 'array',

@@ -15,6 +15,9 @@ export class Group extends CustomBaseEntity {
     description: string
 
     @Column({ nullable: true })
+    tag: string
+
+    @Column({ nullable: true })
     avatarUrl: string
 
     @Column({ default: false })
