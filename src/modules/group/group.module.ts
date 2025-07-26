@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module'
 import { CloudinaryModule } from '../cloudinary/cloudinary.module'
 import { Room } from '../room/entities/room.entity'
+import { User } from '../user/entities/user.entity'
 import { GroupMember } from './entities/group-member.entity'
 import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
@@ -25,7 +26,8 @@ import {
             GroupMember,
             GroupRole,
             GroupSettings,
-            Room
+            Room,
+            User
         ]),
         MongooseModule.forFeature([
             { name: GroupMessage.name, schema: GroupMessageSchema }

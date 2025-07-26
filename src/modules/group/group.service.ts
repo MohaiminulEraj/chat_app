@@ -5,9 +5,10 @@ import {
     NotFoundException
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { Repository, DataSource } from 'typeorm'
 import { v4 as uuidv4 } from 'uuid'
 import { CloudinaryService } from '../cloudinary/cloudinary.service'
+import { User } from '../user/entities/user.entity'
 import { CreateGroupDto } from './dto/create-group.dto'
 import { GroupMember } from './entities/group-member.entity'
 import { GroupRole } from './entities/group-role.entity'
@@ -26,7 +27,10 @@ export class GroupService {
         private roleRepository: Repository<GroupRole>,
         @InjectRepository(GroupSettings)
         private settingsRepository: Repository<GroupSettings>,
-        private cloudinaryService: CloudinaryService
+        @InjectRepository(User)
+        private userRepository: Repository<User>,
+        private cloudinaryService: CloudinaryService,
+        private dataSource: DataSource
     ) {}
 
     async createGroup(
@@ -35,9 +39,35 @@ export class GroupService {
         avatarFile?: Express.Multer.File,
         flagFile?: Express.Multer.File
     ): Promise<Group> {
+        // Validate owner exists
+        const ownerExists = await this.userRepository.findOne({
+            where: { uuid: ownerId }
+        })
+        if (!ownerExists) {
+            throw new BadRequestException('Owner user not found')
+        }
+
         // Validate members don't include owner
         if (data.memberIds && data.memberIds.includes(ownerId)) {
             throw new BadRequestException('You cannot add yourself as a member')
+        }
+
+        // Validate all member IDs exist
+        if (data.memberIds && data.memberIds.length > 0) {
+            const existingUsers = await this.userRepository.find({
+                where: data.memberIds.map((id) => ({ uuid: id }))
+            })
+
+            const existingUserIds = existingUsers.map((user) => user.uuid)
+            const nonExistentUsers = data.memberIds.filter(
+                (id) => !existingUserIds.includes(id)
+            )
+
+            if (nonExistentUsers.length > 0) {
+                throw new BadRequestException(
+                    `Users not found: ${nonExistentUsers.join(', ')}`
+                )
+            }
         }
 
         // Handle avatar upload if file is provided
@@ -80,66 +110,109 @@ export class GroupService {
                 // ignore flag upload failure
             }
         }
-        // Create group
-        const group = this.groupRepository.create({
-            ...data,
-            ownerId,
-            avatarUrl,
-            flagUrl,
-            inviteCode: data.isPublic ? uuidv4() : null,
-            lastActiveAt: new Date()
-        })
-        const savedGroup = await this.groupRepository.save(group)
-        const groupId = savedGroup.uuid
 
-        // Create default roles
-        await this.createDefaultRoles(groupId)
-        // Create group settings
-        const settings = this.settingsRepository.create({
-            groupId: groupId,
-            allowTextMessages: true,
-            allowVoiceMessages: true,
-            allowImageMessages: true,
-            allowVideoMessages: true,
-            allowFileSharing: true,
-            allowGifts: true
-        })
-        await this.settingsRepository.save(settings)
+        // Use transaction for group creation to ensure data consistency
+        return await this.dataSource.transaction(async (manager) => {
+            // Create group
+            const group = this.groupRepository.create({
+                ...data,
+                ownerId,
+                avatarUrl,
+                flagUrl,
+                inviteCode: data.isPublic ? uuidv4() : null,
+                lastActiveAt: new Date()
+            })
+            const savedGroup = await manager.save(group)
+            const groupId = savedGroup.uuid
 
-        // Add owner as super admin
-        const ownerRole = await this.roleRepository.findOne({
-            where: { groupId: groupId, name: 'Group Owner' }
-        })
+            // Create default roles
+            await this.createDefaultRolesInTransaction(manager, groupId)
 
-        const ownerMember = this.memberRepository.create({
-            userId: ownerId,
-            groupId: groupId,
-            roleId: ownerRole.uuid
-        })
-        await this.memberRepository.save(ownerMember)
+            // Create group settings
+            const settings = this.settingsRepository.create({
+                groupId: groupId,
+                allowTextMessages: true,
+                allowVoiceMessages: true,
+                allowImageMessages: true,
+                allowVideoMessages: true,
+                allowFileSharing: true,
+                allowGifts: true
+            })
+            await manager.save(settings)
 
-        // Add initial members if provided
-        if (data.memberIds && data.memberIds.length > 0) {
-            const memberRole = await this.roleRepository.findOne({
-                where: { groupId: groupId, name: 'Member' }
+            // Add owner as super admin
+            const ownerRole = await manager.findOne(GroupRole, {
+                where: { groupId: groupId, name: 'Group Owner' }
             })
 
-            const members = data.memberIds.map((userId) =>
-                this.memberRepository.create({
-                    userId,
-                    groupId: groupId,
-                    roleId: memberRole.uuid
+            if (!ownerRole) {
+                console.error('Failed to find owner role for group:', groupId)
+                throw new BadRequestException(
+                    'Failed to create owner role for group'
+                )
+            }
+
+            console.log('Creating owner member with:', {
+                userId: ownerId,
+                groupId: groupId,
+                roleId: ownerRole.uuid
+            })
+
+            const ownerMember = this.memberRepository.create({
+                userId: ownerId,
+                groupId: groupId,
+                roleId: ownerRole.uuid
+            })
+            await manager.save(ownerMember)
+
+            // Add initial members if provided
+            if (data.memberIds && data.memberIds.length > 0) {
+                const memberRole = await manager.findOne(GroupRole, {
+                    where: { groupId: groupId, name: 'Member' }
                 })
-            )
 
-            await this.memberRepository.save(members)
-        }
+                if (!memberRole) {
+                    console.error(
+                        'Failed to find member role for group:',
+                        groupId
+                    )
+                    throw new BadRequestException(
+                        'Failed to create member role for group'
+                    )
+                }
 
-        // Return the actual group entity
-        return savedGroup
+                console.log(
+                    'Creating members with role:',
+                    memberRole.uuid,
+                    'for users:',
+                    data.memberIds
+                )
+
+                const members = data.memberIds.map((userId) => {
+                    console.log('Creating member:', {
+                        userId,
+                        groupId: groupId,
+                        roleId: memberRole.uuid
+                    })
+                    return this.memberRepository.create({
+                        userId,
+                        groupId: groupId,
+                        roleId: memberRole.uuid
+                    })
+                })
+
+                await manager.save(members)
+            }
+
+            // Return the saved group
+            return savedGroup
+        })
     }
 
-    async createDefaultRoles(groupId: string): Promise<void> {
+    private async createDefaultRolesInTransaction(
+        manager: any,
+        groupId: string
+    ): Promise<void> {
         const defaultRoles = [
             {
                 groupId,
@@ -232,8 +305,26 @@ export class GroupService {
                 color: '#808080'
             }
         ]
-        const groupRoles = await this.roleRepository.create(defaultRoles)
-        await this.roleRepository.save(groupRoles)
+
+        try {
+            const groupRoles = this.roleRepository.create(defaultRoles)
+            const savedRoles = await manager.save(groupRoles)
+
+            if (savedRoles.length !== defaultRoles.length) {
+                throw new BadRequestException(
+                    'Failed to create all default roles'
+                )
+            }
+        } catch (error) {
+            console.error(
+                'Error creating default roles for group:',
+                groupId,
+                error
+            )
+            throw new BadRequestException(
+                'Failed to create default roles for group'
+            )
+        }
     }
 
     async transferOwnership(
