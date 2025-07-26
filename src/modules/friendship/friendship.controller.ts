@@ -143,7 +143,30 @@ export class FriendshipController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'List of friends',
-        type: [Friendship]
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Friends fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'number' },
+                            uuid: { type: 'string' },
+                            createdAt: { type: 'string', format: 'date-time' },
+                            updatedAt: { type: 'string', format: 'date-time' },
+                            status: { type: 'string', example: 'accepted' },
+                            user: { $ref: '#/components/schemas/User' }
+                        }
+                    }
+                }
+            }
+        }
     })
     async getFriends(@Request() req) {
         const data = await this.friendshipService.getFriends(req.user.uuid)
