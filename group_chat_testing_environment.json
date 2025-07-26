@@ -1,0 +1,103 @@
+{
+    "id": "group-chat-test-environment",
+    "name": "Group Chat Test Environment",
+    "values": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3001",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "live_url",
+            "value": "http://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "api_base",
+            "value": "/api/v1",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "auth_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "user_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_1_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_1_name",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_1_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "user_2_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_2_name",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_2_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "group_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "group_name",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "message_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://localhost:3001/group-chat",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "live_websocket_url",
+            "value": "ws://103.190.136.200:3000/group-chat",
+            "type": "default",
+            "enabled": true
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}

@@ -1,0 +1,884 @@
+{
+    "info": {
+        "name": "Kitty Live API - Complete Chat System",
+        "description": "Complete API collection for testing both one-to-one chat and group chat functionality on live server with WebSocket connections",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_postman_id": "kitty-live-complete-chat-api"
+    },
+    "item": [
+        {
+            "name": "Authentication",
+            "item": [
+                {
+                    "name": "Register User 1 (Main User)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"{{user_name}}\",\n  \"email\": \"{{user_email}}\",\n  \"phoneNumber\": \"{{user_phone}}\",\n  \"password\": \"{{user_password}}\",\n  \"confirmPassword\": \"{{user_password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/auth/registration",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["auth", "registration"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.result && response.result.token) {",
+                                    "        pm.environment.set('jwt_token', response.result.token);",
+                                    "        pm.environment.set('user_id', response.result.id);",
+                                    "        pm.environment.set('user_uuid', response.result.uuid);",
+                                    "        console.log('Main user registered successfully');",
+                                    "        console.log('Token:', response.result.token);",
+                                    "        console.log('User ID:', response.result.id);",
+                                    "        console.log('User UUID:', response.result.uuid);",
+                                    "    }",
+                                    "}",
+                                    "",
+                                    "pm.test('Registration successful', function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Register User 2 (Friend User)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"{{friend_name}}\",\n  \"email\": \"{{friend_email}}\",\n  \"phoneNumber\": \"{{friend_phone}}\",\n  \"password\": \"{{friend_password}}\",\n  \"confirmPassword\": \"{{friend_password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/auth/registration",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["auth", "registration"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.result && response.result.id) {",
+                                    "        pm.environment.set('friend_user_id', response.result.id);",
+                                    "        pm.environment.set('friend_user_uuid', response.result.uuid);",
+                                    "        console.log('Friend user registered successfully');",
+                                    "        console.log('Friend User ID:', response.result.id);",
+                                    "        console.log('Friend User UUID:', response.result.uuid);",
+                                    "    }",
+                                    "}",
+                                    "",
+                                    "pm.test('Friend registration successful', function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Login Main User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"emailOrPhone\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/auth/login",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["auth", "login"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.result && response.result.token) {",
+                                    "        pm.environment.set('jwt_token', response.result.token);",
+                                    "        pm.environment.set('user_id', response.result.id);",
+                                    "        pm.environment.set('user_uuid', response.result.uuid);",
+                                    "        if (response.result.refreshToken) {",
+                                    "            pm.environment.set('refresh_token', response.result.refreshToken);",
+                                    "        }",
+                                    "        console.log('Main user logged in successfully');",
+                                    "        console.log('JWT Token saved to environment');",
+                                    "    }",
+                                    "}",
+                                    "",
+                                    "pm.test('Login successful', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Current User Profile",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/user/profile",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["user", "profile"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Friendship Management",
+            "item": [
+                {
+                    "name": "Send Friend Request",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"friendId\": \"{{friend_user_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/friendship/send-request",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["friendship", "send-request"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get All Users (Find Friends)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/user",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["user"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Friend Requests",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/friendship/requests",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["friendship", "requests"]
+                        }
+                    }
+                },
+                {
+                    "name": "Accept Friend Request",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"friendId\": \"{{friend_user_id}}\",\n  \"status\": \"accepted\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/friendship/respond-request",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["friendship", "respond-request"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Friends List",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/friendship/friends",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["friendship", "friends"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "One-to-One Chat",
+            "item": [
+                {
+                    "name": "Create Conversation",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"participantId\": \"{{friend_user_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/conversations",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["conversations"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.id) {",
+                                    "        pm.environment.set('conversation_id', response.id);",
+                                    "        console.log('Conversation created with ID:', response.id);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get All Conversations",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/conversations",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["conversations"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Conversation Messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/conversations/{{conversation_id}}/messages?page=1&limit=20",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "conversations",
+                                "{{conversation_id}}",
+                                "messages"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Send Message (HTTP)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"content\": \"Hello from HTTP API!\",\n  \"messageType\": \"text\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/conversations/{{conversation_id}}/messages",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "conversations",
+                                "{{conversation_id}}",
+                                "messages"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Group Management",
+            "item": [
+                {
+                    "name": "Create Group",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"groupName\": \"Live Test Group Chat\",\n  \"description\": \"Testing group chat functionality on live server\",\n  \"category\": \"testing\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/group",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["group"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.uuid) {",
+                                    "        pm.environment.set('group_uuid', response.uuid);",
+                                    "        console.log('Group created with UUID:', response.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get All Groups",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["group"]
+                        }
+                    }
+                },
+                {
+                    "name": "Join Group",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group/{{group_uuid}}/join",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["group", "{{group_uuid}}", "join"]
+                        }
+                    }
+                },
+                {
+                    "name": "Invite User to Group",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"userId\": \"{{friend_user_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/group/{{group_uuid}}/invite",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["group", "{{group_uuid}}", "invite"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Group Members",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group/{{group_uuid}}/members",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["group", "{{group_uuid}}", "members"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Group Chat HTTP Endpoints",
+            "item": [
+                {
+                    "name": "Get Group Messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group-chat/{{group_uuid}}/messages?page=1&limit=20",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "group-chat",
+                                "{{group_uuid}}",
+                                "messages"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Mark Group Messages as Read",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"messageIds\": [\"{{message_id}}\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/group-chat/{{group_uuid}}/mark-as-read",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "group-chat",
+                                "{{group_uuid}}",
+                                "mark-as-read"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Edit Group Message",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"content\": \"This message was edited via HTTP API\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/group-chat/{{group_uuid}}/messages/{{message_id}}",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "group-chat",
+                                "{{group_uuid}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Group Message",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group-chat/{{group_uuid}}/messages/{{message_id}}",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "group-chat",
+                                "{{group_uuid}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Group Messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base_url}}/group-chat/{{group_uuid}}/messages/search?query=hello&page=1&limit=10",
+                            "host": ["{{api_base_url}}"],
+                            "path": [
+                                "group-chat",
+                                "{{group_uuid}}",
+                                "messages",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "query",
+                                    "value": "hello"
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "WebSocket Connections",
+            "item": [
+                {
+                    "name": "📋 One-to-One Chat WebSocket Connection Guide",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base_url}}/websocket-info/chat",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["websocket-info", "chat"]
+                        },
+                        "description": "📌 **WebSocket Connection Instructions for One-to-One Chat**\n\n**🔗 Connection URL:** `ws://103.190.136.200:3000/chat`\n\n**📝 How to Connect in Postman:**\n1. Create a **NEW WebSocket Request** (not HTTP GET)\n2. Set URL to: `ws://103.190.136.200:3000/chat`\n3. Click **Connect**\n4. Send messages in JSON format below\n\n**🔐 Authentication (Send First):**\n```json\n{\n  \"event\": \"authenticate\", \n  \"data\": {\n    \"token\": \"{{jwt_token}}\"\n  }\n}\n```\n\n**🏠 Join Conversation:**\n```json\n{\n  \"event\": \"joinConversation\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\"\n  }\n}\n```\n\n**💬 Send Message:**\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"content\": \"Hello from Postman WebSocket!\",\n    \"messageType\": \"text\"\n  }\n}\n```\n\n**📜 Get Message History:**\n```json\n{\n  \"event\": \"getMessageHistory\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"page\": 1,\n    \"limit\": 20\n  }\n}\n```\n\n**⌨️ Typing Indicator:**\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n**✅ Mark as Read:**\n```json\n{\n  \"event\": \"markAsRead\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"messageIds\": [\"message-id-1\", \"message-id-2\"]\n  }\n}\n```\n\n**⚠️ Note:** This is a guide request. For actual WebSocket testing, create a new WebSocket request in Postman with the URL above."
+                    }
+                },
+                {
+                    "name": "📋 Group Chat WebSocket Connection Guide",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_base_url}}/websocket-info/group-chat",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["websocket-info", "group-chat"]
+                        },
+                        "description": "📌 **WebSocket Connection Instructions for Group Chat**\n\n**🔗 Connection URL:** `ws://103.190.136.200:3000/group-chat`\n\n**📝 How to Connect in Postman:**\n1. Create a **NEW WebSocket Request** (not HTTP GET)\n2. Set URL to: `ws://103.190.136.200:3000/group-chat`\n3. Click **Connect**\n4. Send messages in JSON format below\n\n**🔐 Authentication (Send First):**\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"{{jwt_token}}\"\n  }\n}\n```\n\n**👥 Join Group:**\n```json\n{\n  \"event\": \"joinGroup\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\"\n  }\n}\n```\n\n**💬 Send Message:**\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"content\": \"Hello group from Postman WebSocket!\",\n    \"messageType\": \"text\"\n  }\n}\n```\n\n**✏️ Edit Message:**\n```json\n{\n  \"event\": \"editMessage\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"messageId\": \"{{message_id}}\",\n    \"content\": \"Edited message content\"\n  }\n}\n```\n\n**🗑️ Delete Message:**\n```json\n{\n  \"event\": \"deleteMessage\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"messageId\": \"{{message_id}}\"\n  }\n}\n```\n\n**📜 Get Message History:**\n```json\n{\n  \"event\": \"getMessageHistory\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"page\": 1,\n    \"limit\": 20\n  }\n}\n```\n\n**⌨️ Typing Indicator:**\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n**✅ Mark as Read:**\n```json\n{\n  \"event\": \"markAsRead\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\",\n    \"messageIds\": [\"message-id-1\", \"message-id-2\"]\n  }\n}\n```\n\n**🚪 Leave Group:**\n```json\n{\n  \"event\": \"leaveGroup\",\n  \"data\": {\n    \"groupUuid\": \"{{group_uuid}}\"\n  }\n}\n```\n\n**⚠️ Note:** This is a guide request. For actual WebSocket testing, create a new WebSocket request in Postman with the URL above."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "WebSocket Testing with Socket.io",
+            "item": [
+                {
+                    "name": "One-to-One Chat Socket.io Connection",
+                    "request": {
+                        "method": "WEBSOCKET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{websocket_url}}/socket.io/?EIO=4&transport=websocket&ns={{chat_namespace}}",
+                            "host": ["{{websocket_url}}"],
+                            "path": ["socket.io"],
+                            "query": [
+                                {
+                                    "key": "EIO",
+                                    "value": "4"
+                                },
+                                {
+                                    "key": "transport",
+                                    "value": "websocket"
+                                },
+                                {
+                                    "key": "ns",
+                                    "value": "{{chat_namespace}}"
+                                }
+                            ]
+                        },
+                        "description": "Socket.io WebSocket connection for one-to-one chat with Engine.IO v4 protocol.\n\n**After connection, send these messages:**\n\n1. First, send authentication:\n```\n42[\"authenticate\",{\"token\":\"{{jwt_token}}\"}]\n```\n\n2. Join conversation:\n```\n42[\"joinConversation\",{\"conversationId\":\"{{conversation_id}}\"}]\n```\n\n3. Send message:\n```\n42[\"sendMessage\",{\"conversationId\":\"{{conversation_id}}\",\"content\":\"Hello!\",\"messageType\":\"text\"}]\n```"
+                    }
+                },
+                {
+                    "name": "Group Chat Socket.io Connection",
+                    "request": {
+                        "method": "WEBSOCKET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{websocket_url}}/socket.io/?EIO=4&transport=websocket&ns={{group_chat_namespace}}",
+                            "host": ["{{websocket_url}}"],
+                            "path": ["socket.io"],
+                            "query": [
+                                {
+                                    "key": "EIO",
+                                    "value": "4"
+                                },
+                                {
+                                    "key": "transport",
+                                    "value": "websocket"
+                                },
+                                {
+                                    "key": "ns",
+                                    "value": "{{group_chat_namespace}}"
+                                }
+                            ]
+                        },
+                        "description": "Socket.io WebSocket connection for group chat with Engine.IO v4 protocol.\n\n**After connection, send these messages:**\n\n1. First, send authentication:\n```\n42[\"authenticate\",{\"token\":\"{{jwt_token}}\"}]\n```\n\n2. Join group:\n```\n42[\"joinGroup\",{\"groupUuid\":\"{{group_uuid}}\"}]\n```\n\n3. Send message:\n```\n42[\"sendMessage\",{\"groupUuid\":\"{{group_uuid}}\",\"content\":\"Hello group!\",\"messageType\":\"text\"}]\n```"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "File Upload & Media",
+            "item": [
+                {
+                    "name": "Upload File/Image",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                },
+                                {
+                                    "key": "type",
+                                    "value": "image",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{api_base_url}}/upload",
+                            "host": ["{{api_base_url}}"],
+                            "path": ["upload"]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Set default values if not present",
+                    "if (!pm.environment.get('api_base_url')) {",
+                    "    pm.environment.set('api_base_url', 'http://103.190.136.200:3000/api/v1');",
+                    "}",
+                    "if (!pm.environment.get('websocket_url')) {",
+                    "    pm.environment.set('websocket_url', 'ws://103.190.136.200:3000');",
+                    "}",
+                    "if (!pm.environment.get('chat_namespace')) {",
+                    "    pm.environment.set('chat_namespace', '/chat');",
+                    "}",
+                    "if (!pm.environment.get('group_chat_namespace')) {",
+                    "    pm.environment.set('group_chat_namespace', '/group-chat');",
+                    "}",
+                    "",
+                    "// Log current request info",
+                    "console.log('Making request to:', pm.request.url);",
+                    "if (pm.request.headers.get('Authorization')) {",
+                    "    console.log('Using JWT authentication');",
+                    "}"
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Global test script for all requests",
+                    "console.log('Response status:', pm.response.code);",
+                    "console.log('Response time:', pm.response.responseTime + 'ms');",
+                    "",
+                    "if (pm.response.code >= 400) {",
+                    "    console.log('Error response body:', pm.response.text());",
+                    "}",
+                    "",
+                    "// Common status code tests",
+                    "if (pm.request.method === 'GET') {",
+                    "    pm.test('GET request successful', function () {",
+                    "        pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                    "    });",
+                    "}",
+                    "",
+                    "if (pm.request.method === 'POST') {",
+                    "    pm.test('POST request successful', function () {",
+                    "        pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                    "    });",
+                    "}",
+                    "",
+                    "// Response time test",
+                    "pm.test('Response time is reasonable', function () {",
+                    "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+                    "});"
+                ]
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "api_base_url",
+            "value": "http://103.190.136.200:3000/api/v1",
+            "type": "string"
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://103.190.136.200:3000",
+            "type": "string"
+        },
+        {
+            "key": "chat_namespace",
+            "value": "/chat",
+            "type": "string"
+        },
+        {
+            "key": "group_chat_namespace",
+            "value": "/group-chat",
+            "type": "string"
+        }
+    ]
+}

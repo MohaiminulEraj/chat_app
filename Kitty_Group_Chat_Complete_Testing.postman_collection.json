@@ -1,0 +1,587 @@
+{
+    "info": {
+        "_postman_id": "group-chat-collection-id",
+        "name": "🗨️ Kitty Group Chat Complete Testing Suite",
+        "description": "Complete group chat testing collection for both localhost and live server. This collection tests real-time group messaging, message history, member management, and WebSocket functionality.\n\n## Setup Instructions:\n\n### 1. Environment Variables:\n- Set `base_url` to `http://localhost:3001` or `http://103.190.136.200:3000`\n- Set `api_base` to `/api/v1`\n- Set `auth_token` after login\n- Set `user_uuid` after login\n- Set `group_id` after creating a group\n- Set `message_id` for message operations\n\n### 2. Testing Flow:\n1. **Authentication**: Login with test users\n2. **Group Creation**: Create a test group with members\n3. **Group Management**: Add/remove members, update settings\n4. **HTTP API Testing**: Test REST endpoints for message history, etc.\n5. **WebSocket Testing**: Test real-time messaging functionality\n\n### 3. WebSocket Connection:\n- Namespace: `/group-chat`\n- URL: `ws://localhost:3001/group-chat` or `ws://103.190.136.200:3000/group-chat`\n- Authentication required before other operations\n\n### 4. Test Users:\n- **User 1**: eraj@gmail.com / password123\n- **User 2**: faysal@mobile.com / password123\n\n---\n\n**Note**: This collection includes both HTTP REST API endpoints and WebSocket event examples. Use this for comprehensive group chat testing.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "🔐 Authentication",
+            "item": [
+                {
+                    "name": "Login User 1 (Eraj)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    pm.environment.set('auth_token', response.data.token);",
+                                    "    pm.environment.set('user_uuid', response.data.user.uuid);",
+                                    "    pm.environment.set('user_1_uuid', response.data.user.uuid);",
+                                    "    pm.environment.set('user_1_name', response.data.user.name);",
+                                    "    console.log('User 1 authenticated:', response.data.user.name);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"eraj@gmail.com\",\n  \"password\": \"password123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/auth/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["{{api_base}}", "auth", "login"]
+                        }
+                    }
+                },
+                {
+                    "name": "Login User 2 (Faysal)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    pm.environment.set('user_2_uuid', response.data.user.uuid);",
+                                    "    pm.environment.set('user_2_name', response.data.user.name);",
+                                    "    pm.environment.set('user_2_token', response.data.token);",
+                                    "    console.log('User 2 authenticated:', response.data.user.name);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"faysal@mobile.com\",\n  \"password\": \"password123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/auth/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["{{api_base}}", "auth", "login"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "👥 Group Management",
+            "item": [
+                {
+                    "name": "Create Test Group",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    pm.environment.set('group_id', response.data.uuid);",
+                                    "    pm.environment.set('group_name', response.data.name);",
+                                    "    console.log('Group created:', response.data.name, 'ID:', response.data.uuid);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Test Group Chat\",\n  \"description\": \"Group for testing real-time chat functionality\",\n  \"tag\": \"testing\",\n  \"isPublic\": false,\n  \"memberIds\": [\"{{user_2_uuid}}\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/groups",
+                            "host": ["{{base_url}}"],
+                            "path": ["{{api_base}}", "groups"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Group Members",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/groups/{{group_id}}/members",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "groups",
+                                "{{group_id}}",
+                                "members"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get User Groups",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/groups/my",
+                            "host": ["{{base_url}}"],
+                            "path": ["{{api_base}}", "groups", "my"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🗨️ Group Chat HTTP API",
+            "item": [
+                {
+                    "name": "Get Group Message History",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/messages?page=1&limit=20",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "messages"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Mark Messages as Read",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"messageIds\": [\"{{message_id}}\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/messages/read",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "messages",
+                                "read"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Group Message",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/messages/{{message_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Edit Group Message",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"content\": \"This message has been edited!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/messages/{{message_id}}",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "messages",
+                                "{{message_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Group Members (Chat)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/members",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "members"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Unread Message Count",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/unread-count",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "unread-count"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Group Messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/search?q=hello&limit=10",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "q",
+                                    "value": "hello"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Group Chat Stats",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}{{api_base}}/group-chat/{{group_id}}/stats",
+                            "host": ["{{base_url}}"],
+                            "path": [
+                                "{{api_base}}",
+                                "group-chat",
+                                "{{group_id}}",
+                                "stats"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🔌 WebSocket Testing Guide",
+            "item": [
+                {
+                    "name": "WebSocket Connection Guide",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/websocket-guide",
+                            "host": ["{{base_url}}"],
+                            "path": ["websocket-guide"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "WebSocket Connection Steps",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/websocket-guide",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["websocket-guide"]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [],
+                            "cookie": [],
+                            "body": "{\n  \"websocket_guide\": {\n    \"connection_url\": \"ws://localhost:3001/group-chat\",\n    \"live_url\": \"ws://103.190.136.200:3000/group-chat\",\n    \"steps\": [\n      {\n        \"step\": 1,\n        \"action\": \"Connect to WebSocket\",\n        \"url\": \"ws://localhost:3001/group-chat\",\n        \"note\": \"Use Socket.IO client or browser WebSocket\"\n      },\n      {\n        \"step\": 2,\n        \"action\": \"Authenticate\",\n        \"event\": \"authenticate\",\n        \"payload\": {\n          \"token\": \"{{auth_token}}\"\n        },\n        \"expected_response\": {\n          \"event\": \"authenticated\",\n          \"data\": {\n            \"success\": true,\n            \"userId\": \"user-uuid\",\n            \"userName\": \"User Name\"\n          }\n        }\n      },\n      {\n        \"step\": 3,\n        \"action\": \"Join Group\",\n        \"event\": \"joinGroup\",\n        \"payload\": {\n          \"groupId\": \"{{group_id}}\"\n        },\n        \"expected_response\": {\n          \"event\": \"joinedGroup\",\n          \"data\": {\n            \"groupId\": \"group-uuid\",\n            \"message\": \"Successfully joined group chat\"\n          }\n        }\n      },\n      {\n        \"step\": 4,\n        \"action\": \"Send Message\",\n        \"event\": \"sendGroupMessage\",\n        \"payload\": {\n          \"groupId\": \"{{group_id}}\",\n          \"content\": \"Hello group!\",\n          \"messageType\": \"text\",\n          \"metadata\": {}\n        },\n        \"expected_response\": {\n          \"event\": \"groupMessageReceived\",\n          \"data\": {\n            \"messageId\": \"message-id\",\n            \"senderId\": \"sender-uuid\",\n            \"senderName\": \"Sender Name\",\n            \"groupId\": \"group-uuid\",\n            \"content\": \"Hello group!\",\n            \"messageType\": \"text\",\n            \"timestamp\": \"2023-10-01T12:00:00Z\"\n          }\n        }\n      }\n    ],\n    \"available_events\": {\n      \"client_to_server\": [\n        \"authenticate\",\n        \"joinGroup\",\n        \"leaveGroup\",\n        \"sendGroupMessage\",\n        \"getGroupMessageHistory\",\n        \"markGroupMessageAsRead\",\n        \"groupTyping\",\n        \"deleteGroupMessage\",\n        \"editGroupMessage\",\n        \"getGroupMembers\"\n      ],\n      \"server_to_client\": [\n        \"authenticated\",\n        \"authenticationError\",\n        \"joinedGroup\",\n        \"leftGroup\",\n        \"userJoinedGroup\",\n        \"userLeftGroup\",\n        \"groupMessageReceived\",\n        \"groupMessageHistory\",\n        \"messagesMarkedAsRead\",\n        \"userTypingInGroup\",\n        \"groupMessageDeleted\",\n        \"groupMessageEdited\",\n        \"groupMembersList\",\n        \"error\"\n      ]\n    }\n  }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Sample WebSocket Messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/websocket-samples",
+                            "host": ["{{base_url}}"],
+                            "path": ["websocket-samples"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "WebSocket Message Templates",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/websocket-samples",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["websocket-samples"]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [],
+                            "cookie": [],
+                            "body": "{\n  \"websocket_message_templates\": {\n    \"authentication\": {\n      \"event\": \"authenticate\",\n      \"data\": {\n        \"token\": \"{{auth_token}}\"\n      }\n    },\n    \"join_group\": {\n      \"event\": \"joinGroup\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\"\n      }\n    },\n    \"send_text_message\": {\n      \"event\": \"sendGroupMessage\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"content\": \"Hello everyone! 👋\",\n        \"messageType\": \"text\",\n        \"metadata\": {}\n      }\n    },\n    \"send_reply_message\": {\n      \"event\": \"sendGroupMessage\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"content\": \"This is a reply to your message\",\n        \"messageType\": \"text\",\n        \"replyToMessageId\": \"previous-message-id\",\n        \"metadata\": {}\n      }\n    },\n    \"typing_indicator\": {\n      \"event\": \"groupTyping\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"isTyping\": true\n      }\n    },\n    \"stop_typing\": {\n      \"event\": \"groupTyping\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"isTyping\": false\n      }\n    },\n    \"get_message_history\": {\n      \"event\": \"getGroupMessageHistory\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"page\": 1,\n        \"limit\": 50\n      }\n    },\n    \"mark_as_read\": {\n      \"event\": \"markGroupMessageAsRead\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"messageIds\": [\"message-id-1\", \"message-id-2\"]\n      }\n    },\n    \"delete_message\": {\n      \"event\": \"deleteGroupMessage\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"messageId\": \"message-to-delete-id\"\n      }\n    },\n    \"edit_message\": {\n      \"event\": \"editGroupMessage\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\",\n        \"messageId\": \"message-to-edit-id\",\n        \"newContent\": \"This message has been edited!\"\n      }\n    },\n    \"get_group_members\": {\n      \"event\": \"getGroupMembers\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\"\n      }\n    },\n    \"leave_group\": {\n      \"event\": \"leaveGroup\",\n      \"data\": {\n        \"groupId\": \"{{group_id}}\"\n      }\n    }\n  },\n  \"expected_responses\": {\n    \"authentication_success\": {\n      \"event\": \"authenticated\",\n      \"data\": {\n        \"success\": true,\n        \"userId\": \"user-uuid\",\n        \"userName\": \"User Name\"\n      }\n    },\n    \"message_received\": {\n      \"event\": \"groupMessageReceived\",\n      \"data\": {\n        \"messageId\": \"message-id\",\n        \"senderId\": \"sender-uuid\",\n        \"senderName\": \"Sender Name\",\n        \"senderAvatarUrl\": \"avatar-url\",\n        \"groupId\": \"group-uuid\",\n        \"content\": \"Message content\",\n        \"messageType\": \"text\",\n        \"metadata\": {},\n        \"timestamp\": \"2023-10-01T12:00:00Z\",\n        \"readBy\": [\"sender-uuid\"],\n        \"deliveredTo\": []\n      }\n    },\n    \"user_joined\": {\n      \"event\": \"userJoinedGroup\",\n      \"data\": {\n        \"userId\": \"user-uuid\",\n        \"userName\": \"User Name\",\n        \"groupId\": \"group-uuid\"\n      }\n    },\n    \"typing_indicator\": {\n      \"event\": \"userTypingInGroup\",\n      \"data\": {\n        \"groupId\": \"group-uuid\",\n        \"userId\": \"user-uuid\",\n        \"userName\": \"User Name\",\n        \"isTyping\": true\n      }\n    }\n  }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "🧪 Testing Scenarios",
+            "item": [
+                {
+                    "name": "Scenario 1: Basic Group Chat Flow",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/test-scenario-1",
+                            "host": ["{{base_url}}"],
+                            "path": ["test-scenario-1"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Basic Group Chat Test Steps",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/test-scenario-1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["test-scenario-1"]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [],
+                            "cookie": [],
+                            "body": "{\n  \"scenario\": \"Basic Group Chat Flow\",\n  \"description\": \"Test basic group chat functionality between two users\",\n  \"prerequisites\": [\n    \"Both users (eraj@gmail.com and faysal@mobile.com) must be registered\",\n    \"Environment variables must be set (base_url, api_base)\",\n    \"Server must be running\"\n  ],\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"description\": \"Login User 1 (Eraj)\",\n      \"action\": \"Run 'Login User 1 (Eraj)' request\",\n      \"expected\": \"auth_token and user_1_uuid should be set in environment\"\n    },\n    {\n      \"step\": 2,\n      \"description\": \"Login User 2 (Faysal)\",\n      \"action\": \"Run 'Login User 2 (Faysal)' request\",\n      \"expected\": \"user_2_uuid and user_2_token should be set in environment\"\n    },\n    {\n      \"step\": 3,\n      \"description\": \"Create Test Group\",\n      \"action\": \"Run 'Create Test Group' request\",\n      \"expected\": \"group_id should be set in environment\"\n    },\n    {\n      \"step\": 4,\n      \"description\": \"Verify Group Members\",\n      \"action\": \"Run 'Get Group Members' request\",\n      \"expected\": \"Should return both users as group members\"\n    },\n    {\n      \"step\": 5,\n      \"description\": \"Test WebSocket Connection (User 1)\",\n      \"action\": \"Connect to ws://localhost:3001/group-chat\",\n      \"sub_steps\": [\n        \"Send authenticate event with User 1 token\",\n        \"Send joinGroup event with group_id\",\n        \"Should receive joinedGroup event\"\n      ]\n    },\n    {\n      \"step\": 6,\n      \"description\": \"Test WebSocket Connection (User 2)\",\n      \"action\": \"Connect to ws://localhost:3001/group-chat\",\n      \"sub_steps\": [\n        \"Send authenticate event with User 2 token\",\n        \"Send joinGroup event with group_id\",\n        \"Should receive joinedGroup event\",\n        \"User 1 should receive userJoinedGroup event\"\n      ]\n    },\n    {\n      \"step\": 7,\n      \"description\": \"Send Messages\",\n      \"action\": \"Send messages between users\",\n      \"sub_steps\": [\n        \"User 1 sends: 'Hello group! 👋'\",\n        \"User 2 should receive groupMessageReceived event\",\n        \"User 2 sends: 'Hi there! How are you?'\",\n        \"User 1 should receive groupMessageReceived event\"\n      ]\n    },\n    {\n      \"step\": 8,\n      \"description\": \"Test Message Features\",\n      \"action\": \"Test advanced message features\",\n      \"sub_steps\": [\n        \"Test typing indicators\",\n        \"Test message replies\",\n        \"Test marking messages as read\",\n        \"Test message editing (within 15 minutes)\",\n        \"Test message deletion\"\n      ]\n    },\n    {\n      \"step\": 9,\n      \"description\": \"Test HTTP API\",\n      \"action\": \"Test REST endpoints\",\n      \"sub_steps\": [\n        \"Get message history\",\n        \"Search messages\",\n        \"Get unread count\",\n        \"Get group stats\"\n      ]\n    }\n  ],\n  \"success_criteria\": [\n    \"Both users can connect to WebSocket\",\n    \"Messages are delivered in real-time\",\n    \"Message history is retrievable\",\n    \"All group features work correctly\",\n    \"No authentication errors\",\n    \"Proper error handling for invalid operations\"\n  ]\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Scenario 2: Multi-User Group Testing",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/test-scenario-2",
+                            "host": ["{{base_url}}"],
+                            "path": ["test-scenario-2"]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Multi-User Group Test Steps",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/test-scenario-2",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["test-scenario-2"]
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "_postman_previewlanguage": "json",
+                            "header": [],
+                            "cookie": [],
+                            "body": "{\n  \"scenario\": \"Multi-User Group Testing\",\n  \"description\": \"Test group chat with multiple users, permissions, and advanced features\",\n  \"prerequisites\": [\n    \"Multiple test users registered\",\n    \"Basic group chat flow completed successfully\",\n    \"Group with proper roles and permissions set up\"\n  ],\n  \"steps\": [\n    {\n      \"step\": 1,\n      \"description\": \"Test Group Permissions\",\n      \"action\": \"Verify role-based permissions\",\n      \"sub_steps\": [\n        \"Test message deletion by non-admin (should fail)\",\n        \"Test message deletion by admin (should succeed)\",\n        \"Test member management permissions\"\n      ]\n    },\n    {\n      \"step\": 2,\n      \"description\": \"Test Message Broadcasting\",\n      \"action\": \"Send message from one user, verify all receive\",\n      \"sub_steps\": [\n        \"User A sends message\",\n        \"Verify Users B, C, D all receive message\",\n        \"Check message delivery and read status\"\n      ]\n    },\n    {\n      \"step\": 3,\n      \"description\": \"Test User Join/Leave Events\",\n      \"action\": \"Test real-time user presence\",\n      \"sub_steps\": [\n        \"User joins group - all should receive userJoinedGroup\",\n        \"User leaves group - all should receive userLeftGroup\",\n        \"Test connection/disconnection handling\"\n      ]\n    },\n    {\n      \"step\": 4,\n      \"description\": \"Test Concurrent Messaging\",\n      \"action\": \"Multiple users send messages simultaneously\",\n      \"expected\": \"All messages delivered in correct order\"\n    },\n    {\n      \"step\": 5,\n      \"description\": \"Test Message History Pagination\",\n      \"action\": \"Send 100+ messages, test pagination\",\n      \"sub_steps\": [\n        \"Send bulk messages\",\n        \"Test page-by-page retrieval\",\n        \"Test 'before' parameter for cursor-based pagination\"\n      ]\n    }\n  ]\n}"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Auto-set base_url if not defined",
+                    "if (!pm.environment.get('base_url')) {",
+                    "    pm.environment.set('base_url', 'http://localhost:3001');",
+                    "}",
+                    "",
+                    "// Auto-set api_base if not defined",
+                    "if (!pm.environment.get('api_base')) {",
+                    "    pm.environment.set('api_base', '/api/v1');",
+                    "}",
+                    "",
+                    "console.log('Current environment:');",
+                    "console.log('- Base URL:', pm.environment.get('base_url'));",
+                    "console.log('- API Base:', pm.environment.get('api_base'));",
+                    "console.log('- Auth Token:', pm.environment.get('auth_token') ? '***SET***' : 'NOT SET');",
+                    "console.log('- Group ID:', pm.environment.get('group_id') || 'NOT SET');"
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Global test script for error handling",
+                    "if (pm.response.code >= 400) {",
+                    "    console.error('Request failed with status:', pm.response.code);",
+                    "    console.error('Response:', pm.response.text());",
+                    "}",
+                    "",
+                    "// Log successful responses",
+                    "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                    "    console.log('✅ Request successful:', pm.response.code);",
+                    "}"
+                ]
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3001",
+            "type": "string"
+        },
+        {
+            "key": "api_base",
+            "value": "/api/v1",
+            "type": "string"
+        }
+    ]
+}
