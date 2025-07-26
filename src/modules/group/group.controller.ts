@@ -67,6 +67,10 @@ export class GroupController {
                     type: 'string',
                     example: 'education'
                 },
+                country: {
+                    type: 'string',
+                    example: 'United States'
+                },
                 isPublic: { type: 'boolean', example: false },
                 memberIds: {
                     type: 'array',

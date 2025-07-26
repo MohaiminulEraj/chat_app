@@ -101,6 +101,15 @@ export class CreateGroupDto {
     @IsOptional()
     location?: string
 
+    @ApiProperty({
+        description: 'Country name',
+        example: 'Germany',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    country?: string
+
     @ApiProperty({ description: 'Latitude', example: 51.1657, required: false })
     @IsOptional()
     latitude?: number

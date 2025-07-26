@@ -32,6 +32,9 @@ export class Group extends CustomBaseEntity {
     @Column({ nullable: true })
     location: string
 
+    @Column({ nullable: true })
+    country: string
+
     @Column({ type: 'decimal', precision: 9, scale: 6, nullable: true })
     latitude: number
 
