@@ -14,7 +14,6 @@ import { ConversationService } from '../conversation/conversation.service'
 import { FriendshipService } from '../friendship/friendship.service'
 import { GroupService } from '../group/group.service'
 import { UserService } from '../user/user.service'
-import { SocketIOService } from './socketio.service'
 
 interface AuthenticatedSocket extends Socket {
     userId?: string
@@ -47,12 +46,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         private readonly conversationService: ConversationService,
         private readonly friendshipService: FriendshipService,
         private readonly groupService: GroupService,
-        private readonly userService: UserService,
-        private readonly socketIOService: SocketIOService
+        private readonly userService: UserService
     ) {}
 
     async handleConnection(client: AuthenticatedSocket) {
-        this.logger.log(`Client connected: ${client.id}`)
+        const connectionTime = new Date().toISOString()
+        const clientIp = client.handshake.address
+        const userAgent = client.handshake.headers['user-agent']
+        const transport = client.conn.transport.name
+
+        this.logger.log(`🔌 [CONNECTION] New client connected`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ IP Address: ${clientIp}`)
+        this.logger.log(`   ├─ User Agent: ${userAgent || 'Unknown'}`)
+        this.logger.log(`   ├─ Transport: ${transport}`)
+        this.logger.log(`   ├─ Connection Time: ${connectionTime}`)
+        this.logger.log(`   └─ Total Active Connections: ${this.server.engine.clientsCount}`)
         
         client.emit('connected', {
             success: true,
@@ -62,7 +71,15 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     async handleDisconnect(client: AuthenticatedSocket) {
-        this.logger.log(`Client disconnected: ${client.id}`)
+        const disconnectionTime = new Date().toISOString()
+        const userId = client.userUuid
+        const userName = client.userName
+
+        this.logger.log(`🔌 [DISCONNECTION] Client disconnected`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${userName || 'Anonymous'} (${userId || 'Not authenticated'})`)
+        this.logger.log(`   ├─ Disconnection Time: ${disconnectionTime}`)
+        this.logger.log(`   └─ Remaining Connections: ${Math.max(0, this.server.engine.clientsCount - 1)}`)
 
         if (client.userUuid) {
             // Remove from authenticated users map
@@ -73,8 +90,14 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 this.authenticatedUsers.delete(client.userUuid)
                 // Update user status to offline
                 await this.updateUserStatus(client.userUuid, 'offline')
+                this.logger.log(`👋 [USER_OFFLINE] User went offline`)
+                this.logger.log(`   ├─ User: ${userName} (${userId})`)
+                this.logger.log(`   └─ All sessions disconnected`)
             } else {
                 this.authenticatedUsers.set(client.userUuid, updatedSockets)
+                this.logger.log(`📱 [SESSION_END] User session ended but other sessions remain`)
+                this.logger.log(`   ├─ User: ${userName} (${userId})`)
+                this.logger.log(`   └─ Active Sessions: ${updatedSockets.length}`)
             }
 
             // Remove from socket user map
@@ -84,6 +107,7 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             client.rooms.forEach(room => {
                 if (room !== client.id) {
                     client.leave(room)
+                    this.logger.log(`🚪 [ROOM_LEAVE] User left room: ${room}`)
                 }
             })
         }
@@ -95,8 +119,27 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { token: string }
     ) {
+        const startTime = Date.now()
+        
+        this.logger.log(`🔐 [AUTHENTICATE] Authentication attempt`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Token Present: ${data?.token ? 'Yes' : 'No'}`)
+        this.logger.log(`   ├─ Token Length: ${data?.token?.length || 0} chars`)
+        this.logger.log(`   └─ Client IP: ${client.handshake.address}`)
+
         try {
-            this.logger.log(`Authenticating client: ${client.id}`)
+            if (!data?.token) {
+                this.logger.error(`❌ [AUTHENTICATE] Missing token`)
+                client.emit('authenticationError', { 
+                    success: false, 
+                    message: 'Token is required',
+                    code: 'TOKEN_MISSING'
+                })
+                client.disconnect(true)
+                return { success: false, error: 'Token is required' }
+            }
+
+            this.logger.log(`🔍 [AUTHENTICATE] Verifying JWT token`)
 
             // Verify JWT token
             const payload = this.jwtService.verify(data.token)
@@ -118,6 +161,7 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Join user's personal room
             client.join(`user:${client.userUuid}`)
+            this.logger.log(`🏠 [ROOM_JOIN] Joined personal room: user:${client.userUuid}`)
 
             // Join all user's conversation rooms
             await this.joinUserConversations(client)
@@ -128,23 +172,37 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             // Update user status to online
             await this.updateUserStatus(client.userUuid, 'online')
 
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [AUTHENTICATE] Authentication successful`)
+            this.logger.log(`   ├─ Socket ID: ${client.id}`)
+            this.logger.log(`   ├─ User ID: ${client.userUuid}`)
+            this.logger.log(`   ├─ User Name: ${client.userName}`)
+            this.logger.log(`   ├─ User Email: ${client.userEmail}`)
+            this.logger.log(`   ├─ User Sessions: ${userSockets.length}`)
+            this.logger.log(`   ├─ Duration: ${duration}ms`)
+            this.logger.log(`   └─ Total Authenticated Users: ${this.authenticatedUsers.size}`)
+
             client.emit('authenticated', {
                 success: true,
                 userId: client.userUuid,
                 userName: client.userName,
                 message: 'Authentication successful'
             })
-
-            this.logger.log(`User ${client.userUuid} (${client.userName}) authenticated successfully`)
             
             return { success: true, userId: client.userUuid }
 
         } catch (error) {
-            this.logger.error(`Authentication failed: ${error.message}`)
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [AUTHENTICATE] Authentication failed`)
+            this.logger.error(`   ├─ Socket ID: ${client.id}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             
             client.emit('authenticationError', { 
                 success: false, 
-                message: 'Invalid token' 
+                message: 'Invalid token',
+                code: 'TOKEN_INVALID'
             })
             
             client.disconnect(true)
@@ -164,16 +222,39 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             metadata?: any
         }
     ) {
+        const startTime = Date.now()
+        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+        this.logger.log(`💬 [DIRECT_MESSAGE] Sending direct message`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Recipient ID: ${data.recipientId}`)
+        this.logger.log(`   ├─ Message Type: ${data.type}`)
+        this.logger.log(`   ├─ Content Length: ${data.content?.length || 0} chars`)
+        this.logger.log(`   ├─ File URL: ${data.fileUrl ? 'Present' : 'None'}`)
+        this.logger.log(`   └─ Message ID: ${messageId}`)
+
         if (!client.userUuid) {
+            this.logger.error(`❌ [DIRECT_MESSAGE] Unauthenticated client`)
             return { success: false, error: 'User not authenticated' }
         }
 
+        if (!data.recipientId) {
+            this.logger.error(`❌ [DIRECT_MESSAGE] Missing recipient ID`)
+            return { success: false, error: 'Recipient ID is required' }
+        }
+
         try {
+            this.logger.log(`🔍 [DIRECT_MESSAGE] Getting or creating conversation`)
+            
             // Get or create direct conversation
             const conversation = await this.conversationService.getOrCreateDirectConversation(
                 client.userUuid,
                 data.recipientId
             )
+
+            this.logger.log(`💾 [DIRECT_MESSAGE] Creating message in database`)
+            this.logger.log(`   └─ Conversation ID: ${conversation.uuid}`)
 
             // Create message
             const message = await this.conversationService.createMessage({
@@ -184,8 +265,16 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 fileUrl: data.fileUrl
             })
 
+            // Count participants in conversation room
+            const roomName = `conversation:${conversation.uuid}`
+            const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+            this.logger.log(`📡 [DIRECT_MESSAGE] Broadcasting to conversation participants`)
+            this.logger.log(`   ├─ Room: ${roomName}`)
+            this.logger.log(`   └─ Online Participants: ${participantsCount}`)
+
             // Emit to conversation participants
-            this.server.to(`conversation:${conversation.uuid}`).emit('newDirectMessage', {
+            this.server.to(roomName).emit('newDirectMessage', {
                 conversationId: conversation.uuid,
                 message,
                 sender: {
@@ -195,10 +284,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 }
             })
 
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [DIRECT_MESSAGE] Message sent successfully`)
+            this.logger.log(`   ├─ Message ID: ${message.id || messageId}`)
+            this.logger.log(`   ├─ Conversation ID: ${conversation.uuid}`)
+            this.logger.log(`   ├─ Recipients Notified: ${participantsCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
             return { success: true, message, conversationId: conversation.uuid }
 
         } catch (error) {
-            this.logger.error(`Error sending direct message: ${error.message}`)
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [DIRECT_MESSAGE] Message send failed`)
+            this.logger.error(`   ├─ Message ID: ${messageId}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -208,24 +309,57 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { conversationId: string }
     ) {
+        const startTime = Date.now()
+
+        this.logger.log(`🚪 [JOIN_CONVERSATION] Joining direct conversation`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   └─ Conversation ID: ${data.conversationId}`)
+
         if (!client.userUuid) {
+            this.logger.error(`❌ [JOIN_CONVERSATION] Unauthenticated client`)
             return { success: false, error: 'User not authenticated' }
         }
 
+        if (!data.conversationId) {
+            this.logger.error(`❌ [JOIN_CONVERSATION] Missing conversation ID`)
+            return { success: false, error: 'Conversation ID is required' }
+        }
+
         try {
+            this.logger.log(`🔍 [JOIN_CONVERSATION] Verifying conversation access`)
+
             // Verify user is part of this conversation
             const conversation = await this.conversationService.getConversation(data.conversationId)
             
             if (!conversation.participantIds.includes(client.userUuid)) {
+                this.logger.error(`❌ [JOIN_CONVERSATION] Access denied`)
+                this.logger.error(`   ├─ User ID: ${client.userUuid}`)
+                this.logger.error(`   └─ Participants: ${conversation.participantIds.join(', ')}`)
                 return { success: false, error: 'Access denied' }
             }
 
             // Join conversation room
-            client.join(`conversation:${data.conversationId}`)
+            const roomName = `conversation:${data.conversationId}`
+            client.join(roomName)
+
+            // Count current participants in room
+            const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [JOIN_CONVERSATION] Successfully joined conversation`)
+            this.logger.log(`   ├─ Room: ${roomName}`)
+            this.logger.log(`   ├─ Online Participants: ${participantsCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, conversationId: data.conversationId }
 
         } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [JOIN_CONVERSATION] Failed to join conversation`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -235,7 +369,26 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { conversationId: string }
     ) {
-        client.leave(`conversation:${data.conversationId}`)
+        this.logger.log(`🚪 [LEAVE_CONVERSATION] Leaving direct conversation`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   └─ Conversation ID: ${data.conversationId}`)
+
+        const roomName = `conversation:${data.conversationId}`
+        
+        // Count participants before leaving
+        const participantsBeforeLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+        
+        client.leave(roomName)
+        
+        // Count participants after leaving
+        const participantsAfterLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+        this.logger.log(`✅ [LEAVE_CONVERSATION] Successfully left conversation`)
+        this.logger.log(`   ├─ Room: ${roomName}`)
+        this.logger.log(`   ├─ Participants Before: ${participantsBeforeLeave}`)
+        this.logger.log(`   └─ Participants After: ${participantsAfterLeave}`)
+
         return { success: true, conversationId: data.conversationId }
     }
 
@@ -252,16 +405,42 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             replyToMessageId?: string
         }
     ) {
+        const startTime = Date.now()
+        const messageId = `grp_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+        this.logger.log(`👥 [GROUP_MESSAGE] Sending group message`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Group ID: ${data.groupId}`)
+        this.logger.log(`   ├─ Message Type: ${data.type}`)
+        this.logger.log(`   ├─ Content Length: ${data.content?.length || 0} chars`)
+        this.logger.log(`   ├─ File URL: ${data.fileUrl ? 'Present' : 'None'}`)
+        this.logger.log(`   ├─ Reply To: ${data.replyToMessageId || 'None'}`)
+        this.logger.log(`   └─ Message ID: ${messageId}`)
+
         if (!client.userUuid) {
+            this.logger.error(`❌ [GROUP_MESSAGE] Unauthenticated client`)
             return { success: false, error: 'User not authenticated' }
         }
 
+        if (!data.groupId) {
+            this.logger.error(`❌ [GROUP_MESSAGE] Missing group ID`)
+            return { success: false, error: 'Group ID is required' }
+        }
+
         try {
+            this.logger.log(`🔍 [GROUP_MESSAGE] Verifying group membership`)
+
             // Verify user is a member of the group
             const isMember = await this.isUserGroupMember(client.userUuid, data.groupId)
             if (!isMember) {
+                this.logger.error(`❌ [GROUP_MESSAGE] Access denied - not a group member`)
+                this.logger.error(`   ├─ User ID: ${client.userUuid}`)
+                this.logger.error(`   └─ Group ID: ${data.groupId}`)
                 return { success: false, error: 'You are not a member of this group' }
             }
+
+            this.logger.log(`💾 [GROUP_MESSAGE] Creating message in database`)
 
             // Create group message - for now using conversation service with group type
             const message = await this.conversationService.createMessage({
@@ -272,8 +451,16 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 fileUrl: data.fileUrl
             })
 
+            // Count group members in room
+            const roomName = `group:${data.groupId}`
+            const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+            this.logger.log(`📡 [GROUP_MESSAGE] Broadcasting to group members`)
+            this.logger.log(`   ├─ Room: ${roomName}`)
+            this.logger.log(`   └─ Online Members: ${membersCount}`)
+
             // Emit to all group members
-            this.server.to(`group:${data.groupId}`).emit('newGroupMessage', {
+            this.server.to(roomName).emit('newGroupMessage', {
                 groupId: data.groupId,
                 message,
                 sender: {
@@ -283,10 +470,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 }
             })
 
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [GROUP_MESSAGE] Group message sent successfully`)
+            this.logger.log(`   ├─ Message ID: ${message.id || messageId}`)
+            this.logger.log(`   ├─ Group ID: ${data.groupId}`)
+            this.logger.log(`   ├─ Members Notified: ${membersCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
             return { success: true, message, groupId: data.groupId }
 
         } catch (error) {
-            this.logger.error(`Error sending group message: ${error.message}`)
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [GROUP_MESSAGE] Group message send failed`)
+            this.logger.error(`   ├─ Message ID: ${messageId}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -296,22 +495,46 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { groupId: string }
     ) {
+        const startTime = Date.now()
+
+        this.logger.log(`👥 [JOIN_GROUP] Joining group`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   └─ Group ID: ${data.groupId}`)
+
         if (!client.userUuid) {
+            this.logger.error(`❌ [JOIN_GROUP] Unauthenticated client`)
             return { success: false, error: 'User not authenticated' }
         }
 
+        if (!data.groupId) {
+            this.logger.error(`❌ [JOIN_GROUP] Missing group ID`)
+            return { success: false, error: 'Group ID is required' }
+        }
+
         try {
+            this.logger.log(`🔍 [JOIN_GROUP] Verifying group membership`)
+
             // Verify user is a member of the group
             const isMember = await this.isUserGroupMember(client.userUuid, data.groupId)
             if (!isMember) {
+                this.logger.error(`❌ [JOIN_GROUP] Access denied - not a group member`)
+                this.logger.error(`   ├─ User ID: ${client.userUuid}`)
+                this.logger.error(`   └─ Group ID: ${data.groupId}`)
                 return { success: false, error: 'You are not a member of this group' }
             }
 
             // Join group room
-            client.join(`group:${data.groupId}`)
+            const roomName = `group:${data.groupId}`
+            client.join(roomName)
+
+            // Count current members in room
+            const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+            this.logger.log(`📢 [JOIN_GROUP] Notifying other group members`)
 
             // Notify other group members
-            client.to(`group:${data.groupId}`).emit('userJoinedGroup', {
+            client.to(roomName).emit('userJoinedGroup', {
                 groupId: data.groupId,
                 user: {
                     uuid: client.userUuid,
@@ -320,9 +543,20 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 }
             })
 
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [JOIN_GROUP] Successfully joined group`)
+            this.logger.log(`   ├─ Room: ${roomName}`)
+            this.logger.log(`   ├─ Online Members: ${membersCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
             return { success: true, groupId: data.groupId }
 
         } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [JOIN_GROUP] Failed to join group`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -332,10 +566,25 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { groupId: string }
     ) {
-        client.leave(`group:${data.groupId}`)
+        this.logger.log(`👥 [LEAVE_GROUP] Leaving group`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   └─ Group ID: ${data.groupId}`)
+
+        const roomName = `group:${data.groupId}`
+        
+        // Count members before leaving
+        const membersBeforeLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+        
+        client.leave(roomName)
+
+        // Count members after leaving
+        const membersAfterLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+        this.logger.log(`📢 [LEAVE_GROUP] Notifying other group members`)
 
         // Notify other group members
-        client.to(`group:${data.groupId}`).emit('userLeftGroup', {
+        client.to(roomName).emit('userLeftGroup', {
             groupId: data.groupId,
             user: {
                 uuid: client.userUuid,
@@ -343,6 +592,11 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 avatarUrl: client.userAvatarUrl
             }
         })
+
+        this.logger.log(`✅ [LEAVE_GROUP] Successfully left group`)
+        this.logger.log(`   ├─ Room: ${roomName}`)
+        this.logger.log(`   ├─ Members Before: ${membersBeforeLeave}`)
+        this.logger.log(`   └─ Members After: ${membersAfterLeave}`)
 
         return { success: true, groupId: data.groupId }
     }
@@ -357,19 +611,44 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             isTyping: boolean
         }
     ) {
-        if (!client.userUuid) return
+        this.logger.log(`⌨️ [TYPING] Typing indicator`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Conversation ID: ${data.conversationId || 'None'}`)
+        this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
+        this.logger.log(`   └─ Is Typing: ${data.isTyping}`)
+
+        if (!client.userUuid) {
+            this.logger.error(`❌ [TYPING] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
+
+        if (!data.conversationId && !data.groupId) {
+            this.logger.error(`❌ [TYPING] Missing conversation or group ID`)
+            return { success: false, error: 'Conversation ID or Group ID is required' }
+        }
 
         const room = data.conversationId 
             ? `conversation:${data.conversationId}` 
             : `group:${data.groupId}`
+
+        // Count recipients
+        const recipientsCount = this.server.sockets.adapter.rooms.get(room)?.size || 0
+
+        this.logger.log(`📡 [TYPING] Broadcasting typing status`)
+        this.logger.log(`   ├─ Room: ${room}`)
+        this.logger.log(`   └─ Recipients: ${Math.max(0, recipientsCount - 1)}`) // Exclude sender
 
         client.to(room).emit('userTyping', {
             userId: client.userUuid,
             userName: client.userName,
             conversationId: data.conversationId,
             groupId: data.groupId,
-            isTyping: data.isTyping
+            isTyping: data.isTyping,
+            timestamp: new Date().toISOString()
         })
+
+        this.logger.log(`✅ [TYPING] Typing status broadcasted successfully`)
 
         return { success: true }
     }
@@ -384,39 +663,92 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             messageIds: string[]
         }
     ) {
-        if (!client.userUuid) return
+        const startTime = Date.now()
+
+        this.logger.log(`📖 [MARK_READ] Marking messages as read`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Conversation ID: ${data.conversationId || 'None'}`)
+        this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
+        this.logger.log(`   └─ Message Count: ${data.messageIds?.length || 0}`)
+
+        if (!client.userUuid) {
+            this.logger.error(`❌ [MARK_READ] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
+
+        if (!data.conversationId && !data.groupId) {
+            this.logger.error(`❌ [MARK_READ] Missing conversation or group ID`)
+            return { success: false, error: 'Conversation ID or Group ID is required' }
+        }
+
+        if (!data.messageIds || data.messageIds.length === 0) {
+            this.logger.error(`❌ [MARK_READ] No message IDs provided`)
+            return { success: false, error: 'Message IDs are required' }
+        }
 
         try {
             if (data.conversationId) {
+                this.logger.log(`💾 [MARK_READ] Updating conversation message read status`)
+
                 await this.conversationService.markMessagesAsRead(
                     data.conversationId,
                     data.messageIds,
                     client.userUuid
                 )
 
-                this.server.to(`conversation:${data.conversationId}`).emit('messagesRead', {
+                const roomName = `conversation:${data.conversationId}`
+                const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+                this.logger.log(`📡 [MARK_READ] Broadcasting read status to conversation`)
+                this.logger.log(`   ├─ Room: ${roomName}`)
+                this.logger.log(`   └─ Recipients: ${Math.max(0, participantsCount - 1)}`)
+
+                this.server.to(roomName).emit('messagesRead', {
                     conversationId: data.conversationId,
                     messageIds: data.messageIds,
                     readBy: {
                         uuid: client.userUuid,
                         name: client.userName
-                    }
+                    },
+                    timestamp: new Date().toISOString()
                 })
+
             } else if (data.groupId) {
+                this.logger.log(`💾 [MARK_READ] Updating group message read status`)
+
+                const roomName = `group:${data.groupId}`
+                const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+                this.logger.log(`📡 [MARK_READ] Broadcasting read status to group`)
+                this.logger.log(`   ├─ Room: ${roomName}`)
+                this.logger.log(`   └─ Recipients: ${Math.max(0, membersCount - 1)}`)
+
                 // Handle group message read status
-                this.server.to(`group:${data.groupId}`).emit('groupMessagesRead', {
+                this.server.to(roomName).emit('groupMessagesRead', {
                     groupId: data.groupId,
                     messageIds: data.messageIds,
                     readBy: {
                         uuid: client.userUuid,
                         name: client.userName
-                    }
+                    },
+                    timestamp: new Date().toISOString()
                 })
             }
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [MARK_READ] Messages marked as read successfully`)
+            this.logger.log(`   ├─ Messages Processed: ${data.messageIds.length}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true }
 
         } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [MARK_READ] Failed to mark messages as read`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -427,12 +759,60 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { status: 'online' | 'away' | 'busy' | 'offline' }
     ) {
-        if (!client.userUuid) return
+        const startTime = Date.now()
+
+        this.logger.log(`👤 [UPDATE_STATUS] Updating user status`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   └─ New Status: ${data.status}`)
+
+        if (!client.userUuid) {
+            this.logger.error(`❌ [UPDATE_STATUS] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
+
+        if (!data.status) {
+            this.logger.error(`❌ [UPDATE_STATUS] Missing status`)
+            return { success: false, error: 'Status is required' }
+        }
 
         try {
+            this.logger.log(`💾 [UPDATE_STATUS] Updating status in database`)
+
             await this.updateUserStatus(client.userUuid, data.status)
+
+            // Broadcast status change to all authenticated users (should be friends only in production)
+            const authenticatedCount = this.authenticatedUsers.size
+            this.logger.log(`📡 [UPDATE_STATUS] Broadcasting status change`)
+            this.logger.log(`   └─ Authenticated Users: ${authenticatedCount}`)
+
+            // Broadcast to friends/contacts - for now broadcast to all authenticated users
+            this.authenticatedUsers.forEach((userSockets, userId) => {
+                if (userId !== client.userUuid) {
+                    userSockets.forEach(socket => {
+                        socket.emit('userStatusChanged', {
+                            userId: client.userUuid,
+                            userName: client.userName,
+                            status: data.status,
+                            timestamp: new Date().toISOString()
+                        })
+                    })
+                }
+            })
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [UPDATE_STATUS] Status updated successfully`)
+            this.logger.log(`   ├─ New Status: ${data.status}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
             return { success: true, status: data.status }
+
         } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [UPDATE_STATUS] Status update failed`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
             return { success: false, error: error.message }
         }
     }
@@ -448,25 +828,73 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             callId: string
         }
     ) {
-        if (!client.userUuid) return
+        const startTime = Date.now()
 
-        const targetRoom = data.recipientId 
-            ? `user:${data.recipientId}` 
-            : `group:${data.groupId}`
+        this.logger.log(`📞 [INITIATE_CALL] Initiating call`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Caller: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Recipient ID: ${data.recipientId || 'None'}`)
+        this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
+        this.logger.log(`   ├─ Call Type: ${data.callType}`)
+        this.logger.log(`   └─ Call ID: ${data.callId}`)
 
-        this.server.to(targetRoom).emit('incomingCall', {
-            callId: data.callId,
-            callType: data.callType,
-            caller: {
-                uuid: client.userUuid,
-                name: client.userName,
-                avatarUrl: client.userAvatarUrl
-            },
-            recipientId: data.recipientId,
-            groupId: data.groupId
-        })
+        if (!client.userUuid) {
+            this.logger.error(`❌ [INITIATE_CALL] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
 
-        return { success: true, callId: data.callId }
+        if (!data.recipientId && !data.groupId) {
+            this.logger.error(`❌ [INITIATE_CALL] Missing recipient or group ID`)
+            return { success: false, error: 'Recipient ID or Group ID is required' }
+        }
+
+        if (!data.callId) {
+            this.logger.error(`❌ [INITIATE_CALL] Missing call ID`)
+            return { success: false, error: 'Call ID is required' }
+        }
+
+        try {
+            const targetRoom = data.recipientId 
+                ? `user:${data.recipientId}` 
+                : `group:${data.groupId}`
+
+            // Count potential recipients
+            const recipientsCount = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+
+            this.logger.log(`📡 [INITIATE_CALL] Sending call invitation`)
+            this.logger.log(`   ├─ Target Room: ${targetRoom}`)
+            this.logger.log(`   └─ Online Recipients: ${recipientsCount}`)
+
+            this.server.to(targetRoom).emit('incomingCall', {
+                callId: data.callId,
+                callType: data.callType,
+                caller: {
+                    uuid: client.userUuid,
+                    name: client.userName,
+                    avatarUrl: client.userAvatarUrl
+                },
+                recipientId: data.recipientId,
+                groupId: data.groupId,
+                timestamp: new Date().toISOString()
+            })
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [INITIATE_CALL] Call initiated successfully`)
+            this.logger.log(`   ├─ Call ID: ${data.callId}`)
+            this.logger.log(`   ├─ Recipients Notified: ${recipientsCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
+            return { success: true, callId: data.callId }
+
+        } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [INITIATE_CALL] Call initiation failed`)
+            this.logger.error(`   ├─ Call ID: ${data.callId}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
+            return { success: false, error: error.message }
+        }
     }
 
     @SubscribeMessage('respondToCall')
@@ -478,19 +906,64 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             callerId: string
         }
     ) {
-        if (!client.userUuid) return
+        const startTime = Date.now()
 
-        this.server.to(`user:${data.callerId}`).emit('callResponse', {
-            callId: data.callId,
-            response: data.response,
-            responder: {
-                uuid: client.userUuid,
-                name: client.userName,
-                avatarUrl: client.userAvatarUrl
-            }
-        })
+        this.logger.log(`📞 [RESPOND_CALL] Responding to call`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Responder: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Caller ID: ${data.callerId}`)
+        this.logger.log(`   ├─ Call ID: ${data.callId}`)
+        this.logger.log(`   └─ Response: ${data.response}`)
 
-        return { success: true }
+        if (!client.userUuid) {
+            this.logger.error(`❌ [RESPOND_CALL] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
+
+        if (!data.callId || !data.callerId) {
+            this.logger.error(`❌ [RESPOND_CALL] Missing required data`)
+            this.logger.error(`   ├─ Call ID: ${data.callId || 'Missing'}`)
+            this.logger.error(`   └─ Caller ID: ${data.callerId || 'Missing'}`)
+            return { success: false, error: 'Call ID and Caller ID are required' }
+        }
+
+        try {
+            const targetRoom = `user:${data.callerId}`
+            const callersCount = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+
+            this.logger.log(`📡 [RESPOND_CALL] Sending response to caller`)
+            this.logger.log(`   ├─ Target Room: ${targetRoom}`)
+            this.logger.log(`   └─ Online Callers: ${callersCount}`)
+
+            this.server.to(targetRoom).emit('callResponse', {
+                callId: data.callId,
+                response: data.response,
+                responder: {
+                    uuid: client.userUuid,
+                    name: client.userName,
+                    avatarUrl: client.userAvatarUrl
+                },
+                timestamp: new Date().toISOString()
+            })
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [RESPOND_CALL] Call response sent successfully`)
+            this.logger.log(`   ├─ Call ID: ${data.callId}`)
+            this.logger.log(`   ├─ Response: ${data.response}`)
+            this.logger.log(`   ├─ Caller Notified: ${callersCount > 0 ? 'Yes' : 'No'}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
+            return { success: true }
+
+        } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [RESPOND_CALL] Call response failed`)
+            this.logger.error(`   ├─ Call ID: ${data.callId}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
+            return { success: false, error: error.message }
+        }
     }
 
     @SubscribeMessage('endCall')
@@ -501,20 +974,72 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             participants: string[]
         }
     ) {
-        if (!client.userUuid) return
+        const startTime = Date.now()
 
-        // Notify all participants
-        data.participants.forEach(participantId => {
-            this.server.to(`user:${participantId}`).emit('callEnded', {
-                callId: data.callId,
-                endedBy: {
-                    uuid: client.userUuid,
-                    name: client.userName
+        this.logger.log(`📞 [END_CALL] Ending call`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Ender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(`   ├─ Call ID: ${data.callId}`)
+        this.logger.log(`   └─ Participants Count: ${data.participants?.length || 0}`)
+
+        if (!client.userUuid) {
+            this.logger.error(`❌ [END_CALL] Unauthenticated client`)
+            return { success: false, error: 'User not authenticated' }
+        }
+
+        if (!data.callId) {
+            this.logger.error(`❌ [END_CALL] Missing call ID`)
+            return { success: false, error: 'Call ID is required' }
+        }
+
+        if (!data.participants || data.participants.length === 0) {
+            this.logger.error(`❌ [END_CALL] No participants provided`)
+            return { success: false, error: 'Participants list is required' }
+        }
+
+        try {
+            let notifiedCount = 0
+
+            this.logger.log(`📡 [END_CALL] Notifying participants`)
+
+            // Notify all participants
+            data.participants.forEach(participantId => {
+                const targetRoom = `user:${participantId}`
+                const participantSockets = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+
+                if (participantSockets > 0) {
+                    this.server.to(targetRoom).emit('callEnded', {
+                        callId: data.callId,
+                        endedBy: {
+                            uuid: client.userUuid,
+                            name: client.userName
+                        },
+                        timestamp: new Date().toISOString()
+                    })
+                    notifiedCount++
                 }
-            })
-        })
 
-        return { success: true }
+                this.logger.log(`   ├─ Participant ${participantId}: ${participantSockets > 0 ? 'Notified' : 'Offline'}`)
+            })
+
+            const duration = Date.now() - startTime
+            this.logger.log(`✅ [END_CALL] Call ended successfully`)
+            this.logger.log(`   ├─ Call ID: ${data.callId}`)
+            this.logger.log(`   ├─ Total Participants: ${data.participants.length}`)
+            this.logger.log(`   ├─ Notified Participants: ${notifiedCount}`)
+            this.logger.log(`   └─ Duration: ${duration}ms`)
+
+            return { success: true, notifiedParticipants: notifiedCount }
+
+        } catch (error) {
+            const duration = Date.now() - startTime
+            this.logger.error(`❌ [END_CALL] Call end failed`)
+            this.logger.error(`   ├─ Call ID: ${data.callId}`)
+            this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Duration: ${duration}ms`)
+            this.logger.error(`   └─ Stack: ${error.stack}`)
+            return { success: false, error: error.message }
+        }
     }
 
     // ==================== HELPER METHODS ====================
