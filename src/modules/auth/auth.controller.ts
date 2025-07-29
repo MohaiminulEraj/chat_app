@@ -13,6 +13,8 @@ import {
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
+import { ConfigService } from '@nestjs/config'
+import { JwtService } from '@nestjs/jwt'
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'
 
 import {
@@ -28,7 +30,11 @@ import { AuthService } from './service/auth.service'
 @ApiTags('🌏 🔒 Auth API')
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly configService: ConfigService,
+        private readonly jwtService: JwtService
+    ) {}
     @Post('login')
     @ApiOperation({
         summary: 'Login Endpoint'
@@ -212,6 +218,76 @@ export class AuthController {
             status: HttpStatus.CREATED,
             message: 'Password has been set successfully',
             result: await this.authService.recoverPassword(updatePasswordDto)
+        }
+    }
+
+    @Get('debug/jwt-config')
+    @ApiOperation({ summary: 'Debug JWT configuration (remove in production)' })
+    debugJwtConfig() {
+        const jwtSecret = this.configService.get<string>('JWT_SECRET')
+        return {
+            secretConfigured: !!jwtSecret,
+            secretLength: jwtSecret?.length || 0,
+            secretPreview: jwtSecret
+                ? `${jwtSecret.substring(0, 4)}...`
+                : 'Not configured',
+            expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d')
+        }
+    }
+
+    @Post('debug/verify-token')
+    @ApiOperation({
+        summary: 'Debug token verification (remove in production)'
+    })
+    async debugVerifyToken(@Body() body: { token: string }) {
+        try {
+            const decoded = this.jwtService.decode(body.token) as any
+            const verified = await this.jwtService.verifyAsync(body.token)
+
+            return {
+                decoded: {
+                    id: decoded?.id,
+                    uuid: decoded?.uuid,
+                    email: decoded?.email,
+                    iat: decoded?.iat
+                        ? new Date(decoded.iat * 1000).toISOString()
+                        : null,
+                    exp: decoded?.exp
+                        ? new Date(decoded.exp * 1000).toISOString()
+                        : null
+                },
+                verified: true,
+                verifiedData: {
+                    id: verified?.id,
+                    uuid: verified?.uuid,
+                    email: verified?.email
+                }
+            }
+        } catch (error) {
+            return {
+                error: error.name,
+                message: error.message,
+                decoded: (() => {
+                    try {
+                        const decoded = this.jwtService.decode(
+                            body.token
+                        ) as any
+                        return {
+                            id: decoded?.id,
+                            uuid: decoded?.uuid,
+                            email: decoded?.email,
+                            iat: decoded?.iat
+                                ? new Date(decoded.iat * 1000).toISOString()
+                                : null,
+                            exp: decoded?.exp
+                                ? new Date(decoded.exp * 1000).toISOString()
+                                : null
+                        }
+                    } catch {
+                        return null
+                    }
+                })()
+            }
         }
     }
 }

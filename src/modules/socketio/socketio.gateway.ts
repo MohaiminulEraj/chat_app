@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import { ConfigService } from '@nestjs/config'
 import {
     ConnectedSocket,
     MessageBody,
@@ -48,8 +49,31 @@ export class SocketIOGateway
         private readonly conversationService: ConversationService,
         private readonly friendshipService: FriendshipService,
         private readonly groupService: GroupService,
-        private readonly userService: UserService
-    ) {}
+        private readonly userService: UserService,
+        private readonly configService: ConfigService
+    ) {
+        // Log JWT configuration on startup
+        const jwtSecret = this.configService.get<string>('JWT_SECRET')
+        this.logger.log(
+            `🔐 [STARTUP] JWT Secret configured: ${jwtSecret ? 'Yes' : 'No'}`
+        )
+        this.logger.log(
+            `🔐 [STARTUP] JWT Secret length: ${jwtSecret?.length || 0} characters`
+        )
+        this.logger.log(
+            `🔐 [STARTUP] JWT Secret first 4 chars: ${jwtSecret?.substring(
+                0,
+                4
+            )}...`
+        )
+
+        // Warning if using default secret
+        if (jwtSecret === 'your-jwt-secret-here') {
+            this.logger.warn(
+                '⚠️  [STARTUP] WARNING: Using default JWT secret! Please update JWT_SECRET in .env file'
+            )
+        }
+    }
 
     async handleConnection(client: AuthenticatedSocket) {
         const connectionTime = new Date().toISOString()
@@ -66,6 +90,29 @@ export class SocketIOGateway
         this.logger.log(
             `   └─ Total Active Connections: ${this.server.engine.clientsCount}`
         )
+
+        // Try to authenticate from query params if token is provided
+        const token =
+            client.handshake.auth?.token || client.handshake.query?.token
+        if (token) {
+            try {
+                const payload = this.jwtService.verify(token as string)
+                // Pre-authenticate the socket
+                client.userId = payload.id?.toString()
+                client.userUuid = payload.uuid
+                client.userName = payload.name || payload.email
+                client.userEmail = payload.email
+                client.userAvatarUrl = payload.avatarUrl || null
+
+                this.logger.log(
+                    `🔐 [CONNECTION] Pre-authenticated user: ${client.userName} (${client.userUuid})`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️  [CONNECTION] Invalid token in handshake: ${error.message}`
+                )
+            }
+        }
 
         client.emit('connected', {
             success: true,
@@ -86,7 +133,10 @@ export class SocketIOGateway
         )
         this.logger.log(`   ├─ Disconnection Time: ${disconnectionTime}`)
         this.logger.log(
-            `   └─ Remaining Connections: ${Math.max(0, this.server.engine.clientsCount - 1)}`
+            `   └─ Remaining Connections: ${Math.max(
+                0,
+                this.server.engine.clientsCount - 1
+            )}`
         )
 
         if (client.userUuid) {
@@ -140,6 +190,9 @@ export class SocketIOGateway
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
         this.logger.log(`   ├─ Token Present: ${data?.token ? 'Yes' : 'No'}`)
         this.logger.log(`   ├─ Token Length: ${data?.token?.length || 0} chars`)
+        this.logger.log(
+            `   ├─ Token first 20 chars: ${data?.token?.substring(0, 20)}...`
+        )
         this.logger.log(`   └─ Client IP: ${client.handshake.address}`)
 
         try {
@@ -156,8 +209,130 @@ export class SocketIOGateway
 
             this.logger.log(`🔍 [AUTHENTICATE] Verifying JWT token`)
 
-            // Verify JWT token
-            const payload = this.jwtService.verify(data.token)
+            // Try to decode without verification first to see the payload
+            try {
+                const decoded = this.jwtService.decode(data.token) as any
+                const now = Math.floor(Date.now() / 1000)
+                const isExpired = decoded?.exp && decoded.exp < now
+
+                this.logger.log(
+                    `🔍 [AUTHENTICATE] Token decoded (without verification):`
+                )
+                this.logger.log(`   ├─ User ID: ${decoded?.id}`)
+                this.logger.log(`   ├─ User UUID: ${decoded?.uuid}`)
+                this.logger.log(`   ├─ Email: ${decoded?.email}`)
+                this.logger.log(
+                    `   ├─ Issued At: ${
+                        decoded?.iat
+                            ? new Date(decoded.iat * 1000).toISOString()
+                            : 'N/A'
+                    }`
+                )
+                this.logger.log(
+                    `   ├─ Expires At: ${
+                        decoded?.exp
+                            ? new Date(decoded.exp * 1000).toISOString()
+                            : 'N/A'
+                    }`
+                )
+                this.logger.log(
+                    `   └─ Token Status: ${isExpired ? '❌ EXPIRED' : '✅ Valid'}`
+                )
+
+                if (isExpired) {
+                    const expiredSince = now - decoded.exp
+                    this.logger.warn(
+                        `⚠️  [AUTHENTICATE] Token expired ${expiredSince} seconds ago`
+                    )
+                }
+            } catch (decodeError) {
+                this.logger.error(
+                    `❌ [AUTHENTICATE] Failed to decode token: ${decodeError.message}`
+                )
+            }
+
+            // Verify JWT token with additional error handling
+            let payload: any
+            try {
+                // For development, you might want to disable expiration check temporarily
+                const verifyOptions: any = {}
+
+                // Uncomment the following line to ignore token expiration in development
+                // if (process.env.NODE_ENV === 'development') {
+                //     verifyOptions.ignoreExpiration = true
+                //     this.logger.warn('⚠️  [AUTHENTICATE] Ignoring token expiration in development mode')
+                // }
+
+                payload = this.jwtService.verify(data.token, verifyOptions)
+            } catch (jwtError) {
+                // Log the specific JWT error for debugging
+                this.logger.error(
+                    `🔐 [AUTHENTICATE] JWT verification error: ${jwtError.name}`
+                )
+                this.logger.error(`   ├─ Message: ${jwtError.message}`)
+
+                // Log current JWT configuration
+                const currentSecret =
+                    this.configService.get<string>('JWT_SECRET')
+                this.logger.error(
+                    `   ├─ Current JWT Secret length: ${currentSecret?.length || 0}`
+                )
+                this.logger.error(
+                    `   └─ Current JWT Secret first 4 chars: ${currentSecret?.substring(0, 4)}...`
+                )
+
+                // Provide specific error messages based on JWT error type
+                let errorMessage = 'Invalid token'
+                let errorCode = 'TOKEN_INVALID'
+
+                if (jwtError.name === 'TokenExpiredError') {
+                    errorMessage = 'Token has expired. Please log in again.'
+                    errorCode = 'TOKEN_EXPIRED'
+
+                    // Log expiration details
+                    const decoded = this.jwtService.decode(data.token) as any
+                    if (decoded?.exp) {
+                        const expiredAt = new Date(
+                            decoded.exp * 1000
+                        ).toISOString()
+                        this.logger.error(
+                            `   └─ Token expired at: ${expiredAt}`
+                        )
+                    }
+                } else if (jwtError.name === 'JsonWebTokenError') {
+                    if (jwtError.message === 'invalid signature') {
+                        errorMessage =
+                            'Invalid token signature. This may be due to a server configuration change.'
+                        errorCode = 'TOKEN_INVALID_SIGNATURE'
+
+                        // Additional warning if using default secret
+                        if (currentSecret === 'your-jwt-secret-here') {
+                            errorMessage +=
+                                ' The server is using a default JWT secret.'
+                            this.logger.error(
+                                '   └─ ⚠️  Server is using default JWT secret!'
+                            )
+                        }
+                    } else if (jwtError.message === 'jwt malformed') {
+                        errorMessage = 'Malformed token'
+                        errorCode = 'TOKEN_MALFORMED'
+                    }
+                }
+
+                throw {
+                    message: errorMessage,
+                    code: errorCode,
+                    originalError: jwtError
+                }
+            }
+
+            // Validate payload structure
+            if (!payload.uuid || !payload.email) {
+                throw {
+                    message: 'Invalid token payload',
+                    code: 'TOKEN_INVALID_PAYLOAD'
+                }
+            }
 
             // Set user data on socket
             client.userId = payload.id?.toString()
@@ -215,17 +390,39 @@ export class SocketIOGateway
             this.logger.error(`❌ [AUTHENTICATE] Authentication failed`)
             this.logger.error(`   ├─ Socket ID: ${client.id}`)
             this.logger.error(`   ├─ Error: ${error.message}`)
+            this.logger.error(`   ├─ Error Code: ${error.code || 'UNKNOWN'}`)
             this.logger.error(`   ├─ Duration: ${duration}ms`)
-            this.logger.error(`   └─ Stack: ${error.stack}`)
+            if (error.originalError) {
+                this.logger.error(
+                    `   └─ Original Error: ${error.originalError.message}`
+                )
+            }
 
             client.emit('authenticationError', {
                 success: false,
-                message: 'Invalid token',
-                code: 'TOKEN_INVALID'
+                message: error.message || 'Invalid token',
+                code: error.code || 'TOKEN_INVALID',
+                requiresReauth:
+                    error.code === 'TOKEN_EXPIRED' ||
+                    error.code === 'TOKEN_INVALID_SIGNATURE'
             })
 
             client.disconnect(true)
             return { success: false, error: error.message }
+        }
+    }
+
+    // Add a debug method for testing
+    @SubscribeMessage('debugJwtInfo')
+    async handleDebugJwtInfo(@ConnectedSocket() client: AuthenticatedSocket) {
+        const jwtSecret = this.configService.get<string>('JWT_SECRET')
+
+        return {
+            secretConfigured: !!jwtSecret,
+            secretLength: jwtSecret?.length || 0,
+            secretPreview: jwtSecret?.substring(0, 4) + '...',
+            isDefaultSecret: jwtSecret === 'your-jwt-secret-here',
+            environment: process.env.NODE_ENV || 'development'
         }
     }
 
@@ -1152,7 +1349,9 @@ export class SocketIOGateway
                 }
 
                 this.logger.log(
-                    `   ├─ Participant ${participantId}: ${participantSockets > 0 ? 'Notified' : 'Offline'}`
+                    `   ├─ Participant ${participantId}: ${
+                        participantSockets > 0 ? 'Notified' : 'Offline'
+                    }`
                 )
             })
 

@@ -31,9 +31,13 @@ import { SocketIOModule } from './modules/socketio/socketio.module'
 @Module({
     imports: [
         ConfigModule.forRoot({
-            envFilePath: ['.env'],
             isGlobal: true,
-            cache: true
+            load: [
+                () => ({
+                    envFilePath: ['.env'],
+                    cache: true
+                })
+            ]
         }),
         ThrottlerModule.forRootAsync({
             useFactory: async () => ({

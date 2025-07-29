@@ -40,7 +40,8 @@
         "pm2:delete": "pm2 delete kitty-backend",
         "pm2:logs": "pm2 logs kitty-backend",
         "pm2:status": "pm2 status",
-        "pm2:monitor": "pm2 monit"
+        "pm2:monitor": "pm2 monit",
+        "generate:jwt-secret": "ts-node src/scripts/generate-jwt-secret.ts"
     },
     "dependencies": {
         "@nestjs-modules/mailer": "^2.0.0",
