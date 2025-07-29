@@ -1,0 +1,609 @@
+{
+  "info": {
+    "name": "🚀 Unified Socket.IO Real-Time System",
+    "description": "Complete Postman collection for testing the unified Socket.IO real-time communication system. This collection includes HTTP endpoints for authentication and setup, plus comprehensive WebSocket testing examples.\n\n## Features Covered:\n- Authentication & JWT token generation\n- Direct messaging setup\n- Group operations\n- User management\n- Socket.IO WebSocket testing examples\n\n## Prerequisites:\n1. Start your NestJS server on http://localhost:3000\n2. Ensure Socket.IO gateway is running\n3. Have test users created in your database\n\n## Usage:\n1. Run authentication requests to get JWT tokens\n2. Use tokens in Socket.IO client tests\n3. Test real-time features using the provided WebSocket examples\n\n## Note:\nSocket.IO testing is best done with the HTML test client or Node.js scripts provided in the test-client folder. This collection provides the HTTP setup needed for those tests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "socketio-unified-system-2025",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "friend_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "group_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication & Setup",
+      "description": "HTTP endpoints for user authentication and initial setup required for Socket.IO testing",
+      "item": [
+        {
+          "name": "Login User 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.access_token) {",
+                  "        pm.collectionVariables.set('jwt_token', responseJson.access_token);",
+                  "        pm.collectionVariables.set('user_id', responseJson.user?.uuid || responseJson.user?.id);",
+                  "        console.log('✅ JWT Token saved for User 1:', responseJson.access_token);",
+                  "        console.log('✅ User ID saved:', responseJson.user?.uuid || responseJson.user?.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user1@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login as User 1 to get JWT token for Socket.IO authentication"
+          },
+          "response": []
+        },
+        {
+          "name": "Login User 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.access_token) {",
+                  "        pm.collectionVariables.set('jwt_token_user2', responseJson.access_token);",
+                  "        pm.collectionVariables.set('friend_id', responseJson.user?.uuid || responseJson.user?.id);",
+                  "        console.log('✅ JWT Token saved for User 2:', responseJson.access_token);",
+                  "        console.log('✅ Friend ID saved:', responseJson.user?.uuid || responseJson.user?.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user2@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login as User 2 to get second JWT token for testing user interactions"
+          },
+          "response": []
+        },
+        {
+          "name": "Register Test User 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User 1\",\n  \"email\": \"user1@test.com\",\n  \"password\": \"password123\",\n  \"confirmPassword\": \"password123\",\n  \"phoneNumber\": \"+1234567890\",\n  \"dateOfBirth\": \"1990-01-01\",\n  \"gender\": \"male\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register test user 1 if not exists"
+          },
+          "response": []
+        },
+        {
+          "name": "Register Test User 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User 2\",\n  \"email\": \"user2@test.com\",\n  \"password\": \"password123\",\n  \"confirmPassword\": \"password123\",\n  \"phoneNumber\": \"+1234567891\",\n  \"dateOfBirth\": \"1991-01-01\",\n  \"gender\": \"female\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register test user 2 if not exists"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.uuid) {",
+                  "        pm.collectionVariables.set('user_id', responseJson.uuid);",
+                  "        console.log('✅ Current user UUID:', responseJson.uuid);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile"]
+            },
+            "description": "Get current user profile to extract UUID"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👥 Friendship Management",
+      "description": "HTTP endpoints for managing friendships (required for direct messaging in Socket.IO)",
+      "item": [
+        {
+          "name": "Send Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"friendUuid\": \"{{friend_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friendship/send-request",
+              "host": ["{{base_url}}"],
+              "path": ["friendship", "send-request"]
+            },
+            "description": "Send friend request to enable direct messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"friendshipId\": \"friendship-uuid-here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friendship/accept-request",
+              "host": ["{{base_url}}"],
+              "path": ["friendship", "accept-request"]
+            },
+            "description": "Accept friend request to enable bidirectional messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Friends List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.length > 0) {",
+                  "        const firstFriend = responseJson[0];",
+                  "        if (firstFriend.user && firstFriend.user.uuid) {",
+                  "            pm.collectionVariables.set('friend_id', firstFriend.user.uuid);",
+                  "            console.log('✅ Friend ID saved:', firstFriend.user.uuid);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/friendship/friends",
+              "host": ["{{base_url}}"],
+              "path": ["friendship", "friends"]
+            },
+            "description": "Get list of friends for Socket.IO messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/friendship/pending",
+              "host": ["{{base_url}}"],
+              "path": ["friendship", "pending"]
+            },
+            "description": "Get pending friend requests"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👥 Group Management",
+      "description": "HTTP endpoints for group management (required for group messaging in Socket.IO)",
+      "item": [
+        {
+          "name": "Create Test Group",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.uuid) {",
+                  "        pm.collectionVariables.set('group_id', responseJson.uuid);",
+                  "        console.log('✅ Group ID saved:', responseJson.uuid);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Socket.IO Test Group\",\n  \"description\": \"Test group for Socket.IO real-time messaging\",\n  \"country\": \"US\",\n  \"isPrivate\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/group",
+              "host": ["{{base_url}}"],
+              "path": ["group"]
+            },
+            "description": "Create a test group for Socket.IO group messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Member to Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userUuid\": \"{{friend_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/group/{{group_id}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["group", "{{group_id}}", "members"]
+            },
+            "description": "Add friend to group for testing group messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Groups",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.length > 0) {",
+                  "        const firstGroup = responseJson[0];",
+                  "        if (firstGroup.uuid) {",
+                  "            pm.collectionVariables.set('group_id', firstGroup.uuid);",
+                  "            console.log('✅ Group ID saved:', firstGroup.uuid);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/group/my-groups",
+              "host": ["{{base_url}}"],
+              "path": ["group", "my-groups"]
+            },
+            "description": "Get list of groups for Socket.IO testing"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Group Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/group/{{group_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["group", "{{group_id}}"]
+            },
+            "description": "Get group details including members"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💬 Conversation Management",
+      "description": "HTTP endpoints for conversation management (context for direct messaging)",
+      "item": [
+        {
+          "name": "Get My Conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.length > 0) {",
+                  "        const firstConversation = responseJson[0];",
+                  "        if (firstConversation.uuid) {",
+                  "            pm.collectionVariables.set('conversation_id', firstConversation.uuid);",
+                  "            console.log('✅ Conversation ID saved:', firstConversation.uuid);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/conversation",
+              "host": ["{{base_url}}"],
+              "path": ["conversation"]
+            },
+            "description": "Get list of conversations for Socket.IO context"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/conversation/{{conversation_id}}/messages?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["conversation", "{{conversation_id}}", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get conversation message history"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔌 Socket.IO WebSocket Testing",
+      "description": "Examples and templates for testing Socket.IO WebSocket connections. Use these as reference for your Socket.IO client implementations.",
+      "item": [
+        {
+          "name": "📋 Socket.IO Connection Guide",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Socket.IO Connection Examples\n\n## JavaScript Browser Client\n```javascript\n// Connect to Socket.IO server\nconst socket = io('http://localhost:3000');\n\n// Authenticate with JWT token\nsocket.emit('authenticate', { \n  token: 'YOUR_JWT_TOKEN_HERE' \n}, (response) => {\n  if (response.success) {\n    console.log('Authenticated as:', response.userId);\n  } else {\n    console.error('Auth failed:', response.error);\n  }\n});\n\n// Listen for authentication confirmation\nsocket.on('authenticated', (data) => {\n  console.log('Auth successful:', data.message);\n});\n\n// Handle authentication errors\nsocket.on('authenticationError', (data) => {\n  console.error('Auth error:', data.message);\n});\n```\n\n## Node.js Client\n```javascript\nconst { io } = require('socket.io-client');\n\nconst socket = io('http://localhost:3000');\n\nsocket.on('connect', () => {\n  console.log('Connected to server');\n  \n  // Authenticate\n  socket.emit('authenticate', { \n    token: 'YOUR_JWT_TOKEN_HERE' \n  }, (response) => {\n    if (response.success) {\n      console.log('Authenticated successfully');\n    }\n  });\n});\n```\n\n## Python Client\n```python\nimport socketio\n\nsio = socketio.Client()\n\n@sio.event\ndef connect():\n    print('Connected to server')\n    sio.emit('authenticate', {'token': 'YOUR_JWT_TOKEN_HERE'})\n\n@sio.event\ndef authenticated(data):\n    print(f'Authenticated: {data[\"message\"]}')\n\nsio.connect('http://localhost:3000')\n```\n\n## Testing URLs\n- HTML Test Client: http://localhost:8080/unified-socketio-test.html\n- Server Endpoint: http://localhost:3000\n- Socket.IO Path: /socket.io/\n\n## Required Environment\n1. Start your NestJS server: `npm run start:dev`\n2. Start test client server: `cd test-client && python3 -m http.server 8080`\n3. Use JWT tokens from authentication endpoints above"
+          },
+          "response": []
+        },
+        {
+          "name": "📨 Direct Messaging Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Direct Messaging Socket.IO Events\n\n## Send Direct Message (Client → Server)\n```javascript\nsocket.emit('sendDirectMessage', {\n  recipientId: 'recipient-uuid',\n  type: 'text', // 'text', 'image', 'file', 'voice'\n  content: 'Hello, this is a test message!',\n  metadata: {} // optional\n}, (response) => {\n  if (response.success) {\n    console.log('Message sent:', response.messageId);\n    console.log('Conversation:', response.conversationId);\n  } else {\n    console.error('Send failed:', response.error);\n  }\n});\n```\n\n## Receive Direct Message (Server → Client)\n```javascript\nsocket.on('newDirectMessage', (data) => {\n  console.log('New message in conversation:', data.conversationId);\n  console.log('From:', data.message.sender.name);\n  console.log('Content:', data.message.content);\n  console.log('Type:', data.message.type);\n  console.log('Timestamp:', data.message.timestamp);\n});\n```\n\n## Mark Messages as Read\n```javascript\nsocket.emit('markMessagesAsRead', {\n  conversationId: 'conversation-uuid',\n  messageIds: ['msg-uuid-1', 'msg-uuid-2']\n}, (response) => {\n  if (response.success) {\n    console.log('Messages marked as read');\n  }\n});\n```\n\n## Read Receipt Notification\n```javascript\nsocket.on('messagesRead', (data) => {\n  console.log('Messages read by:', data.readBy.name);\n  console.log('Conversation:', data.conversationId);\n  console.log('Message IDs:', data.messageIds);\n});\n```\n\n## Required Setup\n1. Users must be friends to send direct messages\n2. Use friendship endpoints to establish relationships\n3. Get friend UUIDs from friends list endpoint"
+          },
+          "response": []
+        },
+        {
+          "name": "👥 Group Messaging Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Group Messaging Socket.IO Events\n\n## Join Group (Client → Server)\n```javascript\nsocket.emit('joinGroup', {\n  groupId: 'group-uuid'\n}, (response) => {\n  if (response.success) {\n    console.log('Joined group successfully');\n  } else {\n    console.error('Join failed:', response.error);\n  }\n});\n```\n\n## Leave Group (Client → Server)\n```javascript\nsocket.emit('leaveGroup', {\n  groupId: 'group-uuid'\n}, (response) => {\n  if (response.success) {\n    console.log('Left group successfully');\n  }\n});\n```\n\n## Send Group Message (Client → Server)\n```javascript\nsocket.emit('sendGroupMessage', {\n  groupId: 'group-uuid',\n  type: 'text', // 'text', 'image', 'file', 'voice'\n  content: 'Hello group!',\n  metadata: {} // optional\n}, (response) => {\n  if (response.success) {\n    console.log('Group message sent:', response.messageId);\n  } else {\n    console.error('Send failed:', response.error);\n  }\n});\n```\n\n## Receive Group Message (Server → Client)\n```javascript\nsocket.on('newGroupMessage', (data) => {\n  console.log('New message in group:', data.groupId);\n  console.log('From:', data.message.sender.name);\n  console.log('Content:', data.message.content);\n  console.log('Type:', data.message.type);\n});\n```\n\n## Group Events\n```javascript\n// User joined group\nsocket.on('userJoinedGroup', (data) => {\n  console.log(data.user.name + ' joined group ' + data.groupId);\n});\n\n// User left group\nsocket.on('userLeftGroup', (data) => {\n  console.log(data.user.name + ' left group ' + data.groupId);\n});\n```\n\n## Required Setup\n1. Create group using HTTP endpoint\n2. Add members to group\n3. Members must join group via Socket.IO before messaging"
+          },
+          "response": []
+        },
+        {
+          "name": "📞 Voice/Video Call Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Voice/Video Call Socket.IO Events\n\n## Initiate Call (Client → Server)\n```javascript\nconst callId = 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);\n\nsocket.emit('initiateCall', {\n  recipientId: 'recipient-uuid',\n  callType: 'voice', // 'voice' or 'video'\n  callId: callId\n}, (response) => {\n  if (response.success) {\n    console.log('Call initiated successfully');\n  } else {\n    console.error('Call failed:', response.error);\n  }\n});\n```\n\n## Incoming Call (Server → Client)\n```javascript\nsocket.on('incomingCall', (data) => {\n  console.log('Incoming ' + data.callType + ' call from ' + data.caller.name);\n  console.log('Call ID:', data.callId);\n  \n  // Show call notification to user\n  const accept = confirm('Accept call from ' + data.caller.name + '?');\n  \n  // Respond to call\n  socket.emit('respondToCall', {\n    callId: data.callId,\n    response: accept ? 'accept' : 'decline',\n    callerId: data.caller.uuid\n  });\n});\n```\n\n## Call Response (Server → Client)\n```javascript\nsocket.on('callResponse', (data) => {\n  if (data.response === 'accept') {\n    console.log('Call accepted by ' + data.responder.name);\n    // Start call UI, establish WebRTC connection\n  } else {\n    console.log('Call declined by ' + data.responder.name);\n    // Show declined message\n  }\n});\n```\n\n## End Call (Client → Server)\n```javascript\nsocket.emit('endCall', {\n  callId: 'active-call-id',\n  participants: ['user1-uuid', 'user2-uuid']\n}, (response) => {\n  if (response.success) {\n    console.log('Call ended successfully');\n  }\n});\n```\n\n## Call Ended (Server → Client)\n```javascript\nsocket.on('callEnded', (data) => {\n  console.log('Call ended by ' + data.endedBy.name);\n  // Clean up call UI, close WebRTC connections\n});\n```\n\n## Call Flow\n1. User A initiates call\n2. User B receives incoming call notification\n3. User B accepts/declines\n4. If accepted, both users establish WebRTC connection\n5. Either user can end the call\n\n## Note\nSocket.IO handles call signaling. WebRTC implementation for actual audio/video is separate."
+          },
+          "response": []
+        },
+        {
+          "name": "⌨️ Typing Indicators & Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Typing Indicators & User Status Events\n\n## Typing Indicators\n\n### Send Typing Status (Client → Server)\n```javascript\n// For direct conversation\nsocket.emit('typing', {\n  conversationId: 'conversation-uuid',\n  isTyping: true // or false\n});\n\n// For group conversation\nsocket.emit('typing', {\n  groupId: 'group-uuid',\n  isTyping: true // or false\n});\n```\n\n### Receive Typing Status (Server → Client)\n```javascript\nsocket.on('userTyping', (data) => {\n  if (data.isTyping) {\n    console.log(data.userName + ' is typing...');\n  } else {\n    console.log(data.userName + ' stopped typing');\n  }\n  \n  // Show/hide typing indicator in UI\n  if (data.conversationId) {\n    // Direct conversation typing\n    showTypingIndicator(data.conversationId, data.isTyping);\n  } else if (data.groupId) {\n    // Group conversation typing\n    showGroupTypingIndicator(data.groupId, data.userName, data.isTyping);\n  }\n});\n```\n\n## User Status Updates\n\n### Update My Status (Client → Server)\n```javascript\nsocket.emit('updateStatus', {\n  status: 'online' // 'online', 'away', 'busy', 'offline'\n}, (response) => {\n  if (response.success) {\n    console.log('Status updated successfully');\n  } else {\n    console.error('Status update failed:', response.error);\n  }\n});\n```\n\n### User Status Changed (Server → Client)\n```javascript\nsocket.on('userStatusChanged', (data) => {\n  console.log('User ' + data.userId + ' is now ' + data.status);\n  console.log('Timestamp:', data.timestamp);\n  \n  // Update user status in UI\n  updateUserStatusDisplay(data.userId, data.status);\n});\n```\n\n## Auto-Typing Implementation Example\n```javascript\nlet typingTimeout;\nconst TYPING_DELAY = 2000; // 2 seconds\n\n// On input field change\ninputField.addEventListener('input', function(e) {\n  // Send typing = true\n  socket.emit('typing', {\n    conversationId: currentConversationId,\n    isTyping: true\n  });\n  \n  // Clear existing timeout\n  clearTimeout(typingTimeout);\n  \n  // Set timeout to send typing = false\n  typingTimeout = setTimeout(() => {\n    socket.emit('typing', {\n      conversationId: currentConversationId,\n      isTyping: false\n    });\n  }, TYPING_DELAY);\n});\n\n// On blur (user leaves input)\ninputField.addEventListener('blur', function() {\n  socket.emit('typing', {\n    conversationId: currentConversationId,\n    isTyping: false\n  });\n  clearTimeout(typingTimeout);\n});\n```\n\n## Status Values\n- `online`: User is active\n- `away`: User is idle\n- `busy`: User is busy/do not disturb\n- `offline`: User is offline\n\n## Best Practices\n1. Debounce typing events to avoid spam\n2. Always send typing=false when user stops typing\n3. Handle typing timeouts (auto-stop after delay)\n4. Update status based on user activity"
+          },
+          "response": []
+        },
+        {
+          "name": "🔧 Error Handling & Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"]
+            },
+            "description": "# Error Handling & Event Management\n\n## Connection Events\n```javascript\n// Connection established\nsocket.on('connect', () => {\n  console.log('Connected to server');\n  console.log('Socket ID:', socket.id);\n});\n\n// Connection lost\nsocket.on('disconnect', (reason) => {\n  console.log('Disconnected:', reason);\n  // Handle reconnection logic\n});\n\n// Reconnection attempt\nsocket.on('reconnect', (attemptNumber) => {\n  console.log('Reconnected after', attemptNumber, 'attempts');\n});\n\n// Reconnection failed\nsocket.on('reconnect_error', (error) => {\n  console.error('Reconnection failed:', error);\n});\n```\n\n## Error Events\n```javascript\n// General errors\nsocket.on('error', (data) => {\n  console.error('Socket error:', data.message);\n  // Show error message to user\n  showErrorMessage(data.message);\n});\n\n// Authentication errors\nsocket.on('authenticationError', (data) => {\n  console.error('Auth error:', data.message);\n  // Redirect to login or refresh token\n  handleAuthError(data.message);\n});\n```\n\n## Event Acknowledgments\n```javascript\n// All major events support acknowledgments\nsocket.emit('sendDirectMessage', messageData, (response) => {\n  if (response.success) {\n    console.log('Message sent successfully');\n    // Update UI to show message sent\n  } else {\n    console.error('Message failed:', response.error);\n    // Show error, allow retry\n  }\n});\n```\n\n## Connection Options\n```javascript\nconst socket = io('http://localhost:3000', {\n  transports: ['websocket', 'polling'], // Fallback transport\n  timeout: 20000, // Connection timeout\n  reconnection: true, // Enable auto-reconnection\n  reconnectionDelay: 1000, // Initial delay\n  reconnectionDelayMax: 5000, // Max delay\n  maxReconnectionAttempts: 5, // Max attempts\n  randomizationFactor: 0.5 // Randomization factor\n});\n```\n\n## Error Response Format\n```typescript\n{\n  success: false,\n  error: \"Detailed error message\",\n  code?: \"ERROR_CODE\", // Optional error code\n  details?: {} // Optional error details\n}\n```\n\n## Success Response Format\n```typescript\n{\n  success: true,\n  data?: {}, // Optional response data\n  messageId?: \"uuid\", // For message operations\n  conversationId?: \"uuid\", // For conversation operations\n  callId?: \"uuid\" // For call operations\n}\n```\n\n## Common Error Scenarios\n1. **Authentication Required**: User not authenticated\n2. **Invalid Recipient**: Recipient not found or not a friend\n3. **Group Not Found**: Group doesn't exist or user not a member\n4. **Permission Denied**: User lacks permission for action\n5. **Validation Error**: Invalid data format\n6. **Connection Lost**: Network issues\n\n## Debugging Tips\n1. Check browser console for client-side errors\n2. Monitor server logs for backend errors\n3. Verify JWT token validity\n4. Ensure proper event name spelling\n5. Check data format matches expected DTOs\n6. Verify user permissions (friends, group membership)\n\n## Testing Error Scenarios\n```javascript\n// Test with invalid token\nsocket.emit('authenticate', { token: 'invalid-token' });\n\n// Test with non-existent recipient\nsocket.emit('sendDirectMessage', {\n  recipientId: 'non-existent-uuid',\n  type: 'text',\n  content: 'test'\n});\n\n// Test with invalid group\nsocket.emit('joinGroup', { groupId: 'invalid-group-id' });\n```"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🧪 Quick Test Scenarios",
+      "description": "Pre-configured test scenarios for common Socket.IO use cases",
+      "item": [
+        {
+          "name": "🎯 Complete Test Workflow",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "# Complete Socket.IO Test Workflow\n\n## Step-by-Step Testing Guide\n\n### 1. Initial Setup\n1. Run \"Register Test User 1\" and \"Register Test User 2\" (if users don't exist)\n2. Run \"Login User 1\" and \"Login User 2\" to get JWT tokens\n3. Run \"Get My Profile\" to extract user UUIDs\n4. Run \"Send Friend Request\" and \"Accept Friend Request\" to establish friendship\n\n### 2. Group Setup\n1. Run \"Create Test Group\" to create a test group\n2. Run \"Add Member to Group\" to add the second user\n3. Run \"Get My Groups\" to verify group creation\n\n### 3. Socket.IO Testing\n1. Open the HTML test client: http://localhost:8080/unified-socketio-test.html\n2. Enter JWT tokens for both users (from login responses)\n3. Click \"Connect\" for both users\n4. Test the following features:\n\n#### Direct Messaging Test\n1. Enter recipient UUID in User 1's \"Recipient UUID\" field\n2. Type a message and click \"Send Direct\"\n3. Verify message appears in User 2's message area\n4. Reply from User 2 to User 1\n\n#### Group Messaging Test\n1. Enter group ID (from \"Create Test Group\" response) in both users\n2. Click \"Join Group\" for both users\n3. Send group messages from either user\n4. Verify messages appear for all group members\n\n#### Call Testing\n1. Enter recipient UUID for voice/video calls\n2. Click \"Voice Call\" or \"Video Call\"\n3. Accept/decline call prompts\n4. Test call termination\n\n#### Status & Typing\n1. Change status using dropdown\n2. Type in message boxes to test typing indicators\n3. Verify real-time updates\n\n### 4. Verification Points\n- ✅ Both users connect and authenticate successfully\n- ✅ Direct messages are delivered in real-time\n- ✅ Group messages reach all members\n- ✅ Typing indicators work in both directions\n- ✅ Status changes are broadcast\n- ✅ Call events are properly handled\n- ✅ Error handling works for invalid operations\n\n### 5. Common Issues & Solutions\n- **Auth Fails**: Check JWT token validity and format\n- **Messages Not Delivered**: Verify friendship and user UUIDs\n- **Group Messages Fail**: Ensure users are group members\n- **Connection Issues**: Check server is running on port 3000\n\n### 6. Advanced Testing\n1. Test with multiple browser tabs/windows\n2. Test connection drops and reconnection\n3. Test with invalid data to verify error handling\n4. Test concurrent users and message ordering\n\n## Environment Check\n```bash\n# Server should be running\ncurl http://localhost:3000/health\n\n# Socket.IO endpoint should respond\ncurl http://localhost:3000/socket.io/\n\n# Test client should be accessible\ncurl http://localhost:8080/unified-socketio-test.html\n```"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
