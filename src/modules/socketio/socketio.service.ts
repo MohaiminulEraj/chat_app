@@ -5,7 +5,10 @@ export class SocketIOService {
     private logger = new Logger('SocketIOService')
 
     // Room management utilities
-    public generateRoomName(type: 'user' | 'conversation' | 'group', id: string): string {
+    public generateRoomName(
+        type: 'user' | 'conversation' | 'group',
+        id: string
+    ): string {
         return `${type}:${id}`
     }
 
@@ -34,10 +37,15 @@ export class SocketIOService {
 
     // Logging utilities
     public logSocketEvent(socketId: string, event: string, data?: any) {
-        this.logger.log(`Socket ${socketId} - Event: ${event}`, data ? JSON.stringify(data) : '')
+        this.logger.log(
+            `Socket ${socketId} - Event: ${event}`,
+            data ? JSON.stringify(data) : ''
+        )
     }
 
     public logSocketError(socketId: string, event: string, error: any) {
-        this.logger.error(`Socket ${socketId} - Event: ${event} - Error: ${error.message}`)
+        this.logger.error(
+            `Socket ${socketId} - Event: ${event} - Error: ${error.message}`
+        )
     }
 }

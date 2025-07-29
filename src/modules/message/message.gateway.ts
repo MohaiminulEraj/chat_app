@@ -34,12 +34,18 @@ export class MessageGateway
         const connectionTime = new Date().toISOString()
         const userId = client.data.userId
         const userInfo = client.data.user || {}
-        
-        this.logger.log(`🔗 [MESSAGE_CONNECTION] New client connected to messages namespace`)
+
+        this.logger.log(
+            `🔗 [MESSAGE_CONNECTION] New client connected to messages namespace`
+        )
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId || 'No ID'})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId || 'No ID'})`
+        )
         this.logger.log(`   ├─ IP: ${client.handshake.address}`)
-        this.logger.log(`   ├─ User Agent: ${client.handshake.headers['user-agent'] || 'Unknown'}`)
+        this.logger.log(
+            `   ├─ User Agent: ${client.handshake.headers['user-agent'] || 'Unknown'}`
+        )
         this.logger.log(`   └─ Connection Time: ${connectionTime}`)
 
         if (userId) {
@@ -51,10 +57,13 @@ export class MessageGateway
                 this.logger.log(`   └─ Room: user:${userId}`)
 
                 // Join conversation rooms
-                const conversations = await this.messageService.getUserConversations(userId)
+                const conversations =
+                    await this.messageService.getUserConversations(userId)
                 this.logger.log(`💬 [CONVERSATIONS] Loading user conversations`)
                 this.logger.log(`   ├─ User ID: ${userId}`)
-                this.logger.log(`   └─ Conversations Found: ${conversations.length}`)
+                this.logger.log(
+                    `   └─ Conversations Found: ${conversations.length}`
+                )
 
                 conversations.forEach((conv) => {
                     client.join(`conversation:${conv.id}`)
@@ -64,25 +73,33 @@ export class MessageGateway
                 })
 
                 // Update user status
-                this.server.emit('userStatusUpdate', { userId, status: 'online' })
-                this.logger.log(`📢 [STATUS_UPDATE] Broadcasting user online status`)
+                this.server.emit('userStatusUpdate', {
+                    userId,
+                    status: 'online'
+                })
+                this.logger.log(
+                    `📢 [STATUS_UPDATE] Broadcasting user online status`
+                )
                 this.logger.log(`   ├─ User ID: ${userId}`)
                 this.logger.log(`   ├─ Status: online`)
                 this.logger.log(`   └─ Broadcast: Global`)
-
             } catch (error) {
-                this.logger.error(`❌ [CONNECTION_ERROR] Failed to setup user connection`)
+                this.logger.error(
+                    `❌ [CONNECTION_ERROR] Failed to setup user connection`
+                )
                 this.logger.error(`   ├─ User ID: ${userId}`)
                 this.logger.error(`   ├─ Error: ${error.message}`)
                 this.logger.error(`   └─ Stack: ${error.stack}`)
-                
+
                 client.emit('error', {
                     message: 'Failed to setup connection',
                     code: 'CONNECTION_SETUP_ERROR'
                 })
             }
         } else {
-            this.logger.warn(`⚠️ [CONNECTION_WARNING] Client connected without user ID`)
+            this.logger.warn(
+                `⚠️ [CONNECTION_WARNING] Client connected without user ID`
+            )
             this.logger.warn(`   ├─ Socket ID: ${client.id}`)
             this.logger.warn(`   └─ IP: ${client.handshake.address}`)
         }
@@ -93,21 +110,32 @@ export class MessageGateway
         const userId = client.data.userId
         const userInfo = client.data.user || {}
 
-        this.logger.log(`🔌 [MESSAGE_DISCONNECTION] Client disconnected from messages namespace`)
+        this.logger.log(
+            `🔌 [MESSAGE_DISCONNECTION] Client disconnected from messages namespace`
+        )
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId || 'No ID'})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId || 'No ID'})`
+        )
         this.logger.log(`   ├─ IP: ${client.handshake.address}`)
         this.logger.log(`   └─ Disconnection Time: ${disconnectionTime}`)
 
         if (userId) {
             try {
-                this.server.emit('userStatusUpdate', { userId, status: 'offline' })
-                this.logger.log(`📢 [STATUS_UPDATE] Broadcasting user offline status`)
+                this.server.emit('userStatusUpdate', {
+                    userId,
+                    status: 'offline'
+                })
+                this.logger.log(
+                    `📢 [STATUS_UPDATE] Broadcasting user offline status`
+                )
                 this.logger.log(`   ├─ User ID: ${userId}`)
                 this.logger.log(`   ├─ Status: offline`)
                 this.logger.log(`   └─ Broadcast: Global`)
             } catch (error) {
-                this.logger.error(`❌ [DISCONNECTION_ERROR] Failed to update user status`)
+                this.logger.error(
+                    `❌ [DISCONNECTION_ERROR] Failed to update user status`
+                )
                 this.logger.error(`   ├─ User ID: ${userId}`)
                 this.logger.error(`   ├─ Error: ${error.message}`)
                 this.logger.error(`   └─ Stack: ${error.stack}`)
@@ -126,10 +154,18 @@ export class MessageGateway
 
         this.logger.log(`💬 [SEND_MESSAGE] Message sending initiated`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Sender: ${userInfo.username || 'Unknown'} (${userId})`)
-        this.logger.log(`   ├─ Conversation ID: ${createMessageDto.conversationId}`)
-        this.logger.log(`   ├─ Message Type: ${createMessageDto.type || 'text'}`)
-        this.logger.log(`   ├─ Content Length: ${createMessageDto.content?.length || 0} characters`)
+        this.logger.log(
+            `   ├─ Sender: ${userInfo.username || 'Unknown'} (${userId})`
+        )
+        this.logger.log(
+            `   ├─ Conversation ID: ${createMessageDto.conversationId}`
+        )
+        this.logger.log(
+            `   ├─ Message Type: ${createMessageDto.type || 'text'}`
+        )
+        this.logger.log(
+            `   ├─ Content Length: ${createMessageDto.content?.length || 0} characters`
+        )
         this.logger.log(`   └─ Timestamp: ${timestamp}`)
 
         try {
@@ -139,7 +175,9 @@ export class MessageGateway
             )
 
             this.logger.log(`✅ [MESSAGE_CREATED] Message successfully created`)
-            this.logger.log(`   ├─ Message ID: ${(message as any)._id || 'Generated'}`)
+            this.logger.log(
+                `   ├─ Message ID: ${(message as any)._id || 'Generated'}`
+            )
             this.logger.log(`   ├─ Sender: ${userId}`)
             this.logger.log(`   ├─ Conversation: ${message.conversationId}`)
             this.logger.log(`   ├─ Type: ${message.type || 'text'}`)
@@ -149,18 +187,23 @@ export class MessageGateway
             const roomName = `conversation:${message.conversationId}`
             this.server.to(roomName).emit('newMessage', message)
 
-            this.logger.log(`📢 [MESSAGE_BROADCAST] Message broadcasted to conversation`)
-            this.logger.log(`   ├─ Message ID: ${(message as any)._id || 'Generated'}`)
+            this.logger.log(
+                `📢 [MESSAGE_BROADCAST] Message broadcasted to conversation`
+            )
+            this.logger.log(
+                `   ├─ Message ID: ${(message as any)._id || 'Generated'}`
+            )
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   ├─ Event: newMessage`)
             this.logger.log(`   └─ Broadcast Time: ${new Date().toISOString()}`)
 
             return message
-
         } catch (error) {
             this.logger.error(`❌ [MESSAGE_ERROR] Failed to send message`)
             this.logger.error(`   ├─ User ID: ${userId}`)
-            this.logger.error(`   ├─ Conversation ID: ${createMessageDto.conversationId}`)
+            this.logger.error(
+                `   ├─ Conversation ID: ${createMessageDto.conversationId}`
+            )
             this.logger.error(`   ├─ Error: ${error.message}`)
             this.logger.error(`   └─ Stack: ${error.stack}`)
 
@@ -185,7 +228,9 @@ export class MessageGateway
 
         this.logger.log(`⌨️ [TYPING_INDICATOR] Typing indicator event`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`
+        )
         this.logger.log(`   ├─ Conversation ID: ${data.conversationId}`)
         this.logger.log(`   ├─ Is Typing: ${data.isTyping}`)
         this.logger.log(`   └─ Timestamp: ${timestamp}`)
@@ -199,14 +244,17 @@ export class MessageGateway
                 timestamp: timestamp
             })
 
-            this.logger.log(`📢 [TYPING_BROADCAST] Typing indicator broadcasted`)
+            this.logger.log(
+                `📢 [TYPING_BROADCAST] Typing indicator broadcasted`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   ├─ Is Typing: ${data.isTyping}`)
             this.logger.log(`   └─ Event: userTyping`)
-
         } catch (error) {
-            this.logger.error(`❌ [TYPING_ERROR] Failed to handle typing indicator`)
+            this.logger.error(
+                `❌ [TYPING_ERROR] Failed to handle typing indicator`
+            )
             this.logger.error(`   ├─ User ID: ${userId}`)
             this.logger.error(`   ├─ Conversation ID: ${data.conversationId}`)
             this.logger.error(`   ├─ Error: ${error.message}`)
@@ -231,23 +279,32 @@ export class MessageGateway
 
         this.logger.log(`📖 [MARK_AS_READ] Mark messages as read initiated`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`
+        )
         this.logger.log(`   ├─ Message Count: ${data.messageIds?.length || 0}`)
-        this.logger.log(`   ├─ Message IDs: ${data.messageIds?.slice(0, 3).join(', ')}${data.messageIds?.length > 3 ? '...' : ''}`)
+        this.logger.log(
+            `   ├─ Message IDs: ${data.messageIds?.slice(0, 3).join(', ')}${data.messageIds?.length > 3 ? '...' : ''}`
+        )
         this.logger.log(`   └─ Timestamp: ${timestamp}`)
 
         try {
-            await this.messageService.markMessagesAsRead(userId, data.messageIds)
+            await this.messageService.markMessagesAsRead(
+                userId,
+                data.messageIds
+            )
 
-            this.logger.log(`✅ [MESSAGES_MARKED_READ] Messages successfully marked as read`)
+            this.logger.log(
+                `✅ [MESSAGES_MARKED_READ] Messages successfully marked as read`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Messages Count: ${data.messageIds.length}`)
             this.logger.log(`   └─ Processed At: ${new Date().toISOString()}`)
 
             // Notify sender about read receipt
             data.messageIds.forEach((messageId) => {
-                this.server.emit('messageRead', { 
-                    messageId, 
+                this.server.emit('messageRead', {
+                    messageId,
                     userId,
                     timestamp: new Date().toISOString()
                 })
@@ -258,11 +315,14 @@ export class MessageGateway
                 this.logger.log(`   ├─ Event: messageRead`)
                 this.logger.log(`   └─ Global Broadcast: Yes`)
             })
-
         } catch (error) {
-            this.logger.error(`❌ [MARK_READ_ERROR] Failed to mark messages as read`)
+            this.logger.error(
+                `❌ [MARK_READ_ERROR] Failed to mark messages as read`
+            )
             this.logger.error(`   ├─ User ID: ${userId}`)
-            this.logger.error(`   ├─ Message Count: ${data.messageIds?.length || 0}`)
+            this.logger.error(
+                `   ├─ Message Count: ${data.messageIds?.length || 0}`
+            )
             this.logger.error(`   ├─ Error: ${error.message}`)
             this.logger.error(`   └─ Stack: ${error.stack}`)
 
@@ -287,7 +347,9 @@ export class MessageGateway
 
         this.logger.log(`🚪 [JOIN_CONVERSATION] User joining conversation`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`
+        )
         this.logger.log(`   ├─ Conversation ID: ${conversationId}`)
         this.logger.log(`   └─ Timestamp: ${timestamp}`)
 
@@ -295,7 +357,9 @@ export class MessageGateway
             const roomName = `conversation:${conversationId}`
             client.join(roomName)
 
-            this.logger.log(`✅ [CONVERSATION_JOINED] Successfully joined conversation`)
+            this.logger.log(
+                `✅ [CONVERSATION_JOINED] Successfully joined conversation`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Conversation ID: ${conversationId}`)
             this.logger.log(`   ├─ Room: ${roomName}`)
@@ -308,20 +372,23 @@ export class MessageGateway
                 timestamp: new Date().toISOString()
             })
 
-            this.logger.log(`📢 [USER_JOINED_BROADCAST] User join broadcasted to conversation`)
+            this.logger.log(
+                `📢 [USER_JOINED_BROADCAST] User join broadcasted to conversation`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   ├─ Event: userJoinedConversation`)
             this.logger.log(`   └─ Broadcast: Room participants`)
 
-            return { 
-                status: 'joined', 
+            return {
+                status: 'joined',
                 conversationId,
                 timestamp: new Date().toISOString()
             }
-
         } catch (error) {
-            this.logger.error(`❌ [JOIN_CONVERSATION_ERROR] Failed to join conversation`)
+            this.logger.error(
+                `❌ [JOIN_CONVERSATION_ERROR] Failed to join conversation`
+            )
             this.logger.error(`   ├─ User ID: ${userId}`)
             this.logger.error(`   ├─ Conversation ID: ${conversationId}`)
             this.logger.error(`   ├─ Error: ${error.message}`)
@@ -348,13 +415,15 @@ export class MessageGateway
 
         this.logger.log(`🚪 [LEAVE_CONVERSATION] User leaving conversation`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`)
+        this.logger.log(
+            `   ├─ User: ${userInfo.username || 'Unknown'} (${userId})`
+        )
         this.logger.log(`   ├─ Conversation ID: ${conversationId}`)
         this.logger.log(`   └─ Timestamp: ${timestamp}`)
 
         try {
             const roomName = `conversation:${conversationId}`
-            
+
             // Notify other participants before leaving
             client.to(roomName).emit('userLeftConversation', {
                 userId,
@@ -362,7 +431,9 @@ export class MessageGateway
                 timestamp: new Date().toISOString()
             })
 
-            this.logger.log(`📢 [USER_LEFT_BROADCAST] User leave broadcasted to conversation`)
+            this.logger.log(
+                `📢 [USER_LEFT_BROADCAST] User leave broadcasted to conversation`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   ├─ Event: userLeftConversation`)
@@ -370,20 +441,23 @@ export class MessageGateway
 
             client.leave(roomName)
 
-            this.logger.log(`✅ [CONVERSATION_LEFT] Successfully left conversation`)
+            this.logger.log(
+                `✅ [CONVERSATION_LEFT] Successfully left conversation`
+            )
             this.logger.log(`   ├─ User ID: ${userId}`)
             this.logger.log(`   ├─ Conversation ID: ${conversationId}`)
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   └─ Left At: ${new Date().toISOString()}`)
 
-            return { 
-                status: 'left', 
+            return {
+                status: 'left',
                 conversationId,
                 timestamp: new Date().toISOString()
             }
-
         } catch (error) {
-            this.logger.error(`❌ [LEAVE_CONVERSATION_ERROR] Failed to leave conversation`)
+            this.logger.error(
+                `❌ [LEAVE_CONVERSATION_ERROR] Failed to leave conversation`
+            )
             this.logger.error(`   ├─ User ID: ${userId}`)
             this.logger.error(`   ├─ Conversation ID: ${conversationId}`)
             this.logger.error(`   ├─ Error: ${error.message}`)
@@ -395,8 +469,8 @@ export class MessageGateway
                 timestamp: new Date().toISOString()
             })
 
-            return { 
-                status: 'error', 
+            return {
+                status: 'error',
                 conversationId,
                 error: error.message,
                 timestamp: new Date().toISOString()

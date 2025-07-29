@@ -744,13 +744,17 @@ export class WebsocketGateway {
         if (userId && this.onlineUsers.has(userId)) {
             this.onlineUsers.delete(userId)
             this.logger.log(`🧹 [CLEANUP] Removed from online users tracking`)
-            
+
             // Update user status to offline in database
             try {
                 await this.userService.updateStatus(userId, 'offline')
-                this.logger.log(`📊 [STATUS_UPDATE] User status updated to offline in database`)
+                this.logger.log(
+                    `📊 [STATUS_UPDATE] User status updated to offline in database`
+                )
             } catch (error) {
-                this.logger.error(`❌ [STATUS_UPDATE_ERROR] Failed to update user status to offline`)
+                this.logger.error(
+                    `❌ [STATUS_UPDATE_ERROR] Failed to update user status to offline`
+                )
                 this.logger.error(`   └─ Error: ${error.message}`)
             }
         }

@@ -33,7 +33,9 @@ interface AuthenticatedSocket extends Socket {
     transports: ['websocket', 'polling'],
     allowEIO3: true
 })
-export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class SocketIOGateway
+    implements OnGatewayConnection, OnGatewayDisconnect
+{
     @WebSocketServer()
     server: Server
 
@@ -61,8 +63,10 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         this.logger.log(`   ├─ User Agent: ${userAgent || 'Unknown'}`)
         this.logger.log(`   ├─ Transport: ${transport}`)
         this.logger.log(`   ├─ Connection Time: ${connectionTime}`)
-        this.logger.log(`   └─ Total Active Connections: ${this.server.engine.clientsCount}`)
-        
+        this.logger.log(
+            `   └─ Total Active Connections: ${this.server.engine.clientsCount}`
+        )
+
         client.emit('connected', {
             success: true,
             message: 'Connected to real-time server',
@@ -77,15 +81,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`🔌 [DISCONNECTION] Client disconnected`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${userName || 'Anonymous'} (${userId || 'Not authenticated'})`)
+        this.logger.log(
+            `   ├─ User: ${userName || 'Anonymous'} (${userId || 'Not authenticated'})`
+        )
         this.logger.log(`   ├─ Disconnection Time: ${disconnectionTime}`)
-        this.logger.log(`   └─ Remaining Connections: ${Math.max(0, this.server.engine.clientsCount - 1)}`)
+        this.logger.log(
+            `   └─ Remaining Connections: ${Math.max(0, this.server.engine.clientsCount - 1)}`
+        )
 
         if (client.userUuid) {
             // Remove from authenticated users map
-            const userSockets = this.authenticatedUsers.get(client.userUuid) || []
-            const updatedSockets = userSockets.filter(socket => socket.id !== client.id)
-            
+            const userSockets =
+                this.authenticatedUsers.get(client.userUuid) || []
+            const updatedSockets = userSockets.filter(
+                (socket) => socket.id !== client.id
+            )
+
             if (updatedSockets.length === 0) {
                 this.authenticatedUsers.delete(client.userUuid)
                 // Update user status to offline
@@ -95,16 +106,20 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 this.logger.log(`   └─ All sessions disconnected`)
             } else {
                 this.authenticatedUsers.set(client.userUuid, updatedSockets)
-                this.logger.log(`📱 [SESSION_END] User session ended but other sessions remain`)
+                this.logger.log(
+                    `📱 [SESSION_END] User session ended but other sessions remain`
+                )
                 this.logger.log(`   ├─ User: ${userName} (${userId})`)
-                this.logger.log(`   └─ Active Sessions: ${updatedSockets.length}`)
+                this.logger.log(
+                    `   └─ Active Sessions: ${updatedSockets.length}`
+                )
             }
 
             // Remove from socket user map
             this.socketUserMap.delete(client.id)
 
             // Leave all rooms
-            client.rooms.forEach(room => {
+            client.rooms.forEach((room) => {
                 if (room !== client.id) {
                     client.leave(room)
                     this.logger.log(`🚪 [ROOM_LEAVE] User left room: ${room}`)
@@ -120,7 +135,7 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         @MessageBody() data: { token: string }
     ) {
         const startTime = Date.now()
-        
+
         this.logger.log(`🔐 [AUTHENTICATE] Authentication attempt`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
         this.logger.log(`   ├─ Token Present: ${data?.token ? 'Yes' : 'No'}`)
@@ -130,8 +145,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         try {
             if (!data?.token) {
                 this.logger.error(`❌ [AUTHENTICATE] Missing token`)
-                client.emit('authenticationError', { 
-                    success: false, 
+                client.emit('authenticationError', {
+                    success: false,
                     message: 'Token is required',
                     code: 'TOKEN_MISSING'
                 })
@@ -143,7 +158,7 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Verify JWT token
             const payload = this.jwtService.verify(data.token)
-            
+
             // Set user data on socket
             client.userId = payload.id?.toString()
             client.userUuid = payload.uuid
@@ -152,7 +167,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             client.userAvatarUrl = payload.avatarUrl || null
 
             // Add to authenticated users map
-            const userSockets = this.authenticatedUsers.get(client.userUuid) || []
+            const userSockets =
+                this.authenticatedUsers.get(client.userUuid) || []
             userSockets.push(client)
             this.authenticatedUsers.set(client.userUuid, userSockets)
 
@@ -161,7 +177,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Join user's personal room
             client.join(`user:${client.userUuid}`)
-            this.logger.log(`🏠 [ROOM_JOIN] Joined personal room: user:${client.userUuid}`)
+            this.logger.log(
+                `🏠 [ROOM_JOIN] Joined personal room: user:${client.userUuid}`
+            )
 
             // Join all user's conversation rooms
             await this.joinUserConversations(client)
@@ -180,7 +198,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`   ├─ User Email: ${client.userEmail}`)
             this.logger.log(`   ├─ User Sessions: ${userSockets.length}`)
             this.logger.log(`   ├─ Duration: ${duration}ms`)
-            this.logger.log(`   └─ Total Authenticated Users: ${this.authenticatedUsers.size}`)
+            this.logger.log(
+                `   └─ Total Authenticated Users: ${this.authenticatedUsers.size}`
+            )
 
             client.emit('authenticated', {
                 success: true,
@@ -188,9 +208,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 userName: client.userName,
                 message: 'Authentication successful'
             })
-            
-            return { success: true, userId: client.userUuid }
 
+            return { success: true, userId: client.userUuid }
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [AUTHENTICATE] Authentication failed`)
@@ -198,13 +217,13 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.error(`   ├─ Error: ${error.message}`)
             this.logger.error(`   ├─ Duration: ${duration}ms`)
             this.logger.error(`   └─ Stack: ${error.stack}`)
-            
-            client.emit('authenticationError', { 
-                success: false, 
+
+            client.emit('authenticationError', {
+                success: false,
                 message: 'Invalid token',
                 code: 'TOKEN_INVALID'
             })
-            
+
             client.disconnect(true)
             return { success: false, error: error.message }
         }
@@ -214,7 +233,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('sendDirectMessage')
     async handleDirectMessage(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             recipientId: string
             type: 'text' | 'image' | 'file' | 'voice'
             content?: string
@@ -227,10 +247,14 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`💬 [DIRECT_MESSAGE] Sending direct message`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   ├─ Recipient ID: ${data.recipientId}`)
         this.logger.log(`   ├─ Message Type: ${data.type}`)
-        this.logger.log(`   ├─ Content Length: ${data.content?.length || 0} chars`)
+        this.logger.log(
+            `   ├─ Content Length: ${data.content?.length || 0} chars`
+        )
         this.logger.log(`   ├─ File URL: ${data.fileUrl ? 'Present' : 'None'}`)
         this.logger.log(`   └─ Message ID: ${messageId}`)
 
@@ -245,13 +269,16 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         }
 
         try {
-            this.logger.log(`🔍 [DIRECT_MESSAGE] Getting or creating conversation`)
-            
-            // Get or create direct conversation
-            const conversation = await this.conversationService.getOrCreateDirectConversation(
-                client.userUuid,
-                data.recipientId
+            this.logger.log(
+                `🔍 [DIRECT_MESSAGE] Getting or creating conversation`
             )
+
+            // Get or create direct conversation
+            const conversation =
+                await this.conversationService.getOrCreateDirectConversation(
+                    client.userUuid,
+                    data.recipientId
+                )
 
             this.logger.log(`💾 [DIRECT_MESSAGE] Creating message in database`)
             this.logger.log(`   └─ Conversation ID: ${conversation.uuid}`)
@@ -267,9 +294,12 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Count participants in conversation room
             const roomName = `conversation:${conversation.uuid}`
-            const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+            const participantsCount =
+                this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
-            this.logger.log(`📡 [DIRECT_MESSAGE] Broadcasting to conversation participants`)
+            this.logger.log(
+                `📡 [DIRECT_MESSAGE] Broadcasting to conversation participants`
+            )
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   └─ Online Participants: ${participantsCount}`)
 
@@ -292,7 +322,6 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, message, conversationId: conversation.uuid }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [DIRECT_MESSAGE] Message send failed`)
@@ -313,7 +342,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`🚪 [JOIN_CONVERSATION] Joining direct conversation`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   └─ Conversation ID: ${data.conversationId}`)
 
         if (!client.userUuid) {
@@ -327,15 +358,21 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         }
 
         try {
-            this.logger.log(`🔍 [JOIN_CONVERSATION] Verifying conversation access`)
+            this.logger.log(
+                `🔍 [JOIN_CONVERSATION] Verifying conversation access`
+            )
 
             // Verify user is part of this conversation
-            const conversation = await this.conversationService.getConversation(data.conversationId)
-            
+            const conversation = await this.conversationService.getConversation(
+                data.conversationId
+            )
+
             if (!conversation.participantIds.includes(client.userUuid)) {
                 this.logger.error(`❌ [JOIN_CONVERSATION] Access denied`)
                 this.logger.error(`   ├─ User ID: ${client.userUuid}`)
-                this.logger.error(`   └─ Participants: ${conversation.participantIds.join(', ')}`)
+                this.logger.error(
+                    `   └─ Participants: ${conversation.participantIds.join(', ')}`
+                )
                 return { success: false, error: 'Access denied' }
             }
 
@@ -344,19 +381,23 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             client.join(roomName)
 
             // Count current participants in room
-            const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+            const participantsCount =
+                this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
             const duration = Date.now() - startTime
-            this.logger.log(`✅ [JOIN_CONVERSATION] Successfully joined conversation`)
+            this.logger.log(
+                `✅ [JOIN_CONVERSATION] Successfully joined conversation`
+            )
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   ├─ Online Participants: ${participantsCount}`)
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, conversationId: data.conversationId }
-
         } catch (error) {
             const duration = Date.now() - startTime
-            this.logger.error(`❌ [JOIN_CONVERSATION] Failed to join conversation`)
+            this.logger.error(
+                `❌ [JOIN_CONVERSATION] Failed to join conversation`
+            )
             this.logger.error(`   ├─ Error: ${error.message}`)
             this.logger.error(`   ├─ Duration: ${duration}ms`)
             this.logger.error(`   └─ Stack: ${error.stack}`)
@@ -371,20 +412,26 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     ) {
         this.logger.log(`🚪 [LEAVE_CONVERSATION] Leaving direct conversation`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   └─ Conversation ID: ${data.conversationId}`)
 
         const roomName = `conversation:${data.conversationId}`
-        
-        // Count participants before leaving
-        const participantsBeforeLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
-        
-        client.leave(roomName)
-        
-        // Count participants after leaving
-        const participantsAfterLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
-        this.logger.log(`✅ [LEAVE_CONVERSATION] Successfully left conversation`)
+        // Count participants before leaving
+        const participantsBeforeLeave =
+            this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+        client.leave(roomName)
+
+        // Count participants after leaving
+        const participantsAfterLeave =
+            this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
+        this.logger.log(
+            `✅ [LEAVE_CONVERSATION] Successfully left conversation`
+        )
         this.logger.log(`   ├─ Room: ${roomName}`)
         this.logger.log(`   ├─ Participants Before: ${participantsBeforeLeave}`)
         this.logger.log(`   └─ Participants After: ${participantsAfterLeave}`)
@@ -396,7 +443,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('sendGroupMessage')
     async handleGroupMessage(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             groupId: string
             type: 'text' | 'image' | 'file' | 'voice'
             content?: string
@@ -410,10 +458,14 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`👥 [GROUP_MESSAGE] Sending group message`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   ├─ Group ID: ${data.groupId}`)
         this.logger.log(`   ├─ Message Type: ${data.type}`)
-        this.logger.log(`   ├─ Content Length: ${data.content?.length || 0} chars`)
+        this.logger.log(
+            `   ├─ Content Length: ${data.content?.length || 0} chars`
+        )
         this.logger.log(`   ├─ File URL: ${data.fileUrl ? 'Present' : 'None'}`)
         this.logger.log(`   ├─ Reply To: ${data.replyToMessageId || 'None'}`)
         this.logger.log(`   └─ Message ID: ${messageId}`)
@@ -432,12 +484,20 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`🔍 [GROUP_MESSAGE] Verifying group membership`)
 
             // Verify user is a member of the group
-            const isMember = await this.isUserGroupMember(client.userUuid, data.groupId)
+            const isMember = await this.isUserGroupMember(
+                client.userUuid,
+                data.groupId
+            )
             if (!isMember) {
-                this.logger.error(`❌ [GROUP_MESSAGE] Access denied - not a group member`)
+                this.logger.error(
+                    `❌ [GROUP_MESSAGE] Access denied - not a group member`
+                )
                 this.logger.error(`   ├─ User ID: ${client.userUuid}`)
                 this.logger.error(`   └─ Group ID: ${data.groupId}`)
-                return { success: false, error: 'You are not a member of this group' }
+                return {
+                    success: false,
+                    error: 'You are not a member of this group'
+                }
             }
 
             this.logger.log(`💾 [GROUP_MESSAGE] Creating message in database`)
@@ -453,7 +513,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Count group members in room
             const roomName = `group:${data.groupId}`
-            const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+            const membersCount =
+                this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
             this.logger.log(`📡 [GROUP_MESSAGE] Broadcasting to group members`)
             this.logger.log(`   ├─ Room: ${roomName}`)
@@ -471,14 +532,15 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             })
 
             const duration = Date.now() - startTime
-            this.logger.log(`✅ [GROUP_MESSAGE] Group message sent successfully`)
+            this.logger.log(
+                `✅ [GROUP_MESSAGE] Group message sent successfully`
+            )
             this.logger.log(`   ├─ Message ID: ${message.id || messageId}`)
             this.logger.log(`   ├─ Group ID: ${data.groupId}`)
             this.logger.log(`   ├─ Members Notified: ${membersCount}`)
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, message, groupId: data.groupId }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [GROUP_MESSAGE] Group message send failed`)
@@ -499,7 +561,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`👥 [JOIN_GROUP] Joining group`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   └─ Group ID: ${data.groupId}`)
 
         if (!client.userUuid) {
@@ -516,12 +580,20 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`🔍 [JOIN_GROUP] Verifying group membership`)
 
             // Verify user is a member of the group
-            const isMember = await this.isUserGroupMember(client.userUuid, data.groupId)
+            const isMember = await this.isUserGroupMember(
+                client.userUuid,
+                data.groupId
+            )
             if (!isMember) {
-                this.logger.error(`❌ [JOIN_GROUP] Access denied - not a group member`)
+                this.logger.error(
+                    `❌ [JOIN_GROUP] Access denied - not a group member`
+                )
                 this.logger.error(`   ├─ User ID: ${client.userUuid}`)
                 this.logger.error(`   └─ Group ID: ${data.groupId}`)
-                return { success: false, error: 'You are not a member of this group' }
+                return {
+                    success: false,
+                    error: 'You are not a member of this group'
+                }
             }
 
             // Join group room
@@ -529,7 +601,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             client.join(roomName)
 
             // Count current members in room
-            const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+            const membersCount =
+                this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
             this.logger.log(`📢 [JOIN_GROUP] Notifying other group members`)
 
@@ -550,7 +623,6 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, groupId: data.groupId }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [JOIN_GROUP] Failed to join group`)
@@ -568,18 +640,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     ) {
         this.logger.log(`👥 [LEAVE_GROUP] Leaving group`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   └─ Group ID: ${data.groupId}`)
 
         const roomName = `group:${data.groupId}`
-        
+
         // Count members before leaving
-        const membersBeforeLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
-        
+        const membersBeforeLeave =
+            this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+
         client.leave(roomName)
 
         // Count members after leaving
-        const membersAfterLeave = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+        const membersAfterLeave =
+            this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
         this.logger.log(`📢 [LEAVE_GROUP] Notifying other group members`)
 
@@ -605,7 +681,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('typing')
     async handleTyping(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             conversationId?: string
             groupId?: string
             isTyping: boolean
@@ -613,8 +690,12 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     ) {
         this.logger.log(`⌨️ [TYPING] Typing indicator`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
-        this.logger.log(`   ├─ Conversation ID: ${data.conversationId || 'None'}`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
+        this.logger.log(
+            `   ├─ Conversation ID: ${data.conversationId || 'None'}`
+        )
         this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
         this.logger.log(`   └─ Is Typing: ${data.isTyping}`)
 
@@ -625,15 +706,19 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         if (!data.conversationId && !data.groupId) {
             this.logger.error(`❌ [TYPING] Missing conversation or group ID`)
-            return { success: false, error: 'Conversation ID or Group ID is required' }
+            return {
+                success: false,
+                error: 'Conversation ID or Group ID is required'
+            }
         }
 
-        const room = data.conversationId 
-            ? `conversation:${data.conversationId}` 
+        const room = data.conversationId
+            ? `conversation:${data.conversationId}`
             : `group:${data.groupId}`
 
         // Count recipients
-        const recipientsCount = this.server.sockets.adapter.rooms.get(room)?.size || 0
+        const recipientsCount =
+            this.server.sockets.adapter.rooms.get(room)?.size || 0
 
         this.logger.log(`📡 [TYPING] Broadcasting typing status`)
         this.logger.log(`   ├─ Room: ${room}`)
@@ -657,7 +742,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('markAsRead')
     async handleMarkAsRead(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             conversationId?: string
             groupId?: string
             messageIds: string[]
@@ -667,8 +753,12 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`📖 [MARK_READ] Marking messages as read`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
-        this.logger.log(`   ├─ Conversation ID: ${data.conversationId || 'None'}`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
+        this.logger.log(
+            `   ├─ Conversation ID: ${data.conversationId || 'None'}`
+        )
         this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
         this.logger.log(`   └─ Message Count: ${data.messageIds?.length || 0}`)
 
@@ -679,7 +769,10 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         if (!data.conversationId && !data.groupId) {
             this.logger.error(`❌ [MARK_READ] Missing conversation or group ID`)
-            return { success: false, error: 'Conversation ID or Group ID is required' }
+            return {
+                success: false,
+                error: 'Conversation ID or Group ID is required'
+            }
         }
 
         if (!data.messageIds || data.messageIds.length === 0) {
@@ -689,7 +782,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         try {
             if (data.conversationId) {
-                this.logger.log(`💾 [MARK_READ] Updating conversation message read status`)
+                this.logger.log(
+                    `💾 [MARK_READ] Updating conversation message read status`
+                )
 
                 await this.conversationService.markMessagesAsRead(
                     data.conversationId,
@@ -698,11 +793,16 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                 )
 
                 const roomName = `conversation:${data.conversationId}`
-                const participantsCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+                const participantsCount =
+                    this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
-                this.logger.log(`📡 [MARK_READ] Broadcasting read status to conversation`)
+                this.logger.log(
+                    `📡 [MARK_READ] Broadcasting read status to conversation`
+                )
                 this.logger.log(`   ├─ Room: ${roomName}`)
-                this.logger.log(`   └─ Recipients: ${Math.max(0, participantsCount - 1)}`)
+                this.logger.log(
+                    `   └─ Recipients: ${Math.max(0, participantsCount - 1)}`
+                )
 
                 this.server.to(roomName).emit('messagesRead', {
                     conversationId: data.conversationId,
@@ -713,16 +813,22 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                     },
                     timestamp: new Date().toISOString()
                 })
-
             } else if (data.groupId) {
-                this.logger.log(`💾 [MARK_READ] Updating group message read status`)
+                this.logger.log(
+                    `💾 [MARK_READ] Updating group message read status`
+                )
 
                 const roomName = `group:${data.groupId}`
-                const membersCount = this.server.sockets.adapter.rooms.get(roomName)?.size || 0
+                const membersCount =
+                    this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
-                this.logger.log(`📡 [MARK_READ] Broadcasting read status to group`)
+                this.logger.log(
+                    `📡 [MARK_READ] Broadcasting read status to group`
+                )
                 this.logger.log(`   ├─ Room: ${roomName}`)
-                this.logger.log(`   └─ Recipients: ${Math.max(0, membersCount - 1)}`)
+                this.logger.log(
+                    `   └─ Recipients: ${Math.max(0, membersCount - 1)}`
+                )
 
                 // Handle group message read status
                 this.server.to(roomName).emit('groupMessagesRead', {
@@ -737,12 +843,15 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             }
 
             const duration = Date.now() - startTime
-            this.logger.log(`✅ [MARK_READ] Messages marked as read successfully`)
-            this.logger.log(`   ├─ Messages Processed: ${data.messageIds.length}`)
+            this.logger.log(
+                `✅ [MARK_READ] Messages marked as read successfully`
+            )
+            this.logger.log(
+                `   ├─ Messages Processed: ${data.messageIds.length}`
+            )
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [MARK_READ] Failed to mark messages as read`)
@@ -763,7 +872,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`👤 [UPDATE_STATUS] Updating user status`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   └─ New Status: ${data.status}`)
 
         if (!client.userUuid) {
@@ -789,7 +900,7 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             // Broadcast to friends/contacts - for now broadcast to all authenticated users
             this.authenticatedUsers.forEach((userSockets, userId) => {
                 if (userId !== client.userUuid) {
-                    userSockets.forEach(socket => {
+                    userSockets.forEach((socket) => {
                         socket.emit('userStatusChanged', {
                             userId: client.userUuid,
                             userName: client.userName,
@@ -806,7 +917,6 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, status: data.status }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [UPDATE_STATUS] Status update failed`)
@@ -821,7 +931,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('initiateCall')
     async handleInitiateCall(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             recipientId?: string
             groupId?: string
             callType: 'voice' | 'video'
@@ -832,7 +943,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`📞 [INITIATE_CALL] Initiating call`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Caller: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ Caller: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   ├─ Recipient ID: ${data.recipientId || 'None'}`)
         this.logger.log(`   ├─ Group ID: ${data.groupId || 'None'}`)
         this.logger.log(`   ├─ Call Type: ${data.callType}`)
@@ -844,8 +957,13 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         }
 
         if (!data.recipientId && !data.groupId) {
-            this.logger.error(`❌ [INITIATE_CALL] Missing recipient or group ID`)
-            return { success: false, error: 'Recipient ID or Group ID is required' }
+            this.logger.error(
+                `❌ [INITIATE_CALL] Missing recipient or group ID`
+            )
+            return {
+                success: false,
+                error: 'Recipient ID or Group ID is required'
+            }
         }
 
         if (!data.callId) {
@@ -854,12 +972,13 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         }
 
         try {
-            const targetRoom = data.recipientId 
-                ? `user:${data.recipientId}` 
+            const targetRoom = data.recipientId
+                ? `user:${data.recipientId}`
                 : `group:${data.groupId}`
 
             // Count potential recipients
-            const recipientsCount = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+            const recipientsCount =
+                this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
 
             this.logger.log(`📡 [INITIATE_CALL] Sending call invitation`)
             this.logger.log(`   ├─ Target Room: ${targetRoom}`)
@@ -885,7 +1004,6 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, callId: data.callId }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [INITIATE_CALL] Call initiation failed`)
@@ -900,7 +1018,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('respondToCall')
     async handleRespondToCall(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             callId: string
             response: 'accept' | 'decline'
             callerId: string
@@ -910,7 +1029,9 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`📞 [RESPOND_CALL] Responding to call`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Responder: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ Responder: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   ├─ Caller ID: ${data.callerId}`)
         this.logger.log(`   ├─ Call ID: ${data.callId}`)
         this.logger.log(`   └─ Response: ${data.response}`)
@@ -924,12 +1045,16 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.error(`❌ [RESPOND_CALL] Missing required data`)
             this.logger.error(`   ├─ Call ID: ${data.callId || 'Missing'}`)
             this.logger.error(`   └─ Caller ID: ${data.callerId || 'Missing'}`)
-            return { success: false, error: 'Call ID and Caller ID are required' }
+            return {
+                success: false,
+                error: 'Call ID and Caller ID are required'
+            }
         }
 
         try {
             const targetRoom = `user:${data.callerId}`
-            const callersCount = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+            const callersCount =
+                this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
 
             this.logger.log(`📡 [RESPOND_CALL] Sending response to caller`)
             this.logger.log(`   ├─ Target Room: ${targetRoom}`)
@@ -950,11 +1075,12 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`✅ [RESPOND_CALL] Call response sent successfully`)
             this.logger.log(`   ├─ Call ID: ${data.callId}`)
             this.logger.log(`   ├─ Response: ${data.response}`)
-            this.logger.log(`   ├─ Caller Notified: ${callersCount > 0 ? 'Yes' : 'No'}`)
+            this.logger.log(
+                `   ├─ Caller Notified: ${callersCount > 0 ? 'Yes' : 'No'}`
+            )
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [RESPOND_CALL] Call response failed`)
@@ -969,7 +1095,8 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     @SubscribeMessage('endCall')
     async handleEndCall(
         @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: {
+        @MessageBody()
+        data: {
             callId: string
             participants: string[]
         }
@@ -978,9 +1105,13 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
 
         this.logger.log(`📞 [END_CALL] Ending call`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
-        this.logger.log(`   ├─ Ender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`)
+        this.logger.log(
+            `   ├─ Ender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+        )
         this.logger.log(`   ├─ Call ID: ${data.callId}`)
-        this.logger.log(`   └─ Participants Count: ${data.participants?.length || 0}`)
+        this.logger.log(
+            `   └─ Participants Count: ${data.participants?.length || 0}`
+        )
 
         if (!client.userUuid) {
             this.logger.error(`❌ [END_CALL] Unauthenticated client`)
@@ -1003,9 +1134,10 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.log(`📡 [END_CALL] Notifying participants`)
 
             // Notify all participants
-            data.participants.forEach(participantId => {
+            data.participants.forEach((participantId) => {
                 const targetRoom = `user:${participantId}`
-                const participantSockets = this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
+                const participantSockets =
+                    this.server.sockets.adapter.rooms.get(targetRoom)?.size || 0
 
                 if (participantSockets > 0) {
                     this.server.to(targetRoom).emit('callEnded', {
@@ -1019,18 +1151,21 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
                     notifiedCount++
                 }
 
-                this.logger.log(`   ├─ Participant ${participantId}: ${participantSockets > 0 ? 'Notified' : 'Offline'}`)
+                this.logger.log(
+                    `   ├─ Participant ${participantId}: ${participantSockets > 0 ? 'Notified' : 'Offline'}`
+                )
             })
 
             const duration = Date.now() - startTime
             this.logger.log(`✅ [END_CALL] Call ended successfully`)
             this.logger.log(`   ├─ Call ID: ${data.callId}`)
-            this.logger.log(`   ├─ Total Participants: ${data.participants.length}`)
+            this.logger.log(
+                `   ├─ Total Participants: ${data.participants.length}`
+            )
             this.logger.log(`   ├─ Notified Participants: ${notifiedCount}`)
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
             return { success: true, notifiedParticipants: notifiedCount }
-
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [END_CALL] Call end failed`)
@@ -1043,31 +1178,43 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     // ==================== HELPER METHODS ====================
-    private async isUserGroupMember(userId: string, groupId: string): Promise<boolean> {
+    private async isUserGroupMember(
+        userId: string,
+        groupId: string
+    ): Promise<boolean> {
         try {
             const members = await this.groupService.getGroupMembers(groupId)
-            return members.some(member => member.userId === userId)
+            return members.some((member) => member.userId === userId)
         } catch (error) {
-            this.logger.error(`Error checking group membership: ${error.message}`)
+            this.logger.error(
+                `Error checking group membership: ${error.message}`
+            )
             return false
         }
     }
 
     private async joinUserConversations(client: AuthenticatedSocket) {
         try {
-            const conversations = await this.conversationService.getUserConversations(client.userUuid)
-            conversations.forEach(conversation => {
+            const conversations =
+                await this.conversationService.getUserConversations(
+                    client.userUuid
+                )
+            conversations.forEach((conversation) => {
                 client.join(`conversation:${conversation.uuid}`)
             })
         } catch (error) {
-            this.logger.error(`Error joining user conversations: ${error.message}`)
+            this.logger.error(
+                `Error joining user conversations: ${error.message}`
+            )
         }
     }
 
     private async joinUserGroups(client: AuthenticatedSocket) {
         try {
-            const groups = await this.groupService.getUserGroups(client.userUuid)
-            groups.forEach(group => {
+            const groups = await this.groupService.getUserGroups(
+                client.userUuid
+            )
+            groups.forEach((group) => {
                 client.join(`group:${group.uuid}`)
             })
         } catch (error) {
@@ -1078,16 +1225,18 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
     private async updateUserStatus(userId: string, status: string) {
         try {
             await this.userService.updateStatus(userId, status as any)
-            
+
             // Notify all friends about status change
             const friends = await this.friendshipService.getFriends(userId)
-            friends.forEach(friendship => {
+            friends.forEach((friendship) => {
                 const friendUserId = friendship.user.uuid
-                this.server.to(`user:${friendUserId}`).emit('userStatusChanged', {
-                    userId,
-                    status,
-                    timestamp: new Date()
-                })
+                this.server
+                    .to(`user:${friendUserId}`)
+                    .emit('userStatusChanged', {
+                        userId,
+                        status,
+                        timestamp: new Date()
+                    })
             })
         } catch (error) {
             this.logger.error(`Error updating user status: ${error.message}`)
@@ -1103,7 +1252,11 @@ export class SocketIOGateway implements OnGatewayConnection, OnGatewayDisconnect
         this.server.to(`group:${groupId}`).emit(event, data)
     }
 
-    public emitToConversation(conversationId: string, event: string, data: any) {
+    public emitToConversation(
+        conversationId: string,
+        event: string,
+        data: any
+    ) {
         this.server.to(`conversation:${conversationId}`).emit(event, data)
     }
 
