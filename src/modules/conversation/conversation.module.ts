@@ -6,7 +6,7 @@ import { AuthModule } from '../auth/auth.module'
 import { User } from '../user/entities/user.entity'
 import { UserModule } from '../user/user.module'
 import { ConversationController } from './conversation.controller'
-import { ConversationGateway } from './conversation.gateway'
+// import { ConversationGateway } from './conversation.gateway' // Disabled - replaced by unified SocketIO
 import { ConversationService } from './conversation.service'
 import { Conversation } from './entities/conversation.entity'
 import { Message, MessageSchema } from './schemas/message.schema'
@@ -25,7 +25,7 @@ import { Message, MessageSchema } from './schemas/message.schema'
         AuthModule
     ],
     controllers: [ConversationController],
-    providers: [ConversationGateway, ConversationService],
+    providers: [/* ConversationGateway, */ ConversationService], // Gateway disabled - replaced by unified SocketIO
     exports: [ConversationService]
 })
 export class ConversationModule {}

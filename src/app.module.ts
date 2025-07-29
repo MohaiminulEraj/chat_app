@@ -26,7 +26,8 @@ import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
 import { GroupModule } from './modules/group/group.module'
 import { RoomModule } from './modules/room/room.module'
-// import { WebsocketModule } from './modules/websocket/websocket.module' // Temporarily disabled to fix WebSocket conflicts
+import { SocketIOModule } from './modules/socketio/socketio.module'
+// import { WebsocketModule } from './modules/websocket/websocket.module' // Disabled - replaced by unified SocketIO
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -66,7 +67,8 @@ import { RoomModule } from './modules/room/room.module'
         UserModule,
         FriendshipModule,
         GroupModule,
-        // WebsocketModule, // Temporarily disabled to fix conflict
+        SocketIOModule, // New unified Socket.IO implementation
+        // WebsocketModule, // Disabled - replaced by unified SocketIO
         CloudinaryModule,
         // UploadModule,
         RoomModule, // Add RoomModule to imports

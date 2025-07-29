@@ -10,7 +10,7 @@ import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
 import { Group } from './entities/group.entity'
 import { GroupChatController } from './group-chat.controller'
-import { GroupChatGateway } from './group-chat.gateway'
+// import { GroupChatGateway } from './group-chat.gateway' // Disabled - replaced by unified SocketIO
 import { GroupChatService } from './group-chat.service'
 import { GroupController } from './group.controller'
 import { GroupService } from './group.service'
@@ -36,7 +36,7 @@ import {
         AuthModule // Add AuthModule for JWT support in WebSocket
     ],
     controllers: [GroupController, GroupChatController],
-    providers: [GroupService, GroupChatService, GroupChatGateway],
+    providers: [GroupService, GroupChatService /* GroupChatGateway */], // Gateway disabled - replaced by unified SocketIO
     exports: [GroupService, GroupChatService]
 })
 export class GroupModule {}

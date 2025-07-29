@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common'
-// import { WebsocketGateway } from './websocket.gateway' // Temporarily disabled to fix WebSocket conflicts
+// import { WebsocketGateway } from './websocket.gateway' // Disabled - replaced by unified SocketIO
 import { WebsocketService } from './websocket.service'
 
 @Module({
     providers: [
-        // WebsocketGateway, // Temporarily disabled to fix WebSocket conflicts
+        // WebsocketGateway, // Disabled - replaced by unified SocketIO
         WebsocketService
     ],
     exports: []
