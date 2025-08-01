@@ -93,7 +93,7 @@ export class AuthController {
     async login(@Request() req) {
         // req.user now contains the validated user from LocalStrategy
         const data = await this.authService.unifiedAuthResponse(req.user)
-        
+
         // Do the logging separately
         await this.authService.logging(req.user, req)
 
@@ -263,9 +263,7 @@ export class AuthController {
         description: 'Code has been verified successfully',
         status: HttpStatus.OK
     })
-    async codeVerification(
-        @Body() forgetPasswordDto: ForgetPasswordDto
-    ) {
+    async codeVerification(@Body() forgetPasswordDto: ForgetPasswordDto) {
         return {
             status: HttpStatus.OK,
             message: 'Code verified',
@@ -285,9 +283,7 @@ export class AuthController {
         description: 'Password updated successfully',
         status: HttpStatus.OK
     })
-    async recoverPassword(
-        @Body() updatePasswordDto: UpdatePasswordDto
-    ) {
+    async recoverPassword(@Body() updatePasswordDto: UpdatePasswordDto) {
         return {
             status: HttpStatus.CREATED,
             message: 'Password has been set successfully',

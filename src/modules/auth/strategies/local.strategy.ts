@@ -12,11 +12,11 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     async validate(emailOrPhone: string, password: string): Promise<any> {
         // Use the validateUser method instead of full login
         const user = await this.authService.validateUser(emailOrPhone, password)
-        
+
         if (!user) {
             throw new UnauthorizedException('Invalid credentials')
         }
-        
+
         return user
     }
 }
