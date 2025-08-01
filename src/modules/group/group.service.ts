@@ -657,13 +657,16 @@ export class GroupService {
         })
     }
 
-    async getUserGroups(userId: string): Promise<Group[]> {
+    async getUserGroups(userId: string): Promise<any[]> {
         const memberships = await this.memberRepository.find({
             where: { userId },
-            relations: ['group']
+            relations: ['group', 'group.rooms']
         })
 
-        return memberships.map((m) => m.group)
+        return memberships.map((m) => ({
+            ...m.group,
+            isRoomActive: m.group.rooms && m.group.rooms.length > 0
+        }))
     }
 
     async updateGroupAvatar(
