@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm'
 import { Group } from '../../group/entities/group.entity'
 import { User } from '../../user/entities/user.entity'
 import { RoomParticipant } from './room-participant.entity'
+import { RoomRoleAssignment } from './room-role.entity'
 import { RoomWaitingList } from './room-waiting-list.entity'
 
 export enum RoomType {
@@ -62,4 +63,10 @@ export class Room extends CustomBaseEntity {
 
     @OneToMany(() => RoomWaitingList, (waiting) => waiting.room)
     waitingList: RoomWaitingList[]
+
+    @OneToMany(
+        () => RoomRoleAssignment,
+        (roleAssignment) => roleAssignment.room
+    )
+    roleAssignments: RoomRoleAssignment[]
 }

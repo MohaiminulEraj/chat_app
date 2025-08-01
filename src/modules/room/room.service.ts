@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { GroupMember } from '../group/entities/group-member.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
+import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 
@@ -21,18 +22,43 @@ export class RoomService {
         @InjectRepository(RoomWaitingList)
         private waitingListRepository: Repository<RoomWaitingList>,
         @InjectRepository(GroupMember)
-        private groupMemberRepository: Repository<GroupMember>
+        private groupMemberRepository: Repository<GroupMember>,
+        @InjectRepository(RoomRoleAssignment)
+        private roomRoleRepository: Repository<RoomRoleAssignment>
     ) {}
 
-    async createRoom(groupId: string, data: any): Promise<Room> {
+    async createRoom(
+        groupId: string,
+        data: any,
+        currentUser?: any
+    ): Promise<Room> {
         const room = this.roomRepository.create({
             ...data,
             groupId,
-            maxSeats: data.maxSeats || 10 // Default to 10 seats if not specified
+            maxSeats: data.maxParticipants || data.maxSeats || 10, // Handle both maxParticipants and maxSeats
+            ownerId: currentUser?.uuid || data.ownerId
         })
 
         const savedRoom = await this.roomRepository.save(room)
-        return Array.isArray(savedRoom) ? savedRoom[0] : savedRoom
+        const finalRoom = Array.isArray(savedRoom) ? savedRoom[0] : savedRoom
+
+        // If we have a current user, assign them as both owner and host by default
+        if (currentUser?.uuid && finalRoom.uuid) {
+            await this.assignRoomRole(
+                finalRoom.uuid,
+                currentUser.uuid,
+                RoomRole.OWNER,
+                currentUser.uuid
+            )
+            await this.assignRoomRole(
+                finalRoom.uuid,
+                currentUser.uuid,
+                RoomRole.HOST,
+                currentUser.uuid
+            )
+        }
+
+        return finalRoom
     }
 
     async findOne(roomId: string): Promise<Room> {
@@ -248,5 +274,221 @@ export class RoomService {
 
         room.isActive = false
         await this.roomRepository.save(room)
+    }
+
+    /**
+     * Assign a role to a user in a room
+     */
+    async assignRoomRole(
+        roomId: string,
+        userId: string,
+        role: RoomRole,
+        assignedBy: string
+    ): Promise<RoomRoleAssignment> {
+        // Check if this role assignment already exists and is active
+        const existingRole = await this.roomRoleRepository.findOne({
+            where: { roomId, userId, role, isActive: true }
+        })
+
+        if (existingRole) {
+            return existingRole
+        }
+
+        // For unique roles (owner, host, admin), ensure only one active assignment exists
+        if ([RoomRole.OWNER, RoomRole.HOST, RoomRole.ADMIN].includes(role)) {
+            await this.roomRoleRepository.update(
+                { roomId, role, isActive: true },
+                { isActive: false, revokedAt: new Date() }
+            )
+        }
+
+        const roleAssignment = this.roomRoleRepository.create({
+            roomId,
+            userId,
+            role,
+            assignedBy,
+            assignedAt: new Date(),
+            isActive: true
+        })
+
+        return this.roomRoleRepository.save(roleAssignment)
+    }
+
+    /**
+     * Get room details by group ID with roles and member information
+     */
+    async getRoomByGroupId(groupId: string): Promise<any> {
+        // Find the room for this group
+        const room = await this.roomRepository.findOne({
+            where: { groupId, isActive: true },
+            relations: [
+                'owner',
+                'group',
+                'participants',
+                'participants.user',
+                'roleAssignments',
+                'roleAssignments.user'
+            ]
+        })
+
+        if (!room) {
+            throw new NotFoundException('No active room found for this group')
+        }
+
+        // Get role assignments
+        const roleAssignments = await this.roomRoleRepository.find({
+            where: { roomId: room.uuid, isActive: true },
+            relations: ['user']
+        })
+
+        // Find owner and host
+        const ownerRole = roleAssignments.find(
+            (role) => role.role === RoomRole.OWNER
+        )
+        const hostRole = roleAssignments.find(
+            (role) => role.role === RoomRole.HOST
+        )
+
+        // Get all participants with their roles
+        const participants = await this.participantRepository.find({
+            where: { roomId: room.uuid },
+            relations: ['user']
+        })
+
+        // Build member list with roles
+        const members = participants.map((participant) => {
+            const userRoles = roleAssignments.filter(
+                (role) => role.userId === participant.userId
+            )
+            const primaryRole =
+                userRoles.find((role) =>
+                    [RoomRole.OWNER, RoomRole.HOST, RoomRole.ADMIN].includes(
+                        role.role
+                    )
+                )?.role ||
+                userRoles.find((role) => role.role === RoomRole.SPEAKER)
+                    ?.role ||
+                RoomRole.LISTENER
+
+            return {
+                _id: participant.user.uuid,
+                name: participant.user.name,
+                email: participant.user.email,
+                image: participant.user.avatarUrl,
+                role: primaryRole,
+                status: !participant.isMuted && !participant.isDeafened, // Active if not muted or deafened
+                join: true, // If they're a participant, they've joined
+                invitedBy: room.ownerId, // Simplified - could be enhanced
+                blocked: false // Simplified - could be enhanced with actual blocking logic
+            }
+        })
+
+        // Format response to match the requested structure
+        return {
+            _id: room.uuid,
+            name: room.name,
+            description: room.description,
+            country: room.group?.country || 'Unknown',
+            roomOwner: ownerRole?.user
+                ? {
+                      id: ownerRole.user.id,
+                      uuid: ownerRole.user.uuid,
+                      name: ownerRole.user.name,
+                      email: ownerRole.user.email,
+                      phoneNumber: ownerRole.user.phoneNumber,
+                      userType: ownerRole.user.userType,
+                      authProvider: ownerRole.user.authProvider,
+                      avatarUrl: ownerRole.user.avatarUrl,
+                      isEmailVerified: ownerRole.user.isEmailVerified,
+                      isPhoneVerified: ownerRole.user.isPhoneVerified
+                  }
+                : null,
+            host: hostRole?.user
+                ? {
+                      id: hostRole.user.id,
+                      uuid: hostRole.user.uuid,
+                      name: hostRole.user.name,
+                      email: hostRole.user.email,
+                      phoneNumber: hostRole.user.phoneNumber,
+                      userType: hostRole.user.userType,
+                      authProvider: hostRole.user.authProvider,
+                      avatarUrl: hostRole.user.avatarUrl,
+                      isEmailVerified: hostRole.user.isEmailVerified,
+                      isPhoneVerified: hostRole.user.isPhoneVerified
+                  }
+                : null,
+            members
+        }
+    }
+
+    /**
+     * Transfer room ownership to another user
+     */
+    async transferRoomOwnership(
+        roomId: string,
+        newOwnerId: string,
+        currentUserId: string
+    ): Promise<void> {
+        // Verify current user is the owner
+        const currentOwnerRole = await this.roomRoleRepository.findOne({
+            where: {
+                roomId,
+                userId: currentUserId,
+                role: RoomRole.OWNER,
+                isActive: true
+            }
+        })
+
+        if (!currentOwnerRole) {
+            throw new ForbiddenException(
+                'Only the room owner can transfer ownership'
+            )
+        }
+
+        // Revoke current ownership
+        await this.roomRoleRepository.update(
+            { roomId, role: RoomRole.OWNER, isActive: true },
+            { isActive: false, revokedAt: new Date() }
+        )
+
+        // Assign new ownership
+        await this.assignRoomRole(
+            roomId,
+            newOwnerId,
+            RoomRole.OWNER,
+            currentUserId
+        )
+
+        // Update room owner in the room entity
+        await this.roomRepository.update(roomId, { ownerId: newOwnerId })
+    }
+
+    /**
+     * Get user roles in a room
+     */
+    async getUserRolesInRoom(
+        roomId: string,
+        userId: string
+    ): Promise<RoomRole[]> {
+        const roles = await this.roomRoleRepository.find({
+            where: { roomId, userId, isActive: true }
+        })
+
+        return roles.map((role) => role.role)
+    }
+
+    /**
+     * Remove a role from a user
+     */
+    async removeRoomRole(
+        roomId: string,
+        userId: string,
+        role: RoomRole,
+        removedBy: string
+    ): Promise<void> {
+        await this.roomRoleRepository.update(
+            { roomId, userId, role, isActive: true },
+            { isActive: false, revokedAt: new Date() }
+        )
     }
 }
