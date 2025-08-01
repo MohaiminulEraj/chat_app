@@ -65,8 +65,8 @@ async function bootstrap() {
                 name: 'JWT',
                 description: 'Enter JWT token',
                 in: 'header'
-            },
-            'JWT-auth' // This name should match the name used in @ApiBearerAuth() decorator
+            }
+            // Remove the custom name to use default, since controllers use @ApiBearerAuth() without parameter
         )
         .build()
 

@@ -47,22 +47,24 @@ node socketio-one-to-one-test.js
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SERVER_URL` | Socket.IO server URL | `http://localhost:3000` |
-| `USER1_JWT_TOKEN` | JWT token for test user 1 | Required |
-| `USER2_JWT_TOKEN` | JWT token for test user 2 | Required |
-| `TEST_EMAIL_1` | Email for auto-login user 1 | `test1@example.com` |
-| `TEST_PASSWORD_1` | Password for auto-login user 1 | `password123` |
-| `TEST_EMAIL_2` | Email for auto-login user 2 | `test2@example.com` |
-| `TEST_PASSWORD_2` | Password for auto-login user 2 | `password123` |
+| Variable          | Description                    | Default                 |
+| ----------------- | ------------------------------ | ----------------------- |
+| `SERVER_URL`      | Socket.IO server URL           | `http://localhost:3000` |
+| `USER1_JWT_TOKEN` | JWT token for test user 1      | Required                |
+| `USER2_JWT_TOKEN` | JWT token for test user 2      | Required                |
+| `TEST_EMAIL_1`    | Email for auto-login user 1    | `test1@example.com`     |
+| `TEST_PASSWORD_1` | Password for auto-login user 1 | `password123`           |
+| `TEST_EMAIL_2`    | Email for auto-login user 2    | `test2@example.com`     |
+| `TEST_PASSWORD_2` | Password for auto-login user 2 | `password123`           |
 
 ### Getting JWT Tokens
 
 #### Option 1: Automatic (using test script)
+
 The bash script will automatically attempt to get tokens using the test credentials.
 
 #### Option 2: Manual via cURL
+
 ```bash
 # Get token for user 1
 curl -X POST http://localhost:3000/auth/login \
@@ -76,6 +78,7 @@ curl -X POST http://localhost:3000/auth/login \
 ```
 
 #### Option 3: From Postman Collection
+
 Use the provided Postman collection to login and copy the tokens from the response.
 
 ## 🧪 Test Coverage
@@ -85,49 +88,57 @@ The test suite covers all major Socket.IO one-to-one chat features:
 ### ✅ Test Cases
 
 1. **Connection & Authentication**
-   - WebSocket connection establishment
-   - JWT token authentication
-   - User ID extraction
+
+    - WebSocket connection establishment
+    - JWT token authentication
+    - User ID extraction
 
 2. **Direct Messaging**
-   - Sending text messages
-   - Message delivery confirmation
-   - Real-time message reception
+
+    - Sending text messages
+    - Message delivery confirmation
+    - Real-time message reception
 
 3. **Bidirectional Communication**
-   - Two-way message exchange
-   - Response handling
-   - Conversation flow
+
+    - Two-way message exchange
+    - Response handling
+    - Conversation flow
 
 4. **Typing Indicators**
-   - Typing start/stop events
-   - Real-time typing notifications
-   - Conversation context
+
+    - Typing start/stop events
+    - Real-time typing notifications
+    - Conversation context
 
 5. **Voice Calls**
-   - Call initiation
-   - Call acceptance/rejection
-   - Call state management
+
+    - Call initiation
+    - Call acceptance/rejection
+    - Call state management
 
 6. **Call Management**
-   - Call termination
-   - Participant management
-   - Event propagation
+
+    - Call termination
+    - Participant management
+    - Event propagation
 
 7. **Status Updates**
-   - User status changes
-   - Status broadcasting
-   - Real-time status sync
+
+    - User status changes
+    - Status broadcasting
+    - Real-time status sync
 
 8. **Read Receipts**
-   - Message read marking
-   - Read receipt delivery
-   - Conversation state tracking
+
+    - Message read marking
+    - Read receipt delivery
+    - Conversation state tracking
 
 9. **Error Handling**
-   - Invalid operation handling
-   - Error response validation
-   - Graceful failure management
+    - Invalid operation handling
+    - Error response validation
+    - Graceful failure management
 
 ## 📊 Test Output Example
 
@@ -169,10 +180,13 @@ Success Rate: 100.0%
 ### Common Issues
 
 #### 1. Connection Failed
+
 ```
 ❌ Connection timeout
 ```
+
 **Solution:** Ensure your server is running on the correct port:
+
 ```bash
 # Check if server is running
 curl http://localhost:3000/health
@@ -182,27 +196,35 @@ npm run start:dev
 ```
 
 #### 2. Authentication Failed
+
 ```
 ❌ Authentication failed: Invalid token
 ```
+
 **Solution:** Get fresh JWT tokens:
+
 ```bash
 ./test-socketio.sh --tokens
 ```
 
 #### 3. Message Not Received
+
 ```
 ❌ Message not received
 ```
+
 **Possible causes:**
+
 - Users are not friends (check friendship relationship)
 - WebSocket connection dropped
 - Server-side message routing issues
 
 #### 4. Call Failed
+
 ```
 ❌ Call initiation failed
 ```
+
 **Solution:** Ensure both users are online and have valid friendship.
 
 ### Debug Mode
@@ -212,10 +234,10 @@ For detailed debugging, modify the test script:
 ```javascript
 // In socketio-one-to-one-test.js, set debug mode
 const socket = io(this.serverUrl, {
-  transports: ['websocket', 'polling'],
-  timeout: 10000,
-  debug: true  // Add this line
-});
+    transports: ['websocket', 'polling'],
+    timeout: 10000,
+    debug: true // Add this line
+})
 ```
 
 ## 🔗 Related Documentation
@@ -250,11 +272,11 @@ TEST_EMAIL_1=user1@test.com TEST_PASSWORD_1=pass123 ./test-socketio.sh --tokens
 # GitHub Actions example
 - name: Test Socket.IO Chat
   run: |
-    cd test-client
-    npm install
-    export USER1_JWT_TOKEN="${{ secrets.TEST_USER1_TOKEN }}"
-    export USER2_JWT_TOKEN="${{ secrets.TEST_USER2_TOKEN }}"
-    node socketio-one-to-one-test.js
+      cd test-client
+      npm install
+      export USER1_JWT_TOKEN="${{ secrets.TEST_USER1_TOKEN }}"
+      export USER2_JWT_TOKEN="${{ secrets.TEST_USER2_TOKEN }}"
+      node socketio-one-to-one-test.js
 ```
 
 ## 📄 License

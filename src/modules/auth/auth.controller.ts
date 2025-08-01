@@ -18,8 +18,9 @@ import {
     ApiTags
 } from '@nestjs/swagger'
 import { AuthService } from './service/auth.service'
-import { LoginDto } from './dto/login.dto'
 import {
+    LoginDto,
+    RegistrationDto,
     EmailVerificationDto,
     VerificationCodeSenderDto,
     ForgetPasswordDto,
@@ -90,7 +91,11 @@ export class AuthController {
         }
     })
     async login(@Request() req) {
+        // req.user now contains the validated user from LocalStrategy
         const data = await this.authService.unifiedAuthResponse(req.user)
+        
+        // Do the logging separately
+        await this.authService.logging(req.user, req)
 
         // Log the generated token for debugging
         this.logger.log(
@@ -104,6 +109,21 @@ export class AuthController {
             statusCode: HttpStatus.OK,
             message: 'Login successful',
             data
+        }
+    }
+
+    @Post('register')
+    @ApiOperation({ summary: 'Register a new user' })
+    @ApiBody({ type: RegistrationDto })
+    @ApiResponse({
+        status: 201,
+        description: 'Registration successful'
+    })
+    async register(@Body() registrationDto: RegistrationDto) {
+        return {
+            statusCode: HttpStatus.CREATED,
+            message: 'Registration successful',
+            data: await this.authService.registration(registrationDto)
         }
     }
 
@@ -154,6 +174,7 @@ export class AuthController {
      */
     @Post('verify-email')
     @ApiOperation({ summary: 'Verifying user email' })
+    @ApiBody({ type: EmailVerificationDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -180,6 +201,7 @@ export class AuthController {
      */
     @Post('regenerate-code')
     @ApiOperation({ summary: 'Code regeneration.' })
+    @ApiBody({ type: VerificationCodeSenderDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -205,6 +227,7 @@ export class AuthController {
 
     @Post('forget-password')
     @ApiOperation({ summary: 'Getting a code when you forgot the password' })
+    @ApiBody({ type: VerificationCodeSenderDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -214,7 +237,7 @@ export class AuthController {
         description: 'A code sent to you mail successfully',
         status: HttpStatus.CREATED
     })
-    private async forgetPassword(
+    async forgetPassword(
         @Body() verificationCodeSenderDto: VerificationCodeSenderDto
     ) {
         return {
@@ -230,6 +253,7 @@ export class AuthController {
     @ApiOperation({
         summary: 'Verify the code when you do not know your password'
     })
+    @ApiBody({ type: ForgetPasswordDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -239,7 +263,7 @@ export class AuthController {
         description: 'Code has been verified successfully',
         status: HttpStatus.OK
     })
-    private async codeVerification(
+    async codeVerification(
         @Body() forgetPasswordDto: ForgetPasswordDto
     ) {
         return {
@@ -251,6 +275,7 @@ export class AuthController {
 
     @Post('recover-password')
     @ApiOperation({ summary: 'Update your password' })
+    @ApiBody({ type: UpdatePasswordDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -260,7 +285,7 @@ export class AuthController {
         description: 'Password updated successfully',
         status: HttpStatus.OK
     })
-    private async recoverPassword(
+    async recoverPassword(
         @Body() updatePasswordDto: UpdatePasswordDto
     ) {
         return {
@@ -273,14 +298,14 @@ export class AuthController {
     @Get('debug/jwt-config')
     @ApiOperation({ summary: 'Debug JWT configuration (remove in production)' })
     debugJwtConfig() {
-        const jwtSecret = this.configService.get<string>('JWT_SECRET')
+        const jwtSecret = this.configService.get<string>('APP_SECRET')
         return {
             secretConfigured: !!jwtSecret,
             secretLength: jwtSecret?.length || 0,
             secretPreview: jwtSecret
                 ? `${jwtSecret.substring(0, 4)}...`
                 : 'Not configured',
-            expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d')
+            expiresIn: this.configService.get<string>('APP_EXPIRES', '86400')
         }
     }
 

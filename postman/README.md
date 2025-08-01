@@ -24,20 +24,22 @@ This folder contains Postman collection and environment files for testing the un
 ### 3. Run the Tests
 
 #### Option A: Full Workflow (Recommended)
+
 1. Go to **🔐 Authentication & Setup** folder
 2. Run requests in order:
-   - Register Test User 1 & 2 (if needed)
-   - Login User 1 & 2
-   - Get My Profile
+    - Register Test User 1 & 2 (if needed)
+    - Login User 1 & 2
+    - Get My Profile
 3. Go to **👥 Friendship Management**
-   - Send Friend Request
-   - Accept Friend Request
-   - Get Friends List
+    - Send Friend Request
+    - Accept Friend Request
+    - Get Friends List
 4. Go to **👥 Group Management**
-   - Create Test Group
-   - Add Member to Group
+    - Create Test Group
+    - Add Member to Group
 
 #### Option B: Individual Testing
+
 - Use any endpoint individually after setting up authentication
 
 ## 🔌 Socket.IO Testing
@@ -67,6 +69,7 @@ http://localhost:8080/unified-socketio-test.html
 ## 🎯 Test Scenarios
 
 The collection includes a **🧪 Quick Test Scenarios** folder with:
+
 - Complete step-by-step testing workflow
 - Verification checkpoints
 - Common issues and solutions
@@ -111,21 +114,25 @@ The collection includes a **🧪 Quick Test Scenarios** folder with:
 The following variables are automatically set during testing:
 
 ### Server Configuration
+
 - `base_url` - Server base URL (http://localhost:3000)
 - `socketio_url` - Socket.IO server URL
 - `test_client_url` - HTML test client URL
 
 ### Authentication
+
 - `jwt_token` - JWT token for User 1 (auto-populated)
 - `jwt_token_user2` - JWT token for User 2 (auto-populated)
 
 ### User Data
+
 - `user_id` - Current user UUID
 - `friend_id` - Friend user UUID
 - `group_id` - Test group UUID
 - `conversation_id` - Conversation UUID
 
 ### Test Data
+
 - `test_user1_email` / `test_user1_password` - Test user 1 credentials
 - `test_user2_email` / `test_user2_password` - Test user 2 credentials
 - `group_name` / `group_description` / `group_country` - Test group data
@@ -133,17 +140,20 @@ The following variables are automatically set during testing:
 ## 🎓 Usage Tips
 
 ### For HTTP API Testing
+
 1. Use the structured folders to test API endpoints
 2. Variables are automatically populated from responses
 3. Check the **Tests** tab in requests to see auto-population scripts
 
 ### For Socket.IO Testing
+
 1. Use HTTP endpoints to set up data (users, groups, friendships)
 2. Copy JWT tokens from Postman variables to Socket.IO clients
 3. Use the HTML test client for real-time interaction testing
 4. Refer to the WebSocket Testing folder for event examples
 
 ### For Debugging
+
 1. Check Console tab in Postman for debug output
 2. Variables are logged when auto-populated
 3. Use the Error Handling guide for troubleshooting Socket.IO issues
@@ -153,17 +163,18 @@ The following variables are automatically set during testing:
 Before using this collection:
 
 1. **Server Running**: Ensure your NestJS server is running on port 3000
-   ```bash
-   npm run start:dev
-   ```
+
+    ```bash
+    npm run start:dev
+    ```
 
 2. **Database Ready**: Ensure PostgreSQL and MongoDB are running and configured
 
 3. **Test Client**: For Socket.IO testing, start the test client server:
-   ```bash
-   cd test-client
-   python3 -m http.server 8080
-   ```
+    ```bash
+    cd test-client
+    python3 -m http.server 8080
+    ```
 
 ## 🔍 Verification
 

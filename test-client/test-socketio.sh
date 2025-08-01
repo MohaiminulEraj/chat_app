@@ -36,7 +36,7 @@ log_error() {
 # Function to check if server is running
 check_server() {
     log_info "Checking if server is running at $SERVER_URL..."
-    
+
     if curl -s -f "$SERVER_URL/health" > /dev/null 2>&1 || \
        curl -s -f "$SERVER_URL" > /dev/null 2>&1; then
         log_success "Server is running at $SERVER_URL"
@@ -54,14 +54,14 @@ check_server() {
 # Function to install dependencies
 setup_dependencies() {
     log_info "Setting up test client dependencies..."
-    
+
     cd "$TEST_CLIENT_DIR"
-    
+
     if [ ! -f "package.json" ]; then
         log_error "package.json not found in test-client directory"
         return 1
     fi
-    
+
     if [ ! -d "node_modules" ] || [ ! -f "node_modules/.package-lock.json" ]; then
         log_info "Installing npm dependencies..."
         npm install
@@ -74,13 +74,13 @@ setup_dependencies() {
 # Function to get JWT tokens for testing
 get_test_tokens() {
     log_info "Attempting to get JWT tokens for testing..."
-    
+
     # Test credentials (you may need to adjust these)
     TEST_EMAIL_1="${TEST_EMAIL_1:-test1@example.com}"
     TEST_PASSWORD_1="${TEST_PASSWORD_1:-password123}"
     TEST_EMAIL_2="${TEST_EMAIL_2:-test2@example.com}"
     TEST_PASSWORD_2="${TEST_PASSWORD_2:-password123}"
-    
+
     log_info "Getting token for user 1: $TEST_EMAIL_1"
     USER1_RESPONSE=$(curl -s -X POST "$SERVER_URL/auth/login" \
         -H "Content-Type: application/json" \
@@ -91,7 +91,7 @@ get_test_tokens() {
         echo "curl -X POST $SERVER_URL/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"$TEST_EMAIL_1\",\"password\":\"$TEST_PASSWORD_1\"}'"
         return 1
     }
-    
+
     log_info "Getting token for user 2: $TEST_EMAIL_2"
     USER2_RESPONSE=$(curl -s -X POST "$SERVER_URL/auth/login" \
         -H "Content-Type: application/json" \
@@ -102,11 +102,11 @@ get_test_tokens() {
         echo "curl -X POST $SERVER_URL/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"$TEST_EMAIL_2\",\"password\":\"$TEST_PASSWORD_2\"}'"
         return 1
     }
-    
+
     # Extract tokens (assuming JSON response with accessToken field)
     USER1_TOKEN=$(echo "$USER1_RESPONSE" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
     USER2_TOKEN=$(echo "$USER2_RESPONSE" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
-    
+
     if [ -z "$USER1_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
         log_error "Failed to extract tokens from login responses"
         log_info "Response 1: $USER1_RESPONSE"
@@ -114,22 +114,22 @@ get_test_tokens() {
         log_info "Please check your login endpoint and credentials"
         return 1
     fi
-    
+
     # Export tokens as environment variables
     export USER1_JWT_TOKEN="$USER1_TOKEN"
     export USER2_JWT_TOKEN="$USER2_TOKEN"
-    
+
     log_success "Successfully obtained JWT tokens"
     log_info "User 1 token: ${USER1_TOKEN:0:20}..."
     log_info "User 2 token: ${USER2_TOKEN:0:20}..."
-    
+
     # Save tokens to a file for future use
     cat > "$TEST_CLIENT_DIR/.env.tokens" << EOF
 # Auto-generated JWT tokens for testing
 USER1_JWT_TOKEN="$USER1_TOKEN"
 USER2_JWT_TOKEN="$USER2_TOKEN"
 EOF
-    
+
     log_info "Tokens saved to .env.tokens file"
 }
 
@@ -138,26 +138,26 @@ load_tokens() {
     if [ -f "$TEST_CLIENT_DIR/.env.tokens" ]; then
         log_info "Loading tokens from .env.tokens file..."
         source "$TEST_CLIENT_DIR/.env.tokens"
-        
+
         if [ -n "$USER1_JWT_TOKEN" ] && [ -n "$USER2_JWT_TOKEN" ]; then
             log_success "Tokens loaded successfully"
             return 0
         fi
     fi
-    
+
     return 1
 }
 
 # Function to run the tests
 run_tests() {
     log_info "Running Socket.IO one-to-one chat tests..."
-    
+
     cd "$TEST_CLIENT_DIR"
-    
+
     # Check if tokens are available
     if [ -z "$USER1_JWT_TOKEN" ] || [ -z "$USER2_JWT_TOKEN" ]; then
         log_warning "JWT tokens not found in environment"
-        
+
         if load_tokens; then
             log_success "Loaded tokens from file"
         else
@@ -171,17 +171,17 @@ run_tests() {
             fi
         fi
     fi
-    
+
     log_info "Starting test execution..."
     echo "=========================================="
-    
+
     # Run the Node.js test script
     node socketio-one-to-one-test.js
-    
+
     local exit_code=$?
-    
+
     echo "=========================================="
-    
+
     if [ $exit_code -eq 0 ]; then
         log_success "All tests completed successfully!"
     else

@@ -12,7 +12,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         private readonly configService: ConfigService,
         private readonly userService: UserService
     ) {
-        const jwtSecret = configService.get<string>('JWT_SECRET')
+        const jwtSecret = configService.get<string>('APP_SECRET')
 
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

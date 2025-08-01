@@ -25,7 +25,7 @@ import {
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { User } from './entities/user.entity'
 import { UserService } from './user.service'

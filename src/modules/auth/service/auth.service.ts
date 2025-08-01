@@ -318,14 +318,14 @@ export class AuthService {
             loginLog.time = new Date()
             const ip =
                 requestObject.headers['x-forwarded-for'] ||
-                requestObject.connection.remoteAddress
-            loginLog.ip = ip.split(':').pop()
+                requestObject.connection?.remoteAddress ||
+                requestObject.ip ||
+                'unknown'
+            loginLog.ip = ip.toString().split(':').pop() || 'unknown'
             await this.loginLogRepository.save(loginLog)
         } catch (error) {
-            throw new HttpException(
-                'Some error occurred',
-                HttpStatus.INTERNAL_SERVER_ERROR
-            )
+            // Log the error but don't throw - login should still succeed
+            console.error('Failed to log user login:', error.message)
         }
     }
 
