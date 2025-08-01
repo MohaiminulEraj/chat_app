@@ -1,36 +1,74 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common'
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
-import { UserService } from 'src/modules/user/user.service'
+import { UserService } from '../../user/user.service'
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
+    private readonly logger = new Logger('JwtStrategy')
+
     constructor(
-        private configService: ConfigService,
-        private userService: UserService
+        private readonly configService: ConfigService,
+        private readonly userService: UserService
     ) {
+        const jwtSecret = configService.get<string>('JWT_SECRET')
+
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: configService.get('JWT_SECRET') || 'your-secret-key'
+            secretOrKey: jwtSecret,
+            passReqToCallback: false
         })
+
+        this.logger.log(`🔐 [JWT_STRATEGY] Initialized`)
+        this.logger.log(`   ├─ Secret Length: ${jwtSecret?.length || 0}`)
+        this.logger.log(
+            `   └─ Secret Preview: ${jwtSecret?.substring(0, 4)}...`
+        )
+
+        if (!jwtSecret || jwtSecret === 'your-jwt-secret-here') {
+            this.logger.error('⚠️  [JWT_STRATEGY] WARNING: Invalid JWT secret!')
+        }
     }
 
     async validate(payload: any) {
-        // Make sure we're returning the full user object with uuid
-        const user = await this.userService.findOne(payload.sub || payload.uuid)
+        this.logger.log(`🔍 [JWT_STRATEGY] Validating JWT payload`)
+        this.logger.log(`   ├─ Payload ID: ${payload.id}`)
+        this.logger.log(`   ├─ Payload UUID: ${payload.uuid}`)
+        this.logger.log(`   ├─ Payload Email: ${payload.email}`)
+        this.logger.log(
+            `   └─ Expires: ${
+                payload.exp
+                    ? new Date(payload.exp * 1000).toISOString()
+                    : 'No expiry'
+            }`
+        )
 
-        if (!user) {
-            throw new UnauthorizedException()
-        }
+        try {
+            const user = await this.userService.findOne(payload.uuid)
 
-        // Return user object that will be attached to request.user
-        return {
-            uuid: user.uuid,
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName
+            if (!user) {
+                this.logger.error(
+                    `❌ [JWT_STRATEGY] User not found: ${payload.uuid}`
+                )
+                throw new UnauthorizedException('User not found')
+            }
+
+            this.logger.log(`✅ [JWT_STRATEGY] User validated: ${user.email}`)
+
+            return {
+                id: user.id,
+                uuid: user.uuid,
+                email: user.email,
+                name: user.name,
+                avatarUrl: user.avatarUrl
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ [JWT_STRATEGY] Validation error: ${error.message}`
+            )
+            throw new UnauthorizedException('Invalid token')
         }
     }
 }

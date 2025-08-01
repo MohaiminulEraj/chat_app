@@ -10,21 +10,19 @@ import { AuthController } from './auth.controller'
 import { LoginLog } from './entities/login-log.entity'
 import { AuthService } from './service/auth.service'
 import { JwtService } from './service/jwt.service'
+import { JwtStrategy } from './strategies/jwt.strategy'
 import { LocalStrategy } from './strategies/local.strategy'
-import { JwtStrategy } from './strategy/jwt.strategy'
 
 @Module({
     imports: [
         ConfigModule,
         UserModule,
-        PassportModule,
+        PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.registerAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
             useFactory: async (configService: ConfigService) => {
-                const secret =
-                    configService.get<string>('jwt.secret') ||
-                    configService.get<string>('JWT_SECRET')
+                const secret = configService.get<string>('JWT_SECRET')
                 console.log(
                     '🔐 [Auth Module] Configuring JWT with secret length:',
                     secret?.length || 0
@@ -43,9 +41,10 @@ import { JwtStrategy } from './strategy/jwt.strategy'
                 return {
                     secret: secret,
                     signOptions: {
-                        expiresIn:
-                            configService.get<string>('jwt.expiresIn') ||
-                            configService.get<string>('JWT_EXPIRES_IN', '7d')
+                        expiresIn: configService.get<string>(
+                            'JWT_EXPIRES_IN',
+                            '7d'
+                        )
                     }
                 }
             }
@@ -61,6 +60,6 @@ import { JwtStrategy } from './strategy/jwt.strategy'
         ConfigService,
         EmailService
     ],
-    exports: [AuthService, JwtModule] // Export AuthService and JwtModule
+    exports: [AuthService, JwtModule]
 })
 export class AuthModule {}

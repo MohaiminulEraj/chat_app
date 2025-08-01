@@ -5,73 +5,122 @@ import {
     HttpStatus,
     Post,
     Request,
-    UseGuards
+    UseGuards,
+    Logger
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { JwtService } from '@nestjs/jwt'
 import {
     ApiBearerAuth,
+    ApiBody,
     ApiOperation,
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
-import { ConfigService } from '@nestjs/config'
-import { JwtService } from '@nestjs/jwt'
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'
-
+import { AuthService } from './service/auth.service'
+import { LoginDto } from './dto/login.dto'
 import {
     EmailVerificationDto,
+    VerificationCodeSenderDto,
     ForgetPasswordDto,
-    LoginDto,
-    RegistrationDto,
-    UpdatePasswordDto,
-    VerificationCodeSenderDto
+    UpdatePasswordDto
 } from './dto/auth.dto'
-import { AuthService } from './service/auth.service'
+import { LocalAuthGuard } from './guards/local-auth.guard'
+import { JwtAuthGuard } from './guards/jwt-auth.guard'
 
 @ApiTags('🌏 🔒 Auth API')
 @Controller('auth')
 export class AuthController {
+    private readonly logger = new Logger('AuthController')
+
     constructor(
         private readonly authService: AuthService,
         private readonly configService: ConfigService,
         private readonly jwtService: JwtService
     ) {}
-    @Post('login')
-    @ApiOperation({
-        summary: 'Login Endpoint'
-    })
-    @ApiResponse({
-        description: 'Something went wrong',
-        status: HttpStatus.BAD_REQUEST
-    })
-    @ApiResponse({
-        description: 'Login successful',
-        status: HttpStatus.OK
-    })
-    async login(@Request() req, @Body() loginDto: LoginDto) {
+
+    @Get('test')
+    @ApiOperation({ summary: 'Test endpoint (no auth required)' })
+    test() {
+        this.logger.log('Test endpoint called')
         return {
             statusCode: HttpStatus.OK,
-            message: 'Login done successfully',
-            result: await this.authService.login(req, loginDto)
+            message: 'API is working',
+            timestamp: new Date().toISOString()
         }
     }
 
-    @Post('registration')
-    @ApiOperation({
-        summary: 'Registration Endpoint'
-    })
-    @ApiResponse({
-        description: 'Something went wrong',
-        status: HttpStatus.BAD_REQUEST
-    })
-    @ApiResponse({
-        description: 'Registration successful',
-        status: HttpStatus.CREATED
-    })
-    async registration(@Body() registrationDto: RegistrationDto) {
+    @Get('test-auth')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Test authentication' })
+    testAuth(@Request() req) {
+        this.logger.log('Test auth endpoint called')
         return {
-            statusCode: HttpStatus.CREATED,
-            message: 'Registration done successfully',
-            result: await this.authService.registration(registrationDto)
+            statusCode: HttpStatus.OK,
+            message: 'Authentication is working',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
+            }
+        }
+    }
+
+    @Post('login')
+    @UseGuards(LocalAuthGuard)
+    @ApiOperation({ summary: 'Login with email and password' })
+    @ApiBody({ type: LoginDto })
+    @ApiResponse({
+        status: 200,
+        description: 'Login successful',
+        schema: {
+            example: {
+                statusCode: 200,
+                message: 'Login successful',
+                data: {
+                    user: {
+                        id: 1,
+                        uuid: '123e4567-e89b-12d3-a456-426614174000',
+                        email: 'user@example.com',
+                        name: 'John Doe'
+                    },
+                    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                }
+            }
+        }
+    })
+    async login(@Request() req) {
+        const data = await this.authService.unifiedAuthResponse(req.user)
+
+        // Log the generated token for debugging
+        this.logger.log(
+            `🔐 [LOGIN] Token generated for user: ${req.user.email}`
+        )
+        this.logger.log(
+            `   └─ Token preview: ${data.token.substring(0, 50)}...`
+        )
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Login successful',
+            data
+        }
+    }
+
+    @Get('me')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get current user info' })
+    @ApiResponse({
+        status: 200,
+        description: 'Current user information'
+    })
+    getCurrentUser(@Request() req) {
+        this.logger.log('Get current user endpoint called')
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Current user fetched successfully',
+            data: req.user
         }
     }
 
@@ -287,6 +336,25 @@ export class AuthController {
                         return null
                     }
                 })()
+            }
+        }
+    }
+
+    @Get('verify-token')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Verify JWT token is valid' })
+    @ApiResponse({
+        status: 200,
+        description: 'Token is valid'
+    })
+    verifyToken(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Token is valid',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
             }
         }
     }

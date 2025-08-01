@@ -1,23 +1,15 @@
 import { Module } from '@nestjs/common'
-import { MongooseModule } from '@nestjs/mongoose'
 import { TypeOrmModule } from '@nestjs/typeorm'
-import { AuthModule } from '../auth/auth.module'
-import { CloudinaryModule } from '../cloudinary/cloudinary.module'
-import { Room } from '../room/entities/room.entity'
-import { User } from '../user/entities/user.entity'
+import { GroupController } from './group.controller'
+import { GroupService } from './group.service'
+import { Group } from './entities/group.entity'
 import { GroupMember } from './entities/group-member.entity'
 import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
-import { Group } from './entities/group.entity'
-import { GroupChatController } from './group-chat.controller'
-// import { GroupChatGateway } from './group-chat.gateway' // Disabled - replaced by unified SocketIO
-import { GroupChatService } from './group-chat.service'
-import { GroupController } from './group.controller'
-import { GroupService } from './group.service'
-import {
-    GroupMessage,
-    GroupMessageSchema
-} from './schemas/group-message.schema'
+import { User } from '../user/entities/user.entity'
+import { UserModule } from '../user/user.module'
+import { CloudinaryModule } from '../cloudinary/cloudinary.module'
+import { AuthModule } from '../auth/auth.module'
 
 @Module({
     imports: [
@@ -26,17 +18,14 @@ import {
             GroupMember,
             GroupRole,
             GroupSettings,
-            Room,
             User
         ]),
-        MongooseModule.forFeature([
-            { name: GroupMessage.name, schema: GroupMessageSchema }
-        ]),
+        UserModule,
         CloudinaryModule,
-        AuthModule // Add AuthModule for JWT support in WebSocket
+        AuthModule // Make sure AuthModule is imported
     ],
-    controllers: [GroupController, GroupChatController],
-    providers: [GroupService, GroupChatService /* GroupChatGateway */], // Gateway disabled - replaced by unified SocketIO
-    exports: [GroupService, GroupChatService]
+    controllers: [GroupController],
+    providers: [GroupService],
+    exports: [GroupService]
 })
 export class GroupModule {}

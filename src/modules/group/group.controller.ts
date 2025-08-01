@@ -47,6 +47,26 @@ import { GroupService } from './group.service'
 export class GroupController {
     constructor(private readonly groupService: GroupService) {}
 
+    @Get('test-auth')
+    @ApiOperation({
+        summary: 'Test authentication',
+        description: 'Test endpoint to verify JWT authentication is working'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Authentication is working'
+    })
+    testAuth(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Authentication is working',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
+            }
+        }
+    }
+
     @Post()
     @ApiOperation({
         summary: 'Create a new group',
