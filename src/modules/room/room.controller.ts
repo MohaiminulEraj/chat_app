@@ -21,6 +21,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AssignRoomRoleDto, TransferOwnershipDto } from './dto/room-role.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
+import { JoinRoomDto } from './dto/join-room.dto'
 import { UpdateRoomDto } from './dto/update-room.dto'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole } from './entities/room-role.entity'
@@ -44,14 +45,50 @@ export class RoomController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: 'Room created successfully',
-        type: Room
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 201 },
+                message: {
+                    type: 'string',
+                    example: 'Room created successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'number' },
+                        uuid: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        type: {
+                            type: 'string',
+                            enum: ['public', 'private', 'group', 'voice']
+                        },
+                        groupId: { type: 'string' },
+                        ownerId: { type: 'string' },
+                        capacity: { type: 'number' },
+                        maxSeats: { type: 'number' },
+                        isLocked: { type: 'boolean' },
+                        password: { type: 'string', nullable: true },
+                        isActive: { type: 'boolean' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        updatedAt: { type: 'string', format: 'date-time' }
+                    }
+                }
+            }
+        }
     })
-    create(@Body() createRoomDto: CreateRoomDto, @Request() req: any) {
-        return this.roomService.createRoom(
+    async create(@Body() createRoomDto: CreateRoomDto, @Request() req: any) {
+        const data = await this.roomService.createRoom(
             createRoomDto.groupId,
             createRoomDto,
             req.user
         )
+        return {
+            statusCode: HttpStatus.CREATED,
+            message: 'Room created successfully',
+            data
+        }
     }
 
     @Get(':groupId/group-room')
@@ -137,8 +174,13 @@ export class RoomController {
         status: HttpStatus.NOT_FOUND,
         description: 'Room not found for the specified group'
     })
-    getRoomByGroupId(@Param('groupId') groupId: string) {
-        return this.roomService.getRoomByGroupId(groupId)
+    async getRoomByGroupId(@Param('groupId') groupId: string) {
+        const data = await this.roomService.getRoomByGroupId(groupId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Room details fetched successfully',
+            data
+        }
     }
 
     @Get(':id/participants')
@@ -153,10 +195,38 @@ export class RoomController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'List of room participants',
-        type: [RoomParticipant]
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room participants fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'number' },
+                            uuid: { type: 'string' },
+                            userId: { type: 'string' },
+                            roomId: { type: 'string' },
+                            joinedAt: { type: 'string', format: 'date-time' },
+                            isActive: { type: 'boolean' }
+                        }
+                    }
+                }
+            }
+        }
     })
-    getParticipants(@Param('id') roomId: string) {
-        return this.roomService.getRoomParticipants(roomId)
+    async getParticipants(@Param('id') roomId: string) {
+        const data = await this.roomService.getRoomParticipants(roomId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Room participants fetched successfully',
+            data
+        }
     }
 
     @Get(':id/waiting-list')
@@ -171,10 +241,103 @@ export class RoomController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'List of users in waiting list',
-        type: [RoomWaitingList]
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Waiting list fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'number' },
+                            uuid: { type: 'string' },
+                            userId: { type: 'string' },
+                            roomId: { type: 'string' },
+                            position: { type: 'number' },
+                            createdAt: { type: 'string', format: 'date-time' }
+                        }
+                    }
+                }
+            }
+        }
     })
-    getWaitingList(@Param('id') roomId: string) {
-        return this.roomService.getRoomWaitingList(roomId)
+    async getWaitingList(@Param('id') roomId: string) {
+        const data = await this.roomService.getRoomWaitingList(roomId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Waiting list fetched successfully',
+            data
+        }
+    }
+
+    @Post(':id/join')
+    @ApiOperation({
+        summary: 'Join a room',
+        description:
+            'Join a room. If the room is private, a password is required.'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Room UUID'
+    })
+    @ApiBody({ type: JoinRoomDto })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'Successfully joined the room',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 201 },
+                message: {
+                    type: 'string',
+                    example: 'Successfully joined the room'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'number' },
+                        uuid: { type: 'string' },
+                        userId: { type: 'string' },
+                        roomId: { type: 'string' },
+                        joinedAt: { type: 'string', format: 'date-time' },
+                        isActive: { type: 'boolean' }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Invalid password for private room'
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Room is full'
+    })
+    @ApiResponse({
+        status: HttpStatus.CONFLICT,
+        description: 'User is already in the room'
+    })
+    async joinRoom(
+        @Param('id') roomId: string,
+        @Body() joinRoomDto: JoinRoomDto,
+        @Request() req: any
+    ) {
+        const data = await this.roomService.joinRoom(
+            roomId,
+            req.user.uuid,
+            joinRoomDto.password
+        )
+        return {
+            statusCode: HttpStatus.CREATED,
+            message: 'Successfully joined the room',
+            data
+        }
     }
 
     @Put(':id')

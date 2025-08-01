@@ -1,5 +1,6 @@
 import {
     BadRequestException,
+    ConflictException,
     ForbiddenException,
     Injectable,
     NotFoundException
@@ -35,8 +36,11 @@ export class RoomService {
         const room = this.roomRepository.create({
             ...data,
             groupId,
-            maxSeats: data.maxParticipants || data.maxSeats || 10, // Handle both maxParticipants and maxSeats
-            ownerId: currentUser?.uuid || data.ownerId
+            maxSeats: data.maxSeats || 8,
+            capacity: data.maxParticipants || data.capacity || 100,
+            ownerId: currentUser?.uuid || data.ownerId,
+            isLocked: data.isPrivate || false, // Set isLocked based on isPrivate
+            password: data.isPrivate ? data.password : null // Only set password if private
         })
 
         const savedRoom = await this.roomRepository.save(room)
@@ -44,18 +48,26 @@ export class RoomService {
 
         // If we have a current user, assign them as both owner and host by default
         if (currentUser?.uuid && finalRoom.uuid) {
-            await this.assignRoomRole(
-                finalRoom.uuid,
-                currentUser.uuid,
-                RoomRole.OWNER,
-                currentUser.uuid
-            )
-            await this.assignRoomRole(
-                finalRoom.uuid,
-                currentUser.uuid,
-                RoomRole.HOST,
-                currentUser.uuid
-            )
+            try {
+                // Assign owner role
+                await this.assignRoomRole(
+                    finalRoom.uuid,
+                    currentUser.uuid,
+                    RoomRole.OWNER,
+                    currentUser.uuid
+                )
+
+                // Assign host role (group owner is also the host by default)
+                await this.assignRoomRole(
+                    finalRoom.uuid,
+                    currentUser.uuid,
+                    RoomRole.HOST,
+                    currentUser.uuid
+                )
+            } catch (error) {
+                console.error('Error assigning default roles:', error)
+                // Continue without throwing error as room is already created
+            }
         }
 
         return finalRoom
@@ -74,7 +86,11 @@ export class RoomService {
         return room
     }
 
-    async joinRoom(roomId: string, userId: string): Promise<RoomParticipant> {
+    async joinRoom(
+        roomId: string,
+        userId: string,
+        password?: string
+    ): Promise<RoomParticipant> {
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId },
             relations: ['participants']
@@ -82,6 +98,15 @@ export class RoomService {
 
         if (!room) {
             throw new NotFoundException('Room not found')
+        }
+
+        // Check if room is private and requires password
+        if (room.isLocked && room.password) {
+            if (!password || password !== room.password) {
+                throw new ForbiddenException(
+                    'Invalid password for private room'
+                )
+            }
         }
 
         if (room.participants.length >= room.maxSeats) {
@@ -94,7 +119,7 @@ export class RoomService {
         })
 
         if (existingParticipant) {
-            throw new BadRequestException('User is already in the room')
+            throw new ConflictException('User is already in the room')
         }
 
         // Find available seat number
@@ -197,7 +222,7 @@ export class RoomService {
         // Remove from waiting list
         await this.waitingListRepository.remove(nextUser)
 
-        // Add as participant - no password needed
+        // Add as participant - no password needed for promotion from waiting list
         await this.joinRoom(roomId, nextUser.userId)
 
         // Update positions in waiting list

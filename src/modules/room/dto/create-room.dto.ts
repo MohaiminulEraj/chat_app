@@ -2,12 +2,14 @@ import { ApiProperty } from '@nestjs/swagger'
 import {
     IsBoolean,
     IsEnum,
+    IsNotEmpty,
     IsNumber,
     IsOptional,
     IsString,
     IsUUID,
     Max,
-    Min
+    Min,
+    ValidateIf
 } from 'class-validator'
 import { RoomType } from '../entities/room.entity'
 
@@ -37,17 +39,31 @@ export class CreateRoomDto {
 
     @ApiProperty({
         description: 'Maximum number of participants allowed',
-        example: 5,
+        example: 10,
         minimum: 1,
-        maximum: 50
+        maximum: 100
+    })
+    @IsNumber()
+    @Min(1)
+    @Max(100)
+    maxParticipants: number
+
+    @ApiProperty({
+        description: 'Maximum number of seats in the room',
+        example: 8,
+        minimum: 1,
+        maximum: 50,
+        required: false,
+        default: 8
     })
     @IsNumber()
     @Min(1)
     @Max(50)
-    maxParticipants: number
+    @IsOptional()
+    maxSeats?: number
 
     @ApiProperty({
-        description: 'Whether the room is private',
+        description: 'Whether the room is private (requires password)',
         example: false,
         required: false,
         default: false
@@ -57,9 +73,22 @@ export class CreateRoomDto {
     isPrivate?: boolean
 
     @ApiProperty({
+        description:
+            'Password for private rooms (required if isPrivate is true)',
+        example: 'mySecretPassword',
+        required: false
+    })
+    @ValidateIf((obj) => obj.isPrivate === true)
+    @IsNotEmpty({ message: 'Password is required for private rooms' })
+    @IsString()
+    password?: string
+
+    @ApiProperty({
         description: 'The type of the room',
-        example: 'VOICE',
-        enum: RoomType
+        example: 'voice',
+        enum: RoomType,
+        required: false,
+        default: 'voice'
     })
     @IsEnum(RoomType)
     @IsOptional()
