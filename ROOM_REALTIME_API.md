@@ -4,24 +4,110 @@
 
 The Room Real-time API provides WebSocket functionality for real-time communication within rooms. Users can join rooms, send comments, exchange gifts, and receive live updates from other participants.
 
-## Base Connection
+## Base Connections
 
-### WebSocket Endpoint
+### Main WebSocket Endpoint (SocketIOGateway)
 
 ```
-ws://localhost:3000/room
+ws://103.190.136.200:3000
+```
+
+### Room WebSocket Endpoint (RoomGateway)
+
+```
+ws://103.190.136.200:3000/rooms
 ```
 
 ### Authentication
 
-All WebSocket connections require JWT authentication via the Authorization header:
+All WebSocket connections require JWT authentication. You can authenticate via:
+
+1. **Query Parameters:**
 
 ```javascript
-const socket = io('ws://localhost:3000/room', {
-    extraHeaders: {
-        Authorization: `Bearer ${jwt_token}`
-    }
+const socket = io('ws://103.190.136.200:3000', {
+    query: { token: jwt_token }
 })
+```
+
+2. **Auth Object:**
+
+```javascript
+const socket = io('ws://103.190.136.200:3000', {
+    auth: { token: jwt_token }
+})
+```
+
+3. **Manual Authentication:**
+
+```javascript
+const socket = io('ws://103.190.136.200:3000')
+socket.emit('authenticate', { token: jwt_token })
+```
+
+## Authentication Events
+
+### Setup Event (Flutter Compatible)
+
+**Event:** `setup`
+**Gateway:** Main SocketIO Gateway
+**Description:** Initialize user session and join relevant rooms
+
+**Payload:**
+
+```typescript
+{
+  userId?: string;     // Optional user ID
+  roomIds?: string[];  // Optional array of room IDs to join
+}
+```
+
+**Example:**
+
+```javascript
+socket.emit('setup', {
+    userId: 'user-uuid',
+    roomIds: ['room-1', 'room-2']
+})
+```
+
+**Response:**
+
+```typescript
+{
+  status: 'success' | 'error';
+  message: string;
+  user?: {
+    id: string;
+    name: string;
+    avatarUrl?: string;
+  };
+  rooms?: string[];
+}
+```
+
+### Manual Authentication
+
+**Event:** `authenticate`
+**Gateway:** Main SocketIO Gateway
+
+**Payload:**
+
+```typescript
+{
+    token: string // JWT token
+}
+```
+
+**Response:**
+
+```typescript
+{
+  status: 'success' | 'error';
+  message: string;
+  userId?: string;
+  userName?: string;
+}
 ```
 
 ## Room Events
@@ -29,37 +115,8 @@ const socket = io('ws://localhost:3000/room', {
 ### 1. Join Room
 
 **Event:** `joinRoom`
-
+**Gateway:** Room Gateway (`/rooms` namespace)
 **Description:** Join a specific room to receive real-time updates
-
-**Payload:**
-
-```typescript
-{
-  roomId: string;      // UUID of the room
-  password?: string;   // Required if room is private
-}
-```
-
-**Example:**
-
-```javascript
-socket.emit('joinRoom', {
-    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
-    password: 'secret123' // Only for private rooms
-})
-```
-
-**Response Events:**
-
-- `joinRoomSuccess`: Successfully joined room
-- `joinRoomError`: Failed to join room (invalid room, wrong password, etc.)
-
-### 2. Leave Room
-
-**Event:** `leaveRoom`
-
-**Description:** Leave a specific room
 
 **Payload:**
 
@@ -72,15 +129,69 @@ socket.emit('joinRoom', {
 **Example:**
 
 ```javascript
-socket.emit('leaveRoom', {
+// Connect to rooms namespace
+const roomSocket = io('ws://103.190.136.200:3000/rooms', {
+    auth: { token: jwt_token }
+})
+
+roomSocket.emit('joinRoom', {
     roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
 })
 ```
 
+**Response:**
+
+```typescript
+{
+  status: 'success' | 'error';
+  participant?: {
+    userId: string;
+    userName: string;
+    seatNumber: number;
+    joinedAt: string;
+  };
+  roomUserCount?: number;
+  message: string;
+}
+```
+
+**Broadcast Events:**
+
+- `userJoined`: Sent to all room participants when someone joins
+
+### 2. Leave Room
+
+**Event:** `leaveRoom` or `leave_room` (legacy)
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+string // Room ID (for leaveRoom)
+// OR
+{
+    roomId: string // For leave_room legacy event
+}
+```
+
+**Response:**
+
+```typescript
+{
+  status: 'success' | 'error';
+  roomUserCount?: number;
+  message: string;
+}
+```
+
+**Broadcast Events:**
+
+- `userLeft`: Sent to all room participants when someone leaves
+
 ### 3. Send Comment
 
 **Event:** `sendComment`
-
+**Gateway:** Room Gateway
 **Description:** Send a real-time comment to a room
 
 **Payload:**
@@ -98,206 +209,331 @@ socket.emit('leaveRoom', {
 **Example:**
 
 ```javascript
-// Text comment
-socket.emit('sendComment', {
+roomSocket.emit('sendComment', {
     roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
     message: 'Great discussion happening here!',
     messageType: 'text'
 })
-
-// Emoji reaction
-socket.emit('sendComment', {
-    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
-    message: '👍',
-    messageType: 'emoji',
-    metadata: { emoji: '👍' }
-})
-
-// Reply to another comment
-socket.emit('sendComment', {
-    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
-    message: 'I agree with this!',
-    replyToId: 'comment-uuid-here'
-})
 ```
 
-**Response Events:**
-
-- `newComment`: Broadcast to all room participants when a comment is sent
-- `commentError`: Error occurred while sending comment
-
-### 4. Send Gift
-
-**Event:** `sendGift`
-
-**Description:** Send a virtual gift to a room
-
-**Payload:**
+**Response:**
 
 ```typescript
 {
-  roomId: string;    // UUID of the room
-  giftId: string;    // UUID of the gift to send
-  message?: string;  // Optional message with gift (max 200 characters)
-}
-```
-
-**Example:**
-
-```javascript
-socket.emit('sendGift', {
-    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
-    giftId: 'gift-uuid-here',
-    message: 'Enjoyed your performance!'
-})
-```
-
-**Response Events:**
-
-- `newGift`: Broadcast to all room participants when a gift is sent
-- `giftError`: Error occurred while sending gift
-
-## Incoming Events (Server to Client)
-
-### 1. Room Join Success
-
-**Event:** `joinRoomSuccess`
-
-**Payload:**
-
-```typescript
-{
-    roomId: string
-    message: string
-    participantCount: number
-}
-```
-
-### 2. Room Join Error
-
-**Event:** `joinRoomError`
-
-**Payload:**
-
-```typescript
-{
-    roomId: string
-    error: string
-}
-```
-
-### 3. New Comment
-
-**Event:** `newComment`
-
-**Description:** Broadcast when someone sends a comment
-
-**Payload:**
-
-```typescript
-{
-  id: string;                    // Comment UUID
-  roomId: string;               // Room UUID
-  message: string;              // Comment content
-  messageType: string;          // Type of message
-  createdAt: string;            // ISO timestamp
-  metadata?: any;               // Additional message data
-  user: {
-    id: string;                 // User UUID
-    displayName: string;        // User display name
-    avatarUrl?: string;         // User avatar URL
-  };
-  replyTo?: {                   // If replying to another comment
-    id: string;
+  status: 'success' | 'error';
+  comment?: {
+    uuid: string;
     message: string;
-    user: {
-      id: string;
-      displayName: string;
-    };
+    messageType: string;
+    createdAt: string;
   };
+  message: string;
 }
 ```
 
-### 4. Comment Error
+**Broadcast Event:** `ReceivedComment` (Flutter compatible)
 
-**Event:** `commentError`
+```typescript
+{
+  _id: string;              // Comment UUID
+  senderId: string;         // Sender user ID
+  senderName: string;       // Sender display name
+  senderImage?: string;     // Sender avatar URL
+  content: string;          // Comment content
+  messageType: string;      // Message type
+  replyToId?: string;       // Reply to comment ID
+  metadata?: any;           // Additional metadata
+  createdAt: string;        // ISO timestamp
+  isVisible: boolean;       // Comment visibility
+}
+```
+
+### 4. Comment Reactions
+
+**Event:** `reactToComment`
+**Gateway:** Room Gateway
 
 **Payload:**
 
 ```typescript
 {
-    error: string
     roomId: string
+    commentId: string
+    reaction: string // Emoji reaction
+    action: 'add' | 'remove'
 }
 ```
 
-### 5. New Gift
+**Broadcast Event:** `commentReaction`
 
-**Event:** `newGift`
+### 5. Typing Indicators
 
-**Description:** Broadcast when someone sends a gift
+**Event:** `typingComment`
+**Gateway:** Room Gateway
 
 **Payload:**
 
 ```typescript
 {
-  id: string;                   // Gift transaction UUID
-  roomId: string;              // Room UUID
-  giftId: string;              // Gift UUID
-  message?: string;            // Optional message with gift
-  createdAt: string;           // ISO timestamp
-  sender: {
-    id: string;                // Sender UUID
-    displayName: string;       // Sender display name
-    avatarUrl?: string;        // Sender avatar URL
-  };
-  gift: {
-    id: string;                // Gift UUID
-    name: string;              // Gift name
-    imageUrl: string;          // Gift image URL
-    value: number;             // Gift value/cost
-  };
-}
-```
-
-### 6. Gift Error
-
-**Event:** `giftError`
-
-**Payload:**
-
-```typescript
-{
-    error: string
     roomId: string
+    isTyping: boolean
 }
 ```
 
-### 7. User Joined Room
+**Broadcast Event:** `userTypingComment`
 
-**Event:** `userJoinedRoom`
+## Group Messaging (Main Gateway)
 
-**Description:** Broadcast when a new user joins the room
+### Send Group Message
+
+**Event:** `sendGroupMessage`
+**Gateway:** Main SocketIO Gateway
+**Description:** Send messages to group conversations
+
+**Payload:**
+
+```typescript
+{
+  groupId: string;
+  type: 'text' | 'image' | 'file' | 'voice';
+  content?: string;
+  fileUrl?: string;
+  metadata?: any;
+  replyToMessageId?: string;
+}
+```
+
+**Broadcast Event:** `GroupMessageReceived` (Flutter compatible)
+
+```typescript
+{
+  _id: string;              // Message UUID
+  senderId: string;         // Sender user ID
+  senderName: string;       // Sender display name
+  senderImage?: string;     // Sender avatar URL
+  content: string;          // Message content
+  messageType: string;      // Message type
+  groupId: string;          // Group ID
+  createdAt: string;        // ISO timestamp
+  replyToMessageId?: string;// Reply to message ID
+  metadata?: any;           // Additional metadata
+}
+```
+
+## Voice Call Management
+
+### Request to Join Call
+
+**Event:** `requestToJoinCall`
+**Gateway:** Room Gateway
 
 **Payload:**
 
 ```typescript
 {
   roomId: string;
-  user: {
-    id: string;
-    displayName: string;
-    avatarUrl?: string;
-  };
-  participantCount: number;
+  message?: string;  // Optional request message
 }
 ```
 
-### 8. User Left Room
+**Broadcast Event:** `UserRequestedToJoinCall`
 
-**Event:** `userLeftRoom`
+```typescript
+{
+  roomId: string;
+  userId: string;
+  userName: string;
+  avatarUrl?: string;
+  message?: string;
+  timestamp: string;
+}
+```
 
-**Description:** Broadcast when a user leaves the room
+### Grant Microphone Access
+
+**Event:** `grantMikeAccess`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+  roomId: string;
+  memberId: string;   // User to grant access to
+  message?: string;
+}
+```
+
+**Broadcast Event:** `MikeAccessGranted`
+
+### Revoke Microphone Access
+
+**Event:** `revokeMikeAccess`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+  roomId: string;
+  memberId: string;   // User to revoke access from
+  message?: string;
+}
+```
+
+**Broadcast Event:** `MikeAccessRevoked`
+
+### Close Room Call
+
+**Event:** `closeRoomCall`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+  roomId: string;
+  reason?: string;
+}
+```
+
+**Broadcast Event:** `RoomCallClosed`
+
+## Room Media Controls
+
+### Toggle Mute
+
+**Event:** `toggleMute`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+    roomId: string
+    isMuted: boolean
+}
+```
+
+### Toggle Video
+
+**Event:** `toggleVideo`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+    roomId: string
+    isVideoOn: boolean
+}
+```
+
+### Update Speaking Status
+
+**Event:** `updateSpeaking`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+    roomId: string
+    isSpeaking: boolean
+}
+```
+
+## Gift System
+
+### Send Gift in Room
+
+**Event:** `sendGiftInRoom`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+  roomId: string;
+  receiverId: string;
+  giftId: string;
+  message?: string;
+}
+```
+
+**Broadcast Event:** `newGiftInRoom`
+
+## Room Information
+
+### Get Room Comments
+
+**Event:** `getRoomComments`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+  roomId: string;
+  limit?: number;
+  offset?: number;
+  lastCommentId?: string;
+}
+```
+
+### Get Room Statistics
+
+**Event:** `getRoomStats`
+**Gateway:** Room Gateway
+
+**Payload:**
+
+```typescript
+{
+    roomId: string
+}
+```
+
+## Connection Events
+
+### Connection Established
+
+**Event:** `connected`
+**Description:** Sent when WebSocket connection is established
+
+**Payload:**
+
+```typescript
+{
+  status: 'success';
+  message: string;
+  socketId?: string;        // Main gateway
+  timestamp?: string;       // Room gateway
+}
+```
+
+### User Events
+
+**Event:** `userJoined`
+**Description:** Broadcast when user joins room
+
+**Payload:**
+
+```typescript
+{
+    roomId: string
+    participant: {
+        userId: string
+        userName: string
+        seatNumber: number
+        joinedAt: string
+    }
+    userName: string
+}
+```
+
+**Event:** `userLeft`
+**Description:** Broadcast when user leaves room
 
 **Payload:**
 
@@ -305,189 +541,156 @@ socket.emit('sendGift', {
 {
     roomId: string
     userId: string
-    participantCount: number
-}
-```
-
-## HTTP Endpoints (Complementary)
-
-### Get Room Comments
-
-**Endpoint:** `GET /room/:id/comments`
-
-**Description:** Retrieve paginated room comments
-
-**Query Parameters:**
-
-- `page` (optional): Page number (default: 1)
-- `limit` (optional): Comments per page (default: 20)
-
-**Response:**
-
-```typescript
-{
-  statusCode: 200,
-  message: "Room comments retrieved successfully",
-  data: {
-    comments: [
-      {
-        id: string;
-        message: string;
-        messageType: string;
-        createdAt: string;
-        user: {
-          id: string;
-          displayName: string;
-          avatarUrl?: string;
-        }
-      }
-    ],
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    }
-  }
+    userName: string
 }
 ```
 
 ## Error Handling
 
-### Common Error Scenarios
+### Common Error Response Format
+
+```typescript
+{
+  status: 'error';
+  message: string;
+  roomId?: string;
+  error?: string;
+}
+```
+
+### Error Scenarios
 
 1. **Authentication Errors**
 
     - Invalid or missing JWT token
     - Token expired
+    - Authentication failed
 
 2. **Room Access Errors**
 
     - Room not found
-    - Room is private and password not provided/incorrect
-    - User not authorized to access room
+    - User not participant of room
+    - Insufficient permissions
 
 3. **Validation Errors**
 
     - Invalid room ID format
-    - Message too long
+    - Message too long (>500 chars)
     - Required fields missing
 
 4. **Rate Limiting**
-    - Too many messages sent in short time
+    - Too many messages in short time
     - Anti-spam protection triggered
 
 ## Connection Management
 
-### Auto-reconnection
+### Dual Gateway Architecture
 
-The WebSocket client should implement auto-reconnection logic:
+This API uses two separate WebSocket gateways:
 
-```javascript
-const socket = io('ws://localhost:3000/room', {
-    extraHeaders: {
-        Authorization: `Bearer ${jwt_token}`
-    },
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 5
-})
+1. **Main Gateway (`ws://103.190.136.200:3000`)**: General messaging, groups, authentication
+2. **Room Gateway (`ws://103.190.136.200:3000/rooms`)**: Room-specific features, comments, voice calls
 
-socket.on('connect', () => {
-    console.log('Connected to room gateway')
-    // Re-join rooms that were previously joined
-    previousRooms.forEach((roomId) => {
-        socket.emit('joinRoom', { roomId })
-    })
-})
-
-socket.on('disconnect', () => {
-    console.log('Disconnected from room gateway')
-})
-```
-
-### Heartbeat/Ping
-
-The server automatically handles WebSocket ping/pong for connection health monitoring.
-
-## Best Practices
-
-1. **Message Throttling**: Implement client-side throttling to prevent spam
-2. **Error Handling**: Always listen for error events and handle gracefully
-3. **Connection State**: Track connection state and re-join rooms on reconnect
-4. **Memory Management**: Clean up event listeners when components unmount
-5. **Authentication**: Refresh JWT tokens before they expire
-
-## Example Implementation
+### Flutter Implementation Example
 
 ```javascript
-class RoomWebSocket {
+class SocketService {
     constructor(token) {
-        this.socket = io('ws://localhost:3000/room', {
-            extraHeaders: {
-                Authorization: `Bearer ${token}`
-            }
+        // Main gateway for general features
+        this.mainSocket = io('ws://103.190.136.200:3000', {
+            auth: { token }
+        })
+
+        // Room gateway for room features
+        this.roomSocket = io('ws://103.190.136.200:3000/rooms', {
+            auth: { token }
         })
 
         this.setupEventListeners()
     }
 
     setupEventListeners() {
-        this.socket.on('connect', () => {
-            console.log('Connected to room service')
+        // Main gateway events
+        this.mainSocket.on('connected', (data) => {
+            console.log('Connected to main gateway:', data)
+            // Setup user session
+            this.mainSocket.emit('setup', { userId: 'user-id' })
         })
 
-        this.socket.on('newComment', (data) => {
-            this.handleNewComment(data)
+        this.mainSocket.on('GroupMessageReceived', (data) => {
+            this.handleGroupMessage(data)
         })
 
-        this.socket.on('newGift', (data) => {
-            this.handleNewGift(data)
+        // Room gateway events
+        this.roomSocket.on('connected', (data) => {
+            console.log('Connected to room gateway:', data)
         })
 
-        this.socket.on('commentError', (error) => {
-            console.error('Comment error:', error)
+        this.roomSocket.on('ReceivedComment', (data) => {
+            this.handleRoomComment(data)
+        })
+
+        this.roomSocket.on('UserRequestedToJoinCall', (data) => {
+            this.handleCallRequest(data)
         })
     }
 
-    joinRoom(roomId, password) {
-        this.socket.emit('joinRoom', { roomId, password })
+    // Join room for real-time updates
+    joinRoom(roomId) {
+        this.roomSocket.emit('joinRoom', { roomId })
     }
 
-    sendComment(roomId, message, options = {}) {
-        this.socket.emit('sendComment', {
+    // Send comment to room
+    sendComment(roomId, message) {
+        this.roomSocket.emit('sendComment', {
             roomId,
             message,
-            ...options
+            messageType: 'text'
         })
     }
 
-    sendGift(roomId, giftId, message) {
-        this.socket.emit('sendGift', {
-            roomId,
-            giftId,
-            message
+    // Send group message
+    sendGroupMessage(groupId, content) {
+        this.mainSocket.emit('sendGroupMessage', {
+            groupId,
+            type: 'text',
+            content
         })
     }
 
-    handleNewComment(comment) {
-        // Update UI with new comment
-        console.log('New comment:', comment)
+    // Handle incoming events
+    handleGroupMessage(data) {
+        console.log('Group message:', data)
+        // Update UI with Flutter-compatible structure
     }
 
-    handleNewGift(gift) {
-        // Show gift animation
-        console.log('New gift:', gift)
+    handleRoomComment(data) {
+        console.log('Room comment:', data)
+        // Update room UI with new comment
+    }
+
+    handleCallRequest(data) {
+        console.log('Call request:', data)
+        // Show call request notification
     }
 }
 ```
 
+## Best Practices
+
+1. **Dual Connection Management**: Use both main and room gateways appropriately
+2. **Event Name Consistency**: Use Flutter-compatible event names (`GroupMessageReceived`, `ReceivedComment`)
+3. **Error Handling**: Always listen for error responses and handle gracefully
+4. **Auto-reconnection**: Implement reconnection logic and re-join rooms
+5. **Authentication**: Use `setup` event after connection for Flutter clients
+6. **Rate Limiting**: Implement client-side throttling to prevent spam
+
 ## Security Considerations
 
-1. **Authentication**: All WebSocket connections must be authenticated
-2. **Authorization**: Users can only join rooms they have access to
-3. **Rate Limiting**: Message sending is rate-limited per user
-4. **Content Filtering**: Messages may be filtered for inappropriate content
-5. **Room Privacy**: Private rooms require correct password
+1. **JWT Authentication**: All connections require valid JWT tokens
+2. **Room Authorization**: Users can only access rooms they're participants in
+3. **Input Validation**: Messages are validated for length and content
+4. **Rate Limiting**: Automatic spam protection and rate limiting
+5. **Permission Checks**: Voice call permissions verified before granting access
 
-This documentation covers all real-time WebSocket functionality for the Room API, enabling seamless real-time communication and interaction within rooms.
+This documentation reflects the current dual-gateway architecture optimized for Flutter client compatibility with proper event naming and structures.
