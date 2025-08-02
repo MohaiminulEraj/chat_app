@@ -18,6 +18,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor'
 import { LoggerMiddleware } from './common/middleware/logger.middleware'
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware'
 import smtpConfig from './config/smtp.config'
+import { AgoraModule } from './modules/agora/agora.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
 import { ConversationModule } from './modules/conversation/conversation.module'
@@ -67,6 +68,7 @@ import { SocketIOModule } from './modules/socketio/socketio.module'
             dropSchema: false // dev only: drop & recreate database on each run
         }),
         ScheduleModule.forRoot(),
+        AgoraModule,
         AuthModule,
         UserModule,
         FriendshipModule,
