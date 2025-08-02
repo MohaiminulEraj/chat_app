@@ -412,6 +412,70 @@ export class SocketIOGateway
         }
     }
 
+    // ==================== SETUP ====================
+    @SubscribeMessage('setup')
+    async handleSetup(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: any
+    ) {
+        this.logger.log(`🔧 [SETUP] User setup initiated`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(
+            `   ├─ User: ${client.userName || 'Anonymous'} (${client.userUuid || 'Not authenticated'})`
+        )
+        this.logger.log(`   └─ Setup Data: ${JSON.stringify(data)}`)
+
+        try {
+            // If user is authenticated, join their personal room
+            if (client.userUuid) {
+                const personalRoom = `user:${client.userUuid}`
+                await client.join(personalRoom)
+
+                this.logger.log(
+                    `✅ [SETUP] User joined personal room: ${personalRoom}`
+                )
+
+                // Add to authenticated users map
+                if (!this.authenticatedUsers.has(client.userUuid)) {
+                    this.authenticatedUsers.set(client.userUuid, [])
+                }
+                this.authenticatedUsers.get(client.userUuid)?.push(client)
+                this.socketUserMap.set(client.id, client.userUuid)
+
+                // Emit successful setup
+                client.emit('setupComplete', {
+                    success: true,
+                    message: 'User setup completed successfully',
+                    userId: client.userUuid,
+                    userName: client.userName,
+                    personalRoom: personalRoom,
+                    timestamp: new Date().toISOString()
+                })
+
+                return { success: true, message: 'Setup completed' }
+            } else {
+                this.logger.warn(`⚠️  [SETUP] User not authenticated`)
+                client.emit('setupError', {
+                    success: false,
+                    message: 'User not authenticated',
+                    code: 'NOT_AUTHENTICATED'
+                })
+                return { success: false, error: 'User not authenticated' }
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ [SETUP] Setup failed: ${error.message}`,
+                error.stack
+            )
+            client.emit('setupError', {
+                success: false,
+                message: error.message || 'Setup failed',
+                code: 'SETUP_FAILED'
+            })
+            return { success: false, error: error.message }
+        }
+    }
+
     // Add a debug method for testing
     @SubscribeMessage('debugJwtInfo')
     async handleDebugJwtInfo(@ConnectedSocket() client: AuthenticatedSocket) {
@@ -718,14 +782,17 @@ export class SocketIOGateway
             this.logger.log(`   └─ Online Members: ${membersCount}`)
 
             // Emit to all group members
-            this.server.to(roomName).emit('newGroupMessage', {
+            this.server.to(roomName).emit('GroupMessageReceived', {
+                content: message.content,
+                senderId: client.userUuid,
+                senderName: client.userName,
+                senderImage: client.userAvatarUrl || null,
+                createdAt: new Date().toISOString(),
                 groupId: data.groupId,
-                message,
-                sender: {
-                    uuid: client.userUuid,
-                    name: client.userName,
-                    avatarUrl: client.userAvatarUrl
-                }
+                messageType: data.type,
+                messageId: messageId,
+                metadata: data.metadata,
+                replyToMessageId: data.replyToMessageId
             })
 
             const duration = Date.now() - startTime
