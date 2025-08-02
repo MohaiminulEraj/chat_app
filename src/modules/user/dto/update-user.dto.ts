@@ -1,5 +1,5 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger'
-import { IsOptional, IsUrl } from 'class-validator'
+import { IsOptional, IsString, IsUrl, ValidateIf } from 'class-validator'
 import { CreateUserDto } from './create-user.dto'
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
@@ -8,6 +8,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
         required: false
     })
     @IsOptional()
-    @IsUrl()
+    @ValidateIf((o) => o.avatarUrl && o.avatarUrl.length > 0)
+    @IsUrl({}, { message: 'Avatar URL must be a valid URL' })
     avatarUrl?: string
 }

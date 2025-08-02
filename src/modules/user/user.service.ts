@@ -84,50 +84,85 @@ export class UserService {
         updateData: UpdateUserDto,
         avatarFile?: Express.Multer.File
     ): Promise<User> {
-        const user = await this.findOne(id)
+        try {
+            const user = await this.findOne(id)
 
-        // Handle avatar upload if file is provided
-        if (avatarFile) {
-            // Delete old avatar if exists
-            if (user.avatarUrl) {
+            // Handle avatar upload if file is provided
+            if (avatarFile) {
+                // Delete old avatar if exists
+                if (user.avatarUrl) {
+                    try {
+                        // Extract public_id from the URL
+                        const urlParts = user.avatarUrl.split('/')
+                        const publicIdWithExtension =
+                            urlParts[urlParts.length - 1]
+                        const publicId = publicIdWithExtension.split('.')[0]
+                        const folderPath = urlParts.slice(-2, -1)[0]
+                        await this.cloudinaryService.deleteFile(
+                            `${folderPath}/${publicId}`
+                        )
+                    } catch (error) {
+                        console.error('Failed to delete old avatar:', error)
+                        // Don't throw here, continue with upload
+                    }
+                }
+
                 try {
-                    // Extract public_id from the URL
-                    const urlParts = user.avatarUrl.split('/')
-                    const publicIdWithExtension = urlParts[urlParts.length - 1]
-                    const publicId = publicIdWithExtension.split('.')[0]
-                    const folderPath = urlParts.slice(-2, -1)[0]
-                    await this.cloudinaryService.deleteFile(
-                        `${folderPath}/${publicId}`
-                    )
+                    // Upload new avatar
+                    const uploadResult =
+                        await this.cloudinaryService.uploadImage(avatarFile, {
+                            folder:
+                                (process.env.CLOUDINARY_FOLDER ?? 'kitty') +
+                                '/avatars',
+                            transformation: {
+                                width: 500,
+                                height: 500,
+                                crop: 'fill',
+                                gravity: 'face'
+                            }
+                        })
+                    updateData.avatarUrl = uploadResult.secure_url
                 } catch (error) {
-                    console.error('Failed to delete old avatar:', error)
+                    console.error('Failed to upload avatar:', error)
+                    throw new ConflictException('Failed to upload avatar image')
                 }
             }
 
-            // Upload new avatar
-            const uploadResult = await this.cloudinaryService.uploadImage(
-                avatarFile,
-                {
-                    folder:
-                        (process.env.CLOUDINARY_FOLDER ?? 'kitty') + '/avatars',
-                    transformation: {
-                        width: 500,
-                        height: 500,
-                        crop: 'fill',
-                        gravity: 'face'
-                    }
+            // Hash password if provided
+            if (updateData.password) {
+                updateData.password = await bcrypt.hash(updateData.password, 10)
+            }
+
+            // Update user with new data
+            Object.assign(user, updateData)
+
+            try {
+                const savedUser = await this.userRepository.save(user)
+                return Array.isArray(savedUser) ? savedUser[0] : savedUser
+            } catch (error) {
+                console.error('Database save error:', error)
+
+                // Check for duplicate email error
+                if (error.code === '23505' && error.detail?.includes('email')) {
+                    throw new ConflictException('Email already exists')
                 }
+
+                throw new ConflictException('Failed to save user updates')
+            }
+        } catch (error) {
+            // Re-throw known exceptions
+            if (
+                error instanceof NotFoundException ||
+                error instanceof ConflictException
+            ) {
+                throw error
+            }
+
+            console.error('Unexpected error in user update:', error)
+            throw new ConflictException(
+                'An unexpected error occurred during user update'
             )
-            updateData.avatarUrl = uploadResult.secure_url
         }
-
-        if (updateData.password) {
-            updateData.password = await bcrypt.hash(updateData.password, 10)
-        }
-
-        Object.assign(user, updateData)
-        const savedUser = await this.userRepository.save(user)
-        return Array.isArray(savedUser) ? savedUser[0] : savedUser
     }
 
     async updateStatus(
