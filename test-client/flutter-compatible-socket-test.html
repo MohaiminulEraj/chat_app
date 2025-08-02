@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Flutter-Compatible Socket.IO Test Client</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .container {
+                background: white;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+                color: #333;
+            }
+            input,
+            textarea,
+            button,
+            select {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+            button {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                cursor: pointer;
+                margin-top: 10px;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            button:disabled {
+                background-color: #6c757d;
+                cursor: not-allowed;
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            .status.connected {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+            .status.disconnected {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            .event-section {
+                border-top: 2px solid #007bff;
+                padding-top: 20px;
+                margin-top: 20px;
+            }
+            .message {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 10px 0;
+            }
+            .message-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .message-author {
+                font-weight: bold;
+                color: #007bff;
+            }
+            .message-time {
+                color: #6c757d;
+                font-size: 12px;
+            }
+            .logs {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 5px;
+                padding: 15px;
+                max-height: 400px;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            .log-entry {
+                margin: 2px 0;
+                padding: 2px 0;
+            }
+            .log-entry.error {
+                color: #dc3545;
+            }
+            .log-entry.success {
+                color: #28a745;
+            }
+            .log-entry.info {
+                color: #007bff;
+            }
+            .log-entry.warning {
+                color: #ffc107;
+            }
+            .row {
+                display: flex;
+                gap: 20px;
+            }
+            .col {
+                flex: 1;
+            }
+            .call-status {
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                color: #856404;
+                padding: 8px 12px;
+                border-radius: 5px;
+                margin: 5px 0;
+                font-style: italic;
+            }
+            .mike-status {
+                background: #d1ecf1;
+                border: 1px solid #bee5eb;
+                color: #0c5460;
+                padding: 8px 12px;
+                border-radius: 5px;
+                margin: 5px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 Flutter-Compatible Socket.IO Test Client</h1>
+
+            <div id="connectionStatus" class="status disconnected">
+                Disconnected
+            </div>
+
+            <div class="form-group">
+                <label for="serverUrl">Server URL:</label>
+                <input
+                    type="text"
+                    id="serverUrl"
+                    value="http://localhost:3001"
+                    placeholder="Enter server URL"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="authToken">Auth Token:</label>
+                <input
+                    type="text"
+                    id="authToken"
+                    placeholder="Enter your JWT token"
+                />
+            </div>
+
+            <button id="connectBtn">Connect to Server</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div class="row">
+            <!-- Group Messages Section -->
+            <div class="col">
+                <div class="container">
+                    <h3>👥 Group Messages</h3>
+
+                    <div class="form-group">
+                        <label for="groupId">Group ID:</label>
+                        <input
+                            type="text"
+                            id="groupId"
+                            placeholder="Enter group UUID"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="groupMessage">Message:</label>
+                        <textarea
+                            id="groupMessage"
+                            rows="3"
+                            placeholder="Type your group message..."
+                        ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="groupMessageType">Message Type:</label>
+                        <select id="groupMessageType">
+                            <option value="text">Text</option>
+                            <option value="image">Image</option>
+                            <option value="file">File</option>
+                            <option value="voice">Voice</option>
+                        </select>
+                    </div>
+
+                    <button id="joinGroupBtn" disabled>Join Group</button>
+                    <button id="sendGroupMessageBtn" disabled>
+                        Send Group Message
+                    </button>
+                    <button id="leaveGroupBtn" disabled>Leave Group</button>
+
+                    <div class="event-section">
+                        <h4>📨 Group Messages</h4>
+                        <div id="groupMessagesList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Room Comments Section -->
+            <div class="col">
+                <div class="container">
+                    <h3>🏠 Room Comments</h3>
+
+                    <div class="form-group">
+                        <label for="roomId">Room ID:</label>
+                        <input
+                            type="text"
+                            id="roomId"
+                            placeholder="Enter room UUID"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="roomComment">Comment:</label>
+                        <textarea
+                            id="roomComment"
+                            rows="3"
+                            placeholder="Type your room comment..."
+                        ></textarea>
+                    </div>
+
+                    <button id="joinRoomBtn" disabled>Join Room</button>
+                    <button id="sendRoomCommentBtn" disabled>
+                        Send Comment
+                    </button>
+                    <button id="leaveRoomBtn" disabled>Leave Room</button>
+
+                    <div class="event-section">
+                        <h4>💬 Room Comments</h4>
+                        <div id="roomCommentsList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Call Management Section -->
+            <div class="col">
+                <div class="container">
+                    <h3>📞 Call Management</h3>
+
+                    <div class="form-group">
+                        <label for="callRoomId">Room ID:</label>
+                        <input
+                            type="text"
+                            id="callRoomId"
+                            placeholder="Enter room UUID"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberId"
+                            >Member ID (for mike access):</label
+                        >
+                        <input
+                            type="text"
+                            id="memberId"
+                            placeholder="Enter member UUID"
+                        />
+                    </div>
+
+                    <button id="requestJoinCallBtn" disabled>
+                        Request to Join Call
+                    </button>
+                    <button id="grantMikeBtn" disabled>
+                        Grant Mike Access
+                    </button>
+                    <button id="revokeMikeBtn" disabled>
+                        Revoke Mike Access
+                    </button>
+                    <button id="closeCallBtn" disabled>Close Room Call</button>
+
+                    <div class="event-section">
+                        <h4>📞 Call Events</h4>
+                        <div id="callEventsList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status & Events -->
+            <div class="col">
+                <div class="container">
+                    <h3>📋 Event Logs</h3>
+                    <div class="logs" id="logs"></div>
+
+                    <div class="event-section">
+                        <button id="clearLogsBtn">Clear Logs</button>
+                        <button id="setupBtn" disabled>Run Setup</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let socket = null
+            let currentGroupId = null
+            let currentRoomId = null
+            let currentUserId = null
+
+            // DOM elements
+            const connectionStatus = document.getElementById('connectionStatus')
+            const serverUrl = document.getElementById('serverUrl')
+            const authToken = document.getElementById('authToken')
+            const connectBtn = document.getElementById('connectBtn')
+            const disconnectBtn = document.getElementById('disconnectBtn')
+            const setupBtn = document.getElementById('setupBtn')
+
+            // Group elements
+            const groupId = document.getElementById('groupId')
+            const groupMessage = document.getElementById('groupMessage')
+            const groupMessageType = document.getElementById('groupMessageType')
+            const joinGroupBtn = document.getElementById('joinGroupBtn')
+            const sendGroupMessageBtn = document.getElementById(
+                'sendGroupMessageBtn'
+            )
+            const leaveGroupBtn = document.getElementById('leaveGroupBtn')
+            const groupMessagesList =
+                document.getElementById('groupMessagesList')
+
+            // Room elements
+            const roomId = document.getElementById('roomId')
+            const roomComment = document.getElementById('roomComment')
+            const joinRoomBtn = document.getElementById('joinRoomBtn')
+            const sendRoomCommentBtn =
+                document.getElementById('sendRoomCommentBtn')
+            const leaveRoomBtn = document.getElementById('leaveRoomBtn')
+            const roomCommentsList = document.getElementById('roomCommentsList')
+
+            // Call elements
+            const callRoomId = document.getElementById('callRoomId')
+            const memberId = document.getElementById('memberId')
+            const requestJoinCallBtn =
+                document.getElementById('requestJoinCallBtn')
+            const grantMikeBtn = document.getElementById('grantMikeBtn')
+            const revokeMikeBtn = document.getElementById('revokeMikeBtn')
+            const closeCallBtn = document.getElementById('closeCallBtn')
+            const callEventsList = document.getElementById('callEventsList')
+
+            const logs = document.getElementById('logs')
+            const clearLogsBtn = document.getElementById('clearLogsBtn')
+
+            function log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString()
+                const logEntry = document.createElement('div')
+                logEntry.className = `log-entry ${type}`
+                logEntry.textContent = `[${timestamp}] ${message}`
+                logs.appendChild(logEntry)
+                logs.scrollTop = logs.scrollHeight
+            }
+
+            function updateConnectionStatus(connected) {
+                if (connected) {
+                    connectionStatus.textContent = 'Connected'
+                    connectionStatus.className = 'status connected'
+                    connectBtn.disabled = true
+                    disconnectBtn.disabled = false
+                    setupBtn.disabled = false
+                    joinGroupBtn.disabled = false
+                    joinRoomBtn.disabled = false
+                    requestJoinCallBtn.disabled = false
+                    grantMikeBtn.disabled = false
+                    revokeMikeBtn.disabled = false
+                    closeCallBtn.disabled = false
+                } else {
+                    connectionStatus.textContent = 'Disconnected'
+                    connectionStatus.className = 'status disconnected'
+                    connectBtn.disabled = false
+                    disconnectBtn.disabled = true
+                    setupBtn.disabled = true
+                    // Disable all action buttons
+                    ;[
+                        'joinGroupBtn',
+                        'sendGroupMessageBtn',
+                        'leaveGroupBtn',
+                        'joinRoomBtn',
+                        'sendRoomCommentBtn',
+                        'leaveRoomBtn',
+                        'requestJoinCallBtn',
+                        'grantMikeBtn',
+                        'revokeMikeBtn',
+                        'closeCallBtn'
+                    ].forEach((id) => {
+                        document.getElementById(id).disabled = true
+                    })
+                }
+            }
+
+            function displayGroupMessage(data) {
+                const messageDiv = document.createElement('div')
+                messageDiv.className = 'message'
+
+                messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-author">${data.senderName}</span>
+                    <span class="message-time">${new Date(data.createdAt).toLocaleString()}</span>
+                </div>
+                <div class="message-content">${data.content}</div>
+                <small>Sender ID: ${data.senderId}</small>
+            `
+
+                groupMessagesList.insertBefore(
+                    messageDiv,
+                    groupMessagesList.firstChild
+                )
+            }
+
+            function displayRoomComment(data) {
+                const commentDiv = document.createElement('div')
+                commentDiv.className = 'message'
+
+                commentDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-author">${data.senderName}</span>
+                    <span class="message-time">${new Date(data.createdAt).toLocaleString()}</span>
+                </div>
+                <div class="message-content">${data.content}</div>
+                <small>Sender ID: ${data.senderId}</small>
+            `
+
+                roomCommentsList.insertBefore(
+                    commentDiv,
+                    roomCommentsList.firstChild
+                )
+            }
+
+            function displayCallEvent(eventType, data) {
+                const eventDiv = document.createElement('div')
+                let className = 'call-status'
+                if (eventType.includes('Mike')) {
+                    className = 'mike-status'
+                }
+                eventDiv.className = className
+
+                let content = ''
+                switch (eventType) {
+                    case 'UserRequestedToJoinCall':
+                        content = `📞 ${data.name} (${data.userId}) requested to join call: "${data.message}"`
+                        break
+                    case 'MikeAccessGranted':
+                        content = `🎤 Microphone access granted to ${data.memberId}: "${data.message}"`
+                        break
+                    case 'MikeAccessRevoked':
+                        content = `🔇 Microphone access revoked from ${data.memberId}: "${data.message}"`
+                        break
+                    case 'RoomCallClosed':
+                        content = `📵 Room call closed by ${data.closedByName}: "${data.reason}"`
+                        break
+                    default:
+                        content = `${eventType}: ${JSON.stringify(data)}`
+                }
+
+                eventDiv.innerHTML = `
+                <div>${content}</div>
+                <small>Time: ${new Date(data.timestamp).toLocaleString()}</small>
+            `
+
+                callEventsList.insertBefore(eventDiv, callEventsList.firstChild)
+            }
+
+            // Socket connection
+            connectBtn.addEventListener('click', () => {
+                const url = serverUrl.value
+                const token = authToken.value
+
+                if (!url || !token) {
+                    alert('Please enter both server URL and auth token')
+                    return
+                }
+
+                // Follow Flutter client pattern
+                socket = io(url, {
+                    transports: ['websocket'],
+                    autoConnect: true,
+                    forceNew: true,
+                    auth: { token: token }
+                })
+
+                socket.on('connect', () => {
+                    log('Socket connected', 'success')
+                    updateConnectionStatus(true)
+                })
+
+                socket.on('disconnect', () => {
+                    log('Socket disconnected', 'error')
+                    updateConnectionStatus(false)
+                })
+
+                socket.on('connect_error', (error) => {
+                    log(`Connection error: ${error}`, 'error')
+                })
+
+                // Flutter-expected events
+                socket.on('connected', (data) => {
+                    log(
+                        `Connected event received: ${JSON.stringify(data)}`,
+                        'success'
+                    )
+                })
+
+                socket.on('setupComplete', (data) => {
+                    log(`Setup completed: ${JSON.stringify(data)}`, 'success')
+                    currentUserId = data.userId
+                })
+
+                socket.on('setupError', (data) => {
+                    log(`Setup error: ${data.message}`, 'error')
+                })
+
+                // Group message events
+                socket.on('GroupMessageReceived', (data) => {
+                    log(
+                        `Group message received from ${data.senderName}: ${data.content}`,
+                        'success'
+                    )
+                    displayGroupMessage(data)
+                })
+
+                // Room comment events
+                socket.on('ReceivedComment', (data) => {
+                    log(
+                        `Room comment received from ${data.senderName}: ${data.content}`,
+                        'success'
+                    )
+                    displayRoomComment(data)
+                })
+
+                // Call events
+                socket.on('UserRequestedToJoinCall', (data) => {
+                    log(`Call join request from ${data.name}`, 'warning')
+                    displayCallEvent('UserRequestedToJoinCall', data)
+                })
+
+                socket.on('MikeAccessGranted', (data) => {
+                    log(`Mike access granted to ${data.memberId}`, 'success')
+                    displayCallEvent('MikeAccessGranted', data)
+                })
+
+                socket.on('MikeAccessRevoked', (data) => {
+                    log(`Mike access revoked from ${data.memberId}`, 'warning')
+                    displayCallEvent('MikeAccessRevoked', data)
+                })
+
+                socket.on('RoomCallClosed', (data) => {
+                    log(`Room call closed in ${data.roomId}`, 'error')
+                    displayCallEvent('RoomCallClosed', data)
+                })
+
+                socket.on('typing', (data) => {
+                    log(`User ${data.userId} is typing...`, 'info')
+                })
+
+                socket.on('error', (error) => {
+                    log(`Socket error: ${error.message || error}`, 'error')
+                })
+            })
+
+            disconnectBtn.addEventListener('click', () => {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                }
+            })
+
+            // Setup button
+            setupBtn.addEventListener('click', () => {
+                if (socket) {
+                    const userId = currentUserId || 'test-user-id'
+                    socket.emit('setup', userId)
+                    log(`Setup called with user ID: ${userId}`, 'info')
+                }
+            })
+
+            // Group functions
+            joinGroupBtn.addEventListener('click', () => {
+                const id = groupId.value
+                if (!id || !socket) {
+                    alert('Please enter group ID and connect first')
+                    return
+                }
+                currentGroupId = id
+                socket.emit('joinGroup', { groupId: id })
+                log(`Joining group: ${id}`, 'info')
+                sendGroupMessageBtn.disabled = false
+                leaveGroupBtn.disabled = false
+            })
+
+            sendGroupMessageBtn.addEventListener('click', () => {
+                const message = groupMessage.value.trim()
+                const type = groupMessageType.value
+
+                if (!message || !socket || !currentGroupId) {
+                    alert('Please enter a message and join a group first')
+                    return
+                }
+
+                socket.emit('sendGroupMessage', {
+                    groupId: currentGroupId,
+                    type: type,
+                    content: message
+                })
+
+                log(
+                    `Sent group message to ${currentGroupId}: ${message}`,
+                    'info'
+                )
+                groupMessage.value = ''
+            })
+
+            leaveGroupBtn.addEventListener('click', () => {
+                if (socket && currentGroupId) {
+                    socket.emit('leaveGroup', { groupId: currentGroupId })
+                    log(`Leaving group: ${currentGroupId}`, 'info')
+                    currentGroupId = null
+                    sendGroupMessageBtn.disabled = true
+                    leaveGroupBtn.disabled = true
+                }
+            })
+
+            // Room functions
+            joinRoomBtn.addEventListener('click', () => {
+                const id = roomId.value
+                if (!id || !socket) {
+                    alert('Please enter room ID and connect first')
+                    return
+                }
+                currentRoomId = id
+                socket.emit('joinRoom', { roomId: id })
+                log(`Joining room: ${id}`, 'info')
+                sendRoomCommentBtn.disabled = false
+                leaveRoomBtn.disabled = false
+            })
+
+            sendRoomCommentBtn.addEventListener('click', () => {
+                const comment = roomComment.value.trim()
+
+                if (!comment || !socket || !currentRoomId) {
+                    alert('Please enter a comment and join a room first')
+                    return
+                }
+
+                socket.emit('sendComment', {
+                    roomId: currentRoomId,
+                    message: comment,
+                    messageType: 'text'
+                })
+
+                log(`Sent room comment to ${currentRoomId}: ${comment}`, 'info')
+                roomComment.value = ''
+            })
+
+            leaveRoomBtn.addEventListener('click', () => {
+                if (socket && currentRoomId) {
+                    socket.emit('leave_room', { roomId: currentRoomId })
+                    log(`Leaving room: ${currentRoomId}`, 'info')
+                    currentRoomId = null
+                    sendRoomCommentBtn.disabled = true
+                    leaveRoomBtn.disabled = true
+                }
+            })
+
+            // Call functions
+            requestJoinCallBtn.addEventListener('click', () => {
+                const roomIdValue = callRoomId.value
+                if (!roomIdValue || !socket) {
+                    alert('Please enter room ID and connect first')
+                    return
+                }
+
+                socket.emit('requestToJoinCall', {
+                    roomId: roomIdValue,
+                    message: 'I would like to join the call'
+                })
+
+                log(`Requested to join call in room: ${roomIdValue}`, 'info')
+            })
+
+            grantMikeBtn.addEventListener('click', () => {
+                const roomIdValue = callRoomId.value
+                const memberIdValue = memberId.value
+                if (!roomIdValue || !memberIdValue || !socket) {
+                    alert('Please enter room ID, member ID and connect first')
+                    return
+                }
+
+                socket.emit('grantMikeAccess', {
+                    roomId: roomIdValue,
+                    memberId: memberIdValue,
+                    message: 'You have been granted microphone access'
+                })
+
+                log(
+                    `Granted mike access to ${memberIdValue} in room ${roomIdValue}`,
+                    'info'
+                )
+            })
+
+            revokeMikeBtn.addEventListener('click', () => {
+                const roomIdValue = callRoomId.value
+                const memberIdValue = memberId.value
+                if (!roomIdValue || !memberIdValue || !socket) {
+                    alert('Please enter room ID, member ID and connect first')
+                    return
+                }
+
+                socket.emit('revokeMikeAccess', {
+                    roomId: roomIdValue,
+                    memberId: memberIdValue,
+                    message: 'Your microphone access has been revoked'
+                })
+
+                log(
+                    `Revoked mike access from ${memberIdValue} in room ${roomIdValue}`,
+                    'info'
+                )
+            })
+
+            closeCallBtn.addEventListener('click', () => {
+                const roomIdValue = callRoomId.value
+                if (!roomIdValue || !socket) {
+                    alert('Please enter room ID and connect first')
+                    return
+                }
+
+                socket.emit('closeRoomCall', {
+                    roomId: roomIdValue,
+                    reason: 'Call ended by moderator'
+                })
+
+                log(`Closed call in room: ${roomIdValue}`, 'info')
+            })
+
+            clearLogsBtn.addEventListener('click', () => {
+                logs.innerHTML = ''
+            })
+
+            // Initialize
+            log('Flutter-Compatible Socket.IO Test Client loaded', 'info')
+            log(
+                'This client matches the event patterns expected by your Flutter app',
+                'info'
+            )
+        </script>
+    </body>
+</html>
