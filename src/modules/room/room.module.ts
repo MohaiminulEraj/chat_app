@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule
 import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift functionality
 import { GroupMember } from '../group/entities/group-member.entity'
+import { Group } from '../group/entities/group.entity'
+import { User } from '../user/entities/user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRoleAssignment } from './entities/room-role.entity'
@@ -20,7 +22,9 @@ import { RoomService } from './room.service'
             RoomWaitingList,
             RoomRoleAssignment,
             RoomComment,
-            GroupMember
+            GroupMember,
+            Group,
+            User
         ]),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
         GiftModule // Add GiftModule for gift functionality

@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     Controller,
     Delete,
@@ -59,38 +60,117 @@ export class RoomController {
                 data: {
                     type: 'object',
                     properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
+                        _id: { type: 'string' },
                         name: { type: 'string' },
                         description: { type: 'string' },
-                        type: {
-                            type: 'string',
-                            enum: ['public', 'private', 'group', 'voice']
+                        country: { type: 'string' },
+                        roomOwner: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'number' },
+                                uuid: { type: 'string' },
+                                name: { type: 'string' },
+                                email: { type: 'string' },
+                                phoneNumber: { type: 'string' },
+                                userType: { type: 'string' },
+                                authProvider: { type: 'string' },
+                                avatarUrl: { type: 'string' },
+                                isEmailVerified: { type: 'boolean' },
+                                isPhoneVerified: { type: 'boolean' }
+                            }
                         },
-                        groupId: { type: 'string' },
-                        ownerId: { type: 'string' },
-                        capacity: { type: 'number' },
-                        maxSeats: { type: 'number' },
-                        isLocked: { type: 'boolean' },
-                        password: { type: 'string', nullable: true },
-                        isActive: { type: 'boolean' },
-                        createdAt: { type: 'string', format: 'date-time' },
-                        updatedAt: { type: 'string', format: 'date-time' }
+                        host: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'number' },
+                                uuid: { type: 'string' },
+                                name: { type: 'string' },
+                                email: { type: 'string' },
+                                phoneNumber: { type: 'string' },
+                                userType: { type: 'string' },
+                                authProvider: { type: 'string' },
+                                avatarUrl: { type: 'string' },
+                                isEmailVerified: { type: 'boolean' },
+                                isPhoneVerified: { type: 'boolean' }
+                            }
+                        },
+                        members: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    email: { type: 'string' },
+                                    image: { type: 'string' },
+                                    role: {
+                                        type: 'string',
+                                        enum: [
+                                            'owner',
+                                            'host',
+                                            'admin',
+                                            'speaker',
+                                            'listener'
+                                        ]
+                                    },
+                                    status: { type: 'boolean' },
+                                    join: { type: 'boolean' },
+                                    invitedBy: { type: 'string' },
+                                    blocked: { type: 'boolean' }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid group ID or user ID provided'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Group not found or user not found'
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'You must be a member of the group to create a room'
+    })
     async create(@Body() createRoomDto: CreateRoomDto, @Request() req: any) {
-        const data = await this.roomService.createRoom(
-            createRoomDto.groupId,
-            createRoomDto,
-            req.user
-        )
-        return {
-            statusCode: HttpStatus.CREATED,
-            message: 'Room created successfully',
-            data
+        try {
+            const roomData = await this.roomService.createRoom(
+                createRoomDto.groupId,
+                createRoomDto,
+                req.user
+            )
+
+            // Get the room details in the same format as getRoomByGroupId
+            const roomDetails = await this.roomService.getRoomByGroupId(
+                createRoomDto.groupId
+            )
+
+            return {
+                statusCode: HttpStatus.CREATED,
+                message: 'Room created successfully',
+                data: roomDetails
+            }
+        } catch (error) {
+            console.error('Room creation error:', error)
+
+            if (error.message?.includes('foreign key constraint')) {
+                throw new BadRequestException(
+                    'Invalid group ID or user ID provided'
+                )
+            }
+
+            if (error.status) {
+                throw error
+            }
+
+            throw new BadRequestException(
+                error.message || 'Failed to create room'
+            )
         }
     }
 

@@ -8,6 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { GroupMember } from '../group/entities/group-member.entity'
+import { Group } from '../group/entities/group.entity'
+import { User } from '../user/entities/user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
@@ -25,6 +27,10 @@ export class RoomService {
         private waitingListRepository: Repository<RoomWaitingList>,
         @InjectRepository(GroupMember)
         private groupMemberRepository: Repository<GroupMember>,
+        @InjectRepository(Group)
+        private groupRepository: Repository<Group>,
+        @InjectRepository(User)
+        private userRepository: Repository<User>,
         @InjectRepository(RoomRoleAssignment)
         private roomRoleRepository: Repository<RoomRoleAssignment>,
         @InjectRepository(RoomComment)
@@ -36,14 +42,48 @@ export class RoomService {
         data: any,
         currentUser?: any
     ): Promise<Room> {
+        // Validate that the group exists
+        const group = await this.groupRepository.findOne({
+            where: { uuid: groupId }
+        })
+
+        if (!group) {
+            throw new NotFoundException(`Group with ID ${groupId} not found`)
+        }
+
+        // Validate that the user exists
+        const userId = currentUser?.uuid || data.ownerId
+        if (!userId) {
+            throw new BadRequestException('Owner ID is required')
+        }
+
+        const user = await this.userRepository.findOne({
+            where: { uuid: userId, isActive: true }
+        })
+
+        if (!user) {
+            throw new NotFoundException(`User with ID ${userId} not found`)
+        }
+
+        // Check if user is a member of the group
+        const groupMember = await this.groupMemberRepository.findOne({
+            where: { groupId, userId }
+        })
+
+        if (!groupMember) {
+            throw new ForbiddenException(
+                'You must be a member of the group to create a room'
+            )
+        }
+
         const room = this.roomRepository.create({
             ...data,
             groupId,
             maxSeats: data.maxSeats || 8,
             capacity: data.maxParticipants || data.capacity || 100,
-            ownerId: currentUser?.uuid || data.ownerId,
-            isLocked: data.isPrivate || false, // Set isLocked based on isPrivate
-            password: data.isPrivate ? data.password : null // Only set password if private
+            ownerId: userId,
+            isLocked: data.isPrivate || false,
+            password: data.isPrivate ? data.password : null
         })
 
         const savedRoom = await this.roomRepository.save(room)
