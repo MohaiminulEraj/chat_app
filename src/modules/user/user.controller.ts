@@ -406,6 +406,7 @@ export class UserController {
                 const allowedMimeTypes = [
                     'image/jpeg',
                     'image/jpg',
+                    'image/pjpeg', // Progressive JPEG (IE sends this)
                     'image/png',
                     'image/gif',
                     'image/webp',
@@ -423,7 +424,7 @@ export class UserController {
                 if (!allowedMimeTypes.includes(file.mimetype)) {
                     return cb(
                         new BadRequestException(
-                            `Unsupported image format: ${file.mimetype}. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO`
+                            `Unsupported image format: ${file.mimetype}. Supported formats: JPEG/JPG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO`
                         ),
                         false
                     )
