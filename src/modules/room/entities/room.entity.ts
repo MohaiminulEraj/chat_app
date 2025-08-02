@@ -43,6 +43,9 @@ export class Room extends CustomBaseEntity {
     @Column({ nullable: true })
     password?: string
 
+    @Column({ nullable: true })
+    roomAvatarUrl?: string
+
     @Column({ default: true }) // Add isActive property
     isActive: boolean
 

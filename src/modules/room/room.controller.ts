@@ -11,11 +11,15 @@ import {
     Put,
     Query,
     Request,
-    UseGuards
+    UploadedFile,
+    UseGuards,
+    UseInterceptors
 } from '@nestjs/common'
+import { FileInterceptor } from '@nestjs/platform-express'
 import {
     ApiBearerAuth,
     ApiBody,
+    ApiConsumes,
     ApiOperation,
     ApiParam,
     ApiQuery,
@@ -27,6 +31,7 @@ import { AssignRoomRoleDto, TransferOwnershipDto } from './dto/room-role.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
 import { JoinRoomDto } from './dto/join-room.dto'
 import { UpdateRoomDto } from './dto/update-room.dto'
+import { UploadRoomAvatarDto } from './dto/upload-room-avatar.dto'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole } from './entities/room-role.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
@@ -64,6 +69,7 @@ export class RoomController {
                         name: { type: 'string' },
                         description: { type: 'string' },
                         country: { type: 'string' },
+                        roomAvatarUrl: { type: 'string', nullable: true },
                         roomOwner: {
                             type: 'object',
                             properties: {
@@ -194,6 +200,7 @@ export class RoomController {
                 name: { type: 'string' },
                 description: { type: 'string' },
                 country: { type: 'string' },
+                roomAvatarUrl: { type: 'string', nullable: true },
                 roomOwner: {
                     type: 'object',
                     properties: {
@@ -651,6 +658,215 @@ export class RoomController {
                 {
                     statusCode: HttpStatus.BAD_REQUEST,
                     message: error.message || 'Failed to retrieve room comments'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    @Post('upload-avatar')
+    @ApiOperation({
+        summary: 'Upload room avatar',
+        description:
+            'Upload an avatar image for a room. Only room owner, host, or admin can upload.'
+    })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        description: 'Room avatar upload',
+        schema: {
+            type: 'object',
+            properties: {
+                roomId: {
+                    type: 'string',
+                    description: 'Room UUID',
+                    example: '123e4567-e89b-12d3-a456-426614174000'
+                },
+                file: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Room avatar image file'
+                }
+            },
+            required: ['roomId', 'file']
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Room avatar uploaded successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room avatar uploaded successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        roomAvatarUrl: {
+                            type: 'string',
+                            example:
+                                'https://res.cloudinary.com/kitty/image/upload/v1234567890/rooms/room-avatar.jpg'
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid file type or size, or missing required fields'
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Insufficient permissions to update room avatar'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Room not found'
+    })
+    @UseInterceptors(FileInterceptor('file'))
+    async uploadRoomAvatar(
+        @UploadedFile() file: Express.Multer.File,
+        @Body('roomId') roomId: string,
+        @Request() req: any
+    ) {
+        try {
+            if (!file) {
+                throw new BadRequestException('No file uploaded')
+            }
+
+            if (!roomId) {
+                throw new BadRequestException('Room ID is required')
+            }
+
+            const result = await this.roomService.uploadRoomAvatar(
+                roomId,
+                file,
+                req.user.uuid
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Room avatar uploaded successfully',
+                data: result
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: error.status || HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to upload room avatar'
+                },
+                error.status || HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    @Get('recommended')
+    @ApiOperation({
+        summary: 'Get recommended rooms',
+        description:
+            'Get a list of all active rooms with their details, similar to getRoomByGroupId format but as an array'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'List of recommended rooms',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Recommended rooms fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            _id: { type: 'string' },
+                            name: { type: 'string' },
+                            description: { type: 'string' },
+                            country: { type: 'string' },
+                            roomAvatarUrl: { type: 'string', nullable: true },
+                            roomOwner: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number' },
+                                    uuid: { type: 'string' },
+                                    name: { type: 'string' },
+                                    email: { type: 'string' },
+                                    phoneNumber: { type: 'string' },
+                                    userType: { type: 'string' },
+                                    authProvider: { type: 'string' },
+                                    avatarUrl: { type: 'string' },
+                                    isEmailVerified: { type: 'boolean' },
+                                    isPhoneVerified: { type: 'boolean' }
+                                }
+                            },
+                            host: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number' },
+                                    uuid: { type: 'string' },
+                                    name: { type: 'string' },
+                                    email: { type: 'string' },
+                                    phoneNumber: { type: 'string' },
+                                    userType: { type: 'string' },
+                                    authProvider: { type: 'string' },
+                                    avatarUrl: { type: 'string' },
+                                    isEmailVerified: { type: 'boolean' },
+                                    isPhoneVerified: { type: 'boolean' }
+                                }
+                            },
+                            members: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        _id: { type: 'string' },
+                                        name: { type: 'string' },
+                                        email: { type: 'string' },
+                                        image: { type: 'string' },
+                                        role: {
+                                            type: 'string',
+                                            enum: [
+                                                'owner',
+                                                'host',
+                                                'admin',
+                                                'speaker',
+                                                'listener'
+                                            ]
+                                        },
+                                        status: { type: 'boolean' },
+                                        join: { type: 'boolean' },
+                                        invitedBy: { type: 'string' },
+                                        blocked: { type: 'boolean' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getRecommendedRooms() {
+        try {
+            const rooms = await this.roomService.getRecommendedRooms()
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Recommended rooms fetched successfully',
+                data: rooms
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message:
+                        error.message || 'Failed to fetch recommended rooms'
                 },
                 HttpStatus.BAD_REQUEST
             )

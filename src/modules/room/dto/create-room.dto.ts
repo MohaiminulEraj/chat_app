@@ -109,4 +109,14 @@ export class CreateRoomDto {
         autoMute?: boolean
         waitingRoom?: boolean
     }
+
+    @ApiProperty({
+        description: 'URL of the room avatar image',
+        example:
+            'https://res.cloudinary.com/kitty/image/upload/v1234567890/rooms/room-avatar.jpg',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    roomAvatarUrl?: string
 }

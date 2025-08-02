@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule
+import { CloudinaryModule } from '../cloudinary/cloudinary.module' // Import CloudinaryModule
 import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift functionality
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
@@ -27,6 +28,7 @@ import { RoomService } from './room.service'
             User
         ]),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
+        CloudinaryModule, // Add CloudinaryModule for image upload functionality
         GiftModule // Add GiftModule for gift functionality
     ],
     controllers: [RoomController],

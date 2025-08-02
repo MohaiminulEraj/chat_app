@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
+import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
 import { User } from '../user/entities/user.entity'
@@ -34,7 +35,8 @@ export class RoomService {
         @InjectRepository(RoomRoleAssignment)
         private roomRoleRepository: Repository<RoomRoleAssignment>,
         @InjectRepository(RoomComment)
-        private roomCommentRepository: Repository<RoomComment>
+        private roomCommentRepository: Repository<RoomComment>,
+        private cloudinaryService: CloudinaryService
     ) {}
 
     async createRoom(
@@ -456,6 +458,7 @@ export class RoomService {
             name: room.name,
             description: room.description,
             country: room.group?.country || 'Unknown',
+            roomAvatarUrl: room.roomAvatarUrl || null,
             roomOwner: ownerRole?.user
                 ? {
                       id: ownerRole.user.id,
@@ -676,5 +679,124 @@ export class RoomService {
         }
 
         await this.roomCommentRepository.update(commentId, { isVisible: false })
+    }
+
+    /**
+     * Upload room avatar image
+     */
+    async uploadRoomAvatar(
+        roomId: string,
+        file: Express.Multer.File,
+        currentUserId: string
+    ): Promise<{ roomAvatarUrl: string }> {
+        // Validate file type and size
+        const allowedMimeTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'image/tiff',
+            'image/svg+xml',
+            'image/avif',
+            'image/heic',
+            'image/heif',
+            'image/x-icon',
+            'image/vnd.microsoft.icon'
+        ]
+
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+            throw new BadRequestException(
+                'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+            )
+        }
+
+        // Check file size (10MB limit)
+        const maxSize = 10 * 1024 * 1024 // 10MB in bytes
+        if (file.size > maxSize) {
+            throw new BadRequestException(
+                'File size too large. Maximum size allowed is 10MB'
+            )
+        }
+
+        // Find the room and verify ownership/permissions
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId, isActive: true }
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Check if user has permission to update room (owner or admin)
+        const userRoles = await this.getUserRolesInRoom(roomId, currentUserId)
+        const canUpdate =
+            room.ownerId === currentUserId ||
+            userRoles.includes(RoomRole.OWNER) ||
+            userRoles.includes(RoomRole.HOST) ||
+            userRoles.includes(RoomRole.ADMIN)
+
+        if (!canUpdate) {
+            throw new ForbiddenException(
+                'You do not have permission to update this room avatar'
+            )
+        }
+
+        try {
+            // Upload to Cloudinary
+            const uploadResult = await this.cloudinaryService.uploadImage(
+                file,
+                {
+                    folder: 'kitty/rooms/avatars',
+                    public_id: `room-${roomId}-${Date.now()}`,
+                    transformation: {
+                        width: 400,
+                        height: 400,
+                        crop: 'fill',
+                        gravity: 'face',
+                        quality: 'auto'
+                    }
+                }
+            )
+
+            // Update room with new avatar URL
+            await this.roomRepository.update(roomId, {
+                roomAvatarUrl: uploadResult.secure_url
+            })
+
+            return { roomAvatarUrl: uploadResult.secure_url }
+        } catch (error) {
+            console.error('Room avatar upload error:', error)
+            throw new BadRequestException(
+                `Failed to upload room avatar: ${error.message}`
+            )
+        }
+    }
+
+    /**
+     * Get recommended rooms (all active rooms with their details)
+     */
+    async getRecommendedRooms(): Promise<any[]> {
+        const rooms = await this.roomRepository.find({
+            where: { isActive: true },
+            relations: ['owner', 'group', 'participants', 'participants.user'],
+            order: { createdAt: 'DESC' }
+        })
+
+        const recommendedRooms = []
+
+        for (const room of rooms) {
+            // Get room details in the same format as getRoomByGroupId
+            const roomDetails = await this.getRoomByGroupId(room.groupId)
+
+            // Add roomAvatarUrl to the response
+            if (roomDetails) {
+                roomDetails.roomAvatarUrl = room.roomAvatarUrl || null
+                recommendedRooms.push(roomDetails)
+            }
+        }
+
+        return recommendedRooms
     }
 }
