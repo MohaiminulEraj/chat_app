@@ -38,17 +38,6 @@ export class CreateRoomDto {
     description?: string
 
     @ApiProperty({
-        description: 'Maximum number of participants allowed',
-        example: 10,
-        minimum: 1,
-        maximum: 100
-    })
-    @IsNumber()
-    @Min(1)
-    @Max(100)
-    maxParticipants: number
-
-    @ApiProperty({
         description: 'Maximum number of seats in the room',
         example: 8,
         minimum: 1,

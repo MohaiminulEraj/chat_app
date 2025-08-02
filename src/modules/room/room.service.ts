@@ -80,7 +80,6 @@ export class RoomService {
             ...data,
             groupId,
             maxSeats: data.maxSeats || 8,
-            capacity: data.maxParticipants || data.capacity || 100,
             ownerId: userId,
             isLocked: data.isPrivate || false,
             password: data.isPrivate ? data.password : null

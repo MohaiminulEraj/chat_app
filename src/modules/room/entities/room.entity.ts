@@ -34,10 +34,7 @@ export class Room extends CustomBaseEntity {
     @Column({ type: 'uuid' })
     ownerId: string
 
-    @Column({ default: 100 }) // Max participants
-    capacity: number
-
-    @Column({ default: 8 }) // Add maxSeats property
+    @Column({ default: 8 }) // Maximum number of seats in the room
     maxSeats: number
 
     @Column({ default: false })
