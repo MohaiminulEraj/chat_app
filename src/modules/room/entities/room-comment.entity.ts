@@ -29,6 +29,9 @@ export class RoomComment extends CustomBaseEntity {
     @Column({ type: 'jsonb', nullable: true })
     metadata?: any // For storing additional data like sticker info, emoji reactions, etc.
 
+    @Column({ type: 'jsonb', nullable: true, default: '{}' })
+    reactions?: { [emoji: string]: string[] } // Emoji reactions with user IDs who reacted
+
     @Column({ default: true })
     isVisible: boolean
 

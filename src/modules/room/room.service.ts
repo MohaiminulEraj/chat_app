@@ -3,6 +3,7 @@ import {
     ConflictException,
     ForbiddenException,
     Injectable,
+    Logger,
     NotFoundException
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
@@ -19,6 +20,8 @@ import { Room } from './entities/room.entity'
 
 @Injectable()
 export class RoomService {
+    private readonly logger = new Logger(RoomService.name)
+
     constructor(
         @InjectRepository(Room)
         private roomRepository: Repository<Room>,
@@ -611,25 +614,48 @@ export class RoomService {
     }
 
     /**
-     * Get room comments
+     * Get room comments with enhanced information
      */
-    async getRoomComments(roomId: string): Promise<any[]> {
-        const comments = await this.roomCommentRepository.find({
-            where: { roomId, isVisible: true },
-            relations: ['user'],
-            order: { createdAt: 'DESC' },
-            select: {
-                uuid: true,
-                userId: true,
-                message: true,
-                createdAt: true,
-                user: {
-                    uuid: true,
-                    name: true,
-                    avatarUrl: true
-                }
-            }
-        })
+    async getRoomComments(
+        roomId: string,
+        limit?: number,
+        offset?: number
+    ): Promise<any[]> {
+        const queryBuilder = this.roomCommentRepository
+            .createQueryBuilder('comment')
+            .leftJoinAndSelect('comment.user', 'user')
+            .leftJoinAndSelect('comment.replyTo', 'replyTo')
+            .leftJoinAndSelect('replyTo.user', 'replyToUser')
+            .where('comment.roomId = :roomId', { roomId })
+            .andWhere('comment.isVisible = :isVisible', { isVisible: true })
+            .orderBy('comment.createdAt', 'DESC')
+            .select([
+                'comment.uuid',
+                'comment.userId',
+                'comment.message',
+                'comment.messageType',
+                'comment.metadata',
+                'comment.reactions',
+                'comment.replyToId',
+                'comment.createdAt',
+                'user.uuid',
+                'user.name',
+                'user.avatarUrl',
+                'replyTo.uuid',
+                'replyTo.message',
+                'replyTo.messageType',
+                'replyToUser.uuid',
+                'replyToUser.name'
+            ])
+
+        if (limit) {
+            queryBuilder.limit(limit)
+        }
+        if (offset) {
+            queryBuilder.offset(offset)
+        }
+
+        const comments = await queryBuilder.getMany()
 
         return comments.map((comment) => ({
             _id: comment.uuid,
@@ -637,38 +663,148 @@ export class RoomService {
             senderName: comment.user.name,
             senderImage: comment.user.avatarUrl || null,
             content: comment.message,
-            createdAt: comment.createdAt
+            messageType: comment.messageType,
+            metadata: comment.metadata,
+            reactions: comment.reactions || {},
+            replyTo: comment.replyTo
+                ? {
+                      _id: comment.replyTo.uuid,
+                      senderId: comment.replyTo.user?.uuid,
+                      senderName: comment.replyTo.user?.name,
+                      content: comment.replyTo.message,
+                      messageType: comment.replyTo.messageType
+                  }
+                : null,
+            createdAt: comment.createdAt,
+            isVisible: true
         }))
     }
 
     /**
      * Delete a room comment (only by the author or room moderators)
      */
-    async deleteRoomComment(commentId: string, userId: string): Promise<void> {
-        const comment = await this.roomCommentRepository.findOne({
-            where: { uuid: commentId },
-            relations: ['room']
-        })
+    async deleteRoomComment(
+        commentId: string,
+        userId: string
+    ): Promise<boolean> {
+        try {
+            const comment = await this.roomCommentRepository.findOne({
+                where: { uuid: commentId, userId }
+            })
 
-        if (!comment) {
-            throw new NotFoundException('Comment not found')
-        }
+            if (!comment) {
+                this.logger.warn(
+                    `Comment not found or unauthorized deletion attempt: ${commentId} by user ${userId}`
+                )
+                return false
+            }
 
-        // Check if user is the author or has moderation permissions
-        const isAuthor = comment.userId === userId
-        const userRoles = await this.getUserRolesInRoom(comment.roomId, userId)
-        const canModerate =
-            userRoles.includes(RoomRole.OWNER) ||
-            userRoles.includes(RoomRole.HOST) ||
-            userRoles.includes(RoomRole.ADMIN)
-
-        if (!isAuthor && !canModerate) {
-            throw new ForbiddenException(
-                'You can only delete your own comments or have moderation permissions'
+            await this.roomCommentRepository.remove(comment)
+            this.logger.log(
+                `Comment deleted successfully: ${commentId} by user ${userId}`
             )
+            return true
+        } catch (error) {
+            this.logger.error(
+                `Error deleting room comment: ${error.message}`,
+                error.stack
+            )
+            return false
         }
+    }
 
-        await this.roomCommentRepository.update(commentId, { isVisible: false })
+    async isUserInRoom(userId: string, roomId: string): Promise<boolean> {
+        try {
+            const participant = await this.participantRepository.findOne({
+                where: { userId, roomId }
+            })
+            return !!participant
+        } catch (error) {
+            this.logger.error(
+                `Error checking if user is in room: ${error.message}`,
+                error.stack
+            )
+            return false
+        }
+    }
+
+    async handleCommentReaction(
+        roomId: string,
+        commentId: string,
+        userId: string,
+        reaction: string,
+        action: 'add' | 'remove'
+    ): Promise<{
+        success: boolean
+        comment?: RoomComment
+        error?: string
+    }> {
+        try {
+            // Find the comment
+            const comment = await this.roomCommentRepository.findOne({
+                where: { uuid: commentId, roomId },
+                relations: ['user']
+            })
+
+            if (!comment) {
+                return {
+                    success: false,
+                    error: 'Comment not found'
+                }
+            }
+
+            // Initialize reactions if null
+            if (!comment.reactions) {
+                comment.reactions = {}
+            }
+
+            // Handle reaction action
+            if (action === 'add') {
+                if (!comment.reactions[reaction]) {
+                    comment.reactions[reaction] = []
+                }
+
+                // Add user to reaction if not already present
+                if (!comment.reactions[reaction].includes(userId)) {
+                    comment.reactions[reaction].push(userId)
+                }
+            } else {
+                // Remove user from reaction
+                if (comment.reactions[reaction]) {
+                    comment.reactions[reaction] = comment.reactions[
+                        reaction
+                    ].filter((id) => id !== userId)
+
+                    // Remove reaction type if no users left
+                    if (comment.reactions[reaction].length === 0) {
+                        delete comment.reactions[reaction]
+                    }
+                }
+            }
+
+            // Save the updated comment
+            await this.roomCommentRepository.save(comment)
+
+            // Reload with relations for return
+            const updatedComment = await this.roomCommentRepository.findOne({
+                where: { uuid: commentId },
+                relations: ['user', 'replyTo', 'replyTo.user']
+            })
+
+            return {
+                success: true,
+                comment: updatedComment
+            }
+        } catch (error) {
+            this.logger.error(
+                `Error handling comment reaction: ${error.message}`,
+                error.stack
+            )
+            return {
+                success: false,
+                error: 'Failed to update comment reaction'
+            }
+        }
     }
 
     /**
