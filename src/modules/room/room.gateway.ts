@@ -92,13 +92,11 @@ export class RoomGateway {
                 data.metadata
             )
 
-            // Get the comment with user information
-            const fullComment = await this.roomService.getRoomComments(
-                data.roomId,
-                1,
-                0
+            // Get the latest comment for the room
+            const allComments = await this.roomService.getRoomComments(
+                data.roomId
             )
-            const commentWithUser = fullComment.comments[0]
+            const commentWithUser = allComments[0] // First comment (latest due to DESC order)
 
             // Emit to all room participants
             this.server.to(`room:${data.roomId}`).emit('newComment', {
@@ -204,13 +202,9 @@ export class RoomGateway {
                 }
             }
 
-            const result = await this.roomService.getRoomComments(
-                data.roomId,
-                data.limit || 50,
-                data.offset || 0
-            )
+            const result = await this.roomService.getRoomComments(data.roomId)
 
-            return { status: 'success', ...result }
+            return { status: 'success', data: result }
         } catch (error) {
             return { status: 'error', message: error.message }
         }

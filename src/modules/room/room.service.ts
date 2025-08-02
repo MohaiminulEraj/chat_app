@@ -611,47 +611,34 @@ export class RoomService {
     }
 
     /**
-     * Get room comments with pagination
+     * Get room comments
      */
-    async getRoomComments(
-        roomId: string,
-        page: number = 1,
-        limit: number = 20
-    ): Promise<{ comments: RoomComment[]; pagination: any }> {
-        const offset = (page - 1) * limit
-
-        const [comments, total] = await this.roomCommentRepository.findAndCount(
-            {
-                where: { roomId, isVisible: true },
-                relations: ['user'],
-                order: { createdAt: 'DESC' },
-                take: limit,
-                skip: offset,
-                select: {
-                    id: true,
-                    message: true,
-                    messageType: true,
-                    createdAt: true,
-                    user: {
-                        id: true,
-                        displayName: true,
-                        avatarUrl: true
-                    }
+    async getRoomComments(roomId: string): Promise<any[]> {
+        const comments = await this.roomCommentRepository.find({
+            where: { roomId, isVisible: true },
+            relations: ['user'],
+            order: { createdAt: 'DESC' },
+            select: {
+                uuid: true,
+                userId: true,
+                message: true,
+                createdAt: true,
+                user: {
+                    uuid: true,
+                    name: true,
+                    avatarUrl: true
                 }
             }
-        )
+        })
 
-        const totalPages = Math.ceil(total / limit)
-
-        return {
-            comments,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages
-            }
-        }
+        return comments.map((comment) => ({
+            _id: comment.uuid,
+            senderId: comment.user.uuid,
+            senderName: comment.user.name,
+            senderImage: comment.user.avatarUrl || null,
+            content: comment.message,
+            createdAt: comment.createdAt
+        }))
     }
 
     /**

@@ -9,7 +9,6 @@ import {
     Param,
     Post,
     Put,
-    Query,
     Request,
     UploadedFile,
     UseGuards,
@@ -22,7 +21,6 @@ import {
     ApiConsumes,
     ApiOperation,
     ApiParam,
-    ApiQuery,
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
@@ -568,23 +566,11 @@ export class RoomController {
     @Get(':id/comments')
     @ApiOperation({
         summary: 'Get room comments',
-        description: 'Retrieve paginated comments for a specific room'
+        description: 'Retrieve comments for a specific room'
     })
     @ApiParam({
         name: 'id',
         description: 'Room UUID'
-    })
-    @ApiQuery({
-        name: 'page',
-        required: false,
-        description: 'Page number for pagination (default: 1)',
-        type: Number
-    })
-    @ApiQuery({
-        name: 'limit',
-        required: false,
-        description: 'Number of comments per page (default: 20)',
-        type: Number
     })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -598,38 +584,29 @@ export class RoomController {
                     example: 'Room comments retrieved successfully'
                 },
                 data: {
-                    type: 'object',
-                    properties: {
-                        comments: {
-                            type: 'array',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    id: { type: 'string' },
-                                    message: { type: 'string' },
-                                    messageType: { type: 'string' },
-                                    createdAt: {
-                                        type: 'string',
-                                        format: 'date-time'
-                                    },
-                                    user: {
-                                        type: 'object',
-                                        properties: {
-                                            id: { type: 'string' },
-                                            displayName: { type: 'string' },
-                                            avatarUrl: { type: 'string' }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        pagination: {
-                            type: 'object',
-                            properties: {
-                                page: { type: 'number' },
-                                limit: { type: 'number' },
-                                total: { type: 'number' },
-                                totalPages: { type: 'number' }
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            _id: {
+                                type: 'string',
+                                example: '64a7e14f4f5e123456789abc'
+                            },
+                            senderId: { type: 'string', example: 'user_001' },
+                            senderName: { type: 'string', example: 'Alice' },
+                            senderImage: {
+                                type: 'string',
+                                nullable: true,
+                                example: 'https://example.com/avatar.jpg'
+                            },
+                            content: {
+                                type: 'string',
+                                example: 'This is a comment!'
+                            },
+                            createdAt: {
+                                type: 'string',
+                                format: 'date-time',
+                                example: '2025-08-02T10:45:00Z'
                             }
                         }
                     }
@@ -637,17 +614,9 @@ export class RoomController {
             }
         }
     })
-    async getRoomComments(
-        @Param('id') roomId: string,
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 20
-    ) {
+    async getRoomComments(@Param('id') roomId: string) {
         try {
-            const comments = await this.roomService.getRoomComments(
-                roomId,
-                page,
-                limit
-            )
+            const comments = await this.roomService.getRoomComments(roomId)
             return {
                 statusCode: HttpStatus.OK,
                 message: 'Room comments retrieved successfully',
