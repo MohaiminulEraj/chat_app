@@ -271,6 +271,105 @@ export class RoomController {
         }
     }
 
+    @Get(':id/details')
+    @ApiOperation({
+        summary: 'Get room details by room ID',
+        description:
+            'Get comprehensive room information including owner, host, members, and room settings'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Room UUID'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Room details with owner, host, and members',
+        schema: {
+            type: 'object',
+            properties: {
+                _id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                country: { type: 'string' },
+                maxSeats: { type: 'number' },
+                type: {
+                    type: 'string',
+                    enum: ['public', 'private', 'group', 'voice']
+                },
+                isLocked: { type: 'boolean' },
+                roomAvatarUrl: { type: 'string', nullable: true },
+                roomOwner: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'number' },
+                        uuid: { type: 'string' },
+                        name: { type: 'string' },
+                        email: { type: 'string' },
+                        phoneNumber: { type: 'string' },
+                        userType: { type: 'string' },
+                        authProvider: { type: 'string' },
+                        avatarUrl: { type: 'string' },
+                        isEmailVerified: { type: 'boolean' },
+                        isPhoneVerified: { type: 'boolean' }
+                    }
+                },
+                host: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'number' },
+                        uuid: { type: 'string' },
+                        name: { type: 'string' },
+                        email: { type: 'string' },
+                        phoneNumber: { type: 'string' },
+                        userType: { type: 'string' },
+                        authProvider: { type: 'string' },
+                        avatarUrl: { type: 'string' },
+                        isEmailVerified: { type: 'boolean' },
+                        isPhoneVerified: { type: 'boolean' }
+                    }
+                },
+                members: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            _id: { type: 'string' },
+                            name: { type: 'string' },
+                            email: { type: 'string' },
+                            image: { type: 'string' },
+                            role: {
+                                type: 'string',
+                                enum: [
+                                    'owner',
+                                    'host',
+                                    'admin',
+                                    'speaker',
+                                    'listener'
+                                ]
+                            },
+                            status: { type: 'boolean' },
+                            join: { type: 'boolean' },
+                            invitedBy: { type: 'string' },
+                            blocked: { type: 'boolean' }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Room not found'
+    })
+    async getRoomDetails(@Param('id') roomId: string) {
+        const data = await this.roomService.getRoomDetails(roomId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Room details fetched successfully',
+            data
+        }
+    }
+
     @Get(':id/participants')
     @ApiOperation({
         summary: 'Get room participants',

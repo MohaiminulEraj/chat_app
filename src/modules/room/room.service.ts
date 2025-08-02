@@ -81,10 +81,16 @@ export class RoomService {
             )
         }
 
+        // Validate maxSeats
+        const maxSeats = data.maxSeats || 8
+        if (![6, 8, 10].includes(maxSeats)) {
+            throw new BadRequestException('maxSeats must be either 6, 8, or 10')
+        }
+
         const room = this.roomRepository.create({
             ...data,
             groupId,
-            maxSeats: data.maxSeats || 8,
+            maxSeats,
             ownerId: userId,
             isLocked: data.isPrivate || false,
             password: data.isPrivate ? data.password : null
@@ -312,6 +318,14 @@ export class RoomService {
         // Remove password from update data if present
         const { password, ...updateData } = data
 
+        // Validate maxSeats if it's being updated
+        if (
+            updateData.maxSeats !== undefined &&
+            ![6, 8, 10].includes(updateData.maxSeats)
+        ) {
+            throw new BadRequestException('maxSeats must be either 6, 8, or 10')
+        }
+
         Object.assign(room, updateData)
         return this.roomRepository.save(room)
     }
@@ -407,6 +421,37 @@ export class RoomService {
             throw new NotFoundException('No active room found for this group')
         }
 
+        return this.formatRoomDetails(room)
+    }
+
+    /**
+     * Get room details by room ID with roles and member information
+     */
+    async getRoomDetails(roomId: string): Promise<any> {
+        // Find the room by ID
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId, isActive: true },
+            relations: [
+                'owner',
+                'group',
+                'participants',
+                'participants.user',
+                'roleAssignments',
+                'roleAssignments.user'
+            ]
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        return this.formatRoomDetails(room)
+    }
+
+    /**
+     * Helper method to format room details consistently
+     */
+    private async formatRoomDetails(room: Room): Promise<any> {
         // Get role assignments
         const roleAssignments = await this.roomRoleRepository.find({
             where: { roomId: room.uuid, isActive: true },
@@ -461,6 +506,9 @@ export class RoomService {
             name: room.name,
             description: room.description,
             country: room.group?.country || 'Unknown',
+            maxSeats: room.maxSeats,
+            type: room.type,
+            isLocked: room.isLocked,
             roomAvatarUrl: room.roomAvatarUrl || null,
             roomOwner: ownerRole?.user
                 ? {

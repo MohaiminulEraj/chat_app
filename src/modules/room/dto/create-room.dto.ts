@@ -2,13 +2,12 @@ import { ApiProperty } from '@nestjs/swagger'
 import {
     IsBoolean,
     IsEnum,
+    IsIn,
     IsNotEmpty,
     IsNumber,
     IsOptional,
     IsString,
     IsUUID,
-    Max,
-    Min,
     ValidateIf
 } from 'class-validator'
 import { RoomType } from '../entities/room.entity'
@@ -40,14 +39,12 @@ export class CreateRoomDto {
     @ApiProperty({
         description: 'Maximum number of seats in the room',
         example: 8,
-        minimum: 1,
-        maximum: 50,
+        enum: [6, 8, 10],
         required: false,
         default: 8
     })
     @IsNumber()
-    @Min(1)
-    @Max(50)
+    @IsIn([6, 8, 10], { message: 'maxSeats must be either 6, 8, or 10' })
     @IsOptional()
     maxSeats?: number
 
