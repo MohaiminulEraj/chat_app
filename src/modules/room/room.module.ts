@@ -1,13 +1,15 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule
+import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift functionality
 import { GroupMember } from '../group/entities/group-member.entity'
+import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 import { RoomController } from './room.controller'
-// import { RoomGateway } from './room.gateway' // Temporarily disabled to fix WebSocket conflicts
+import { RoomGateway } from './room.gateway' // Re-enable the gateway
 import { RoomService } from './room.service'
 
 @Module({
@@ -17,14 +19,16 @@ import { RoomService } from './room.service'
             RoomParticipant,
             RoomWaitingList,
             RoomRoleAssignment,
+            RoomComment,
             GroupMember
         ]),
-        AuthModule // Add AuthModule to provide JwtService for WsJwtGuard
+        AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
+        GiftModule // Add GiftModule for gift functionality
     ],
     controllers: [RoomController],
     providers: [
-        RoomService
-        // RoomGateway  // Temporarily disabled to fix WebSocket conflicts
+        RoomService,
+        RoomGateway // Re-enable the gateway
     ],
     exports: [RoomService]
 })

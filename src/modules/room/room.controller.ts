@@ -3,10 +3,12 @@ import {
     Controller,
     Delete,
     Get,
+    HttpException,
     HttpStatus,
     Param,
     Post,
     Put,
+    Query,
     Request,
     UseGuards
 } from '@nestjs/common'
@@ -15,6 +17,7 @@ import {
     ApiBody,
     ApiOperation,
     ApiParam,
+    ApiQuery,
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
@@ -473,5 +476,104 @@ export class RoomController {
     })
     getUserRoles(@Param('id') roomId: string, @Param('userId') userId: string) {
         return this.roomService.getUserRolesInRoom(roomId, userId)
+    }
+
+    @Get(':id/comments')
+    @ApiOperation({
+        summary: 'Get room comments',
+        description: 'Retrieve paginated comments for a specific room'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Room UUID'
+    })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        description: 'Page number for pagination (default: 1)',
+        type: Number
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        description: 'Number of comments per page (default: 20)',
+        type: Number
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Room comments retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room comments retrieved successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        comments: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'string' },
+                                    message: { type: 'string' },
+                                    messageType: { type: 'string' },
+                                    createdAt: {
+                                        type: 'string',
+                                        format: 'date-time'
+                                    },
+                                    user: {
+                                        type: 'object',
+                                        properties: {
+                                            id: { type: 'string' },
+                                            displayName: { type: 'string' },
+                                            avatarUrl: { type: 'string' }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        pagination: {
+                            type: 'object',
+                            properties: {
+                                page: { type: 'number' },
+                                limit: { type: 'number' },
+                                total: { type: 'number' },
+                                totalPages: { type: 'number' }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getRoomComments(
+        @Param('id') roomId: string,
+        @Query('page') page: number = 1,
+        @Query('limit') limit: number = 20
+    ) {
+        try {
+            const comments = await this.roomService.getRoomComments(
+                roomId,
+                page,
+                limit
+            )
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Room comments retrieved successfully',
+                data: comments
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to retrieve room comments'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
     }
 }

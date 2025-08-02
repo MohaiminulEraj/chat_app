@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { GroupMember } from '../group/entities/group-member.entity'
+import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
@@ -25,7 +26,9 @@ export class RoomService {
         @InjectRepository(GroupMember)
         private groupMemberRepository: Repository<GroupMember>,
         @InjectRepository(RoomRoleAssignment)
-        private roomRoleRepository: Repository<RoomRoleAssignment>
+        private roomRoleRepository: Repository<RoomRoleAssignment>,
+        @InjectRepository(RoomComment)
+        private roomCommentRepository: Repository<RoomComment>
     ) {}
 
     async createRoom(
@@ -515,5 +518,124 @@ export class RoomService {
             { roomId, userId, role, isActive: true },
             { isActive: false, revokedAt: new Date() }
         )
+    }
+
+    /**
+     * Add a comment to a room
+     */
+    async addRoomComment(
+        roomId: string,
+        userId: string,
+        message: string,
+        messageType: 'text' | 'emoji' | 'sticker' | 'system' = 'text',
+        replyToId?: string,
+        metadata?: any
+    ): Promise<RoomComment> {
+        // Verify the user is a participant in the room
+        const participant = await this.participantRepository.findOne({
+            where: { roomId, userId }
+        })
+
+        if (!participant) {
+            throw new ForbiddenException(
+                'You must be a participant in the room to comment'
+            )
+        }
+
+        // If replying to a comment, verify it exists
+        if (replyToId) {
+            const replyToComment = await this.roomCommentRepository.findOne({
+                where: { uuid: replyToId, roomId }
+            })
+
+            if (!replyToComment) {
+                throw new NotFoundException('Comment to reply to not found')
+            }
+        }
+
+        const comment = this.roomCommentRepository.create({
+            roomId,
+            userId,
+            message,
+            messageType,
+            replyToId,
+            metadata
+        })
+
+        return await this.roomCommentRepository.save(comment)
+    }
+
+    /**
+     * Get room comments with pagination
+     */
+    async getRoomComments(
+        roomId: string,
+        page: number = 1,
+        limit: number = 20
+    ): Promise<{ comments: RoomComment[]; pagination: any }> {
+        const offset = (page - 1) * limit
+
+        const [comments, total] = await this.roomCommentRepository.findAndCount(
+            {
+                where: { roomId, isVisible: true },
+                relations: ['user'],
+                order: { createdAt: 'DESC' },
+                take: limit,
+                skip: offset,
+                select: {
+                    id: true,
+                    message: true,
+                    messageType: true,
+                    createdAt: true,
+                    user: {
+                        id: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                }
+            }
+        )
+
+        const totalPages = Math.ceil(total / limit)
+
+        return {
+            comments,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages
+            }
+        }
+    }
+
+    /**
+     * Delete a room comment (only by the author or room moderators)
+     */
+    async deleteRoomComment(commentId: string, userId: string): Promise<void> {
+        const comment = await this.roomCommentRepository.findOne({
+            where: { uuid: commentId },
+            relations: ['room']
+        })
+
+        if (!comment) {
+            throw new NotFoundException('Comment not found')
+        }
+
+        // Check if user is the author or has moderation permissions
+        const isAuthor = comment.userId === userId
+        const userRoles = await this.getUserRolesInRoom(comment.roomId, userId)
+        const canModerate =
+            userRoles.includes(RoomRole.OWNER) ||
+            userRoles.includes(RoomRole.HOST) ||
+            userRoles.includes(RoomRole.ADMIN)
+
+        if (!isAuthor && !canModerate) {
+            throw new ForbiddenException(
+                'You can only delete your own comments or have moderation permissions'
+            )
+        }
+
+        await this.roomCommentRepository.update(commentId, { isVisible: false })
     }
 }
