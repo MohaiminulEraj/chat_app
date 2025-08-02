@@ -530,7 +530,10 @@ export class RoomService {
         )
 
         // Update room owner in the room entity
-        await this.roomRepository.update(roomId, { ownerId: newOwnerId })
+        await this.roomRepository.update(
+            { uuid: roomId },
+            { ownerId: newOwnerId }
+        )
     }
 
     /**
@@ -761,9 +764,10 @@ export class RoomService {
             )
 
             // Update room with new avatar URL
-            await this.roomRepository.update(roomId, {
-                roomAvatarUrl: uploadResult.secure_url
-            })
+            await this.roomRepository.update(
+                { uuid: roomId },
+                { roomAvatarUrl: uploadResult.secure_url }
+            )
 
             return { roomAvatarUrl: uploadResult.secure_url }
         } catch (error) {
