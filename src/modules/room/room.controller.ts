@@ -28,6 +28,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AssignRoomRoleDto, TransferOwnershipDto } from './dto/room-role.dto'
 import { CreateCommentDto } from './dto/create-comment.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
+import {
+    JoinRoomWithSeatDto,
+    ToggleSeatLockDto
+} from './dto/seat-management.dto'
 import { JoinRoomDto } from './dto/join-room.dto'
 import { UpdateRoomDto } from './dto/update-room.dto'
 import { UploadRoomAvatarDto } from './dto/upload-room-avatar.dto'
@@ -514,13 +518,13 @@ export class RoomController {
     @ApiOperation({
         summary: 'Join a room',
         description:
-            'Join a room. If the room is private, a password is required.'
+            'Join a room with optional seat selection. If the room is private, a password is required. Seat 0 is reserved for host/owner.'
     })
     @ApiParam({
         name: 'id',
         description: 'Room UUID'
     })
-    @ApiBody({ type: JoinRoomDto })
+    @ApiBody({ type: JoinRoomWithSeatDto })
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: 'Successfully joined the room',
@@ -535,12 +539,41 @@ export class RoomController {
                 data: {
                     type: 'object',
                     properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
-                        userId: { type: 'string' },
-                        roomId: { type: 'string' },
-                        joinedAt: { type: 'string', format: 'date-time' },
-                        isActive: { type: 'boolean' }
+                        participant: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'number' },
+                                uuid: { type: 'string' },
+                                userId: { type: 'string' },
+                                roomId: { type: 'string' },
+                                seatNumber: { type: 'number' },
+                                joinedAt: {
+                                    type: 'string',
+                                    format: 'date-time'
+                                },
+                                isActive: { type: 'boolean' }
+                            }
+                        },
+                        seatIndex: {
+                            type: 'number',
+                            example: 1,
+                            description: '0-based seat index'
+                        },
+                        seats: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    index: { type: 'number' },
+                                    locked: { type: 'boolean' },
+                                    occupied: { type: 'boolean' },
+                                    occupantUserId: {
+                                        type: 'string',
+                                        nullable: true
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -548,11 +581,12 @@ export class RoomController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: 'Invalid password for private room'
+        description:
+            'Invalid password for private room or seat 0 reserved for host'
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: 'Room is full'
+        description: 'Room is full or seat is locked/occupied'
     })
     @ApiResponse({
         status: HttpStatus.CONFLICT,
@@ -560,18 +594,27 @@ export class RoomController {
     })
     async joinRoom(
         @Param('id') roomId: string,
-        @Body() joinRoomDto: JoinRoomDto,
+        @Body() joinRoomDto: JoinRoomWithSeatDto,
         @Request() req: any
     ) {
-        const data = await this.roomService.joinRoom(
+        const participant = await this.roomService.joinRoom(
             roomId,
             req.user.uuid,
-            joinRoomDto.password
+            joinRoomDto.password,
+            joinRoomDto.seatNumber
         )
+
+        // Get updated seat information
+        const seats = await this.roomService.getRoomSeats(roomId)
+
         return {
             statusCode: HttpStatus.CREATED,
             message: 'Successfully joined the room',
-            data
+            data: {
+                participant,
+                seatIndex: participant.seatNumber - 1, // Convert to 0-based
+                seats
+            }
         }
     }
 
@@ -1065,6 +1108,183 @@ export class RoomController {
                     statusCode: HttpStatus.BAD_REQUEST,
                     message:
                         error.message || 'Failed to fetch recommended rooms'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    // ==================== SEAT MANAGEMENT ENDPOINTS ====================
+
+    @Get(':id/seats')
+    @ApiOperation({
+        summary: 'Get room seats',
+        description:
+            'Get current seat state for a room including lock status and occupancy'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Room UUID'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Room seats retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room seats retrieved successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            index: {
+                                type: 'number',
+                                example: 0,
+                                description: '0-based seat index'
+                            },
+                            locked: { type: 'boolean', example: false },
+                            occupied: { type: 'boolean', example: true },
+                            occupantUserId: {
+                                type: 'string',
+                                nullable: true,
+                                example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Room not found'
+    })
+    async getRoomSeats(@Param('id') roomId: string) {
+        try {
+            const seats = await this.roomService.getRoomSeats(roomId)
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Room seats retrieved successfully',
+                data: seats
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to retrieve room seats'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    @Post(':id/seats/toggle-lock')
+    @ApiOperation({
+        summary: 'Toggle seat lock status',
+        description:
+            'Lock or unlock a specific seat. Only room host/owner can perform this action.'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Room UUID'
+    })
+    @ApiBody({ type: ToggleSeatLockDto })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Seat lock status updated successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Seat lock status updated successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: true },
+                        seatIndex: { type: 'number', example: 3 },
+                        isLocked: { type: 'boolean', example: true },
+                        seats: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    index: { type: 'number' },
+                                    locked: { type: 'boolean' },
+                                    occupied: { type: 'boolean' },
+                                    occupantUserId: {
+                                        type: 'string',
+                                        nullable: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Only room owner or host can lock/unlock seats'
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Cannot lock occupied seat or invalid seat index'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Room not found'
+    })
+    async toggleSeatLock(
+        @Param('id') roomId: string,
+        @Body() toggleSeatLockDto: ToggleSeatLockDto,
+        @Request() req: any
+    ) {
+        try {
+            const result = await this.roomService.toggleSeatLock(
+                roomId,
+                toggleSeatLockDto.seatIndex,
+                toggleSeatLockDto.isLocked,
+                req.user.uuid
+            )
+
+            // Get updated seat information
+            const seats = await this.roomService.getRoomSeats(roomId)
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Seat lock status updated successfully',
+                data: {
+                    ...result,
+                    seats
+                }
+            }
+        } catch (error) {
+            if (
+                error.message.includes('permission') ||
+                error.message.includes('Only')
+            ) {
+                throw new HttpException(
+                    {
+                        statusCode: HttpStatus.FORBIDDEN,
+                        message: error.message
+                    },
+                    HttpStatus.FORBIDDEN
+                )
+            }
+
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to toggle seat lock'
                 },
                 HttpStatus.BAD_REQUEST
             )

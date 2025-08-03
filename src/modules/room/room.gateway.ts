@@ -40,6 +40,29 @@ export class RoomGateway
     >()
     private roomUserCounts = new Map<string, number>()
 
+    // In-memory seat state tracking for real-time updates
+    private roomSeats = new Map<
+        string,
+        Array<{
+            index: number
+            locked: boolean
+            occupied: boolean
+            occupantUserId: string | null
+        }>
+    >()
+
+    // User activity tracking for better monitoring
+    private userLastActivity = new Map<string, Date>()
+    private userActionCounts = new Map<
+        string,
+        {
+            joinRoom: number
+            sendComment: number
+            seatActions: number
+            totalActions: number
+        }
+    >()
+
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService
@@ -49,6 +72,15 @@ export class RoomGateway
         this.logger.log('🚀 Room Gateway initialized successfully')
         this.logger.log(`📡 WebSocket namespace: /rooms`)
         this.logger.log(`🔄 CORS enabled for all origins`)
+        this.logger.log(`📊 Real-time tracking initialized:`)
+        this.logger.log(`   ├─ Connected users tracking: Ready`)
+        this.logger.log(`   ├─ Room user counts tracking: Ready`)
+        this.logger.log(`   └─ Room seats state tracking: Ready`)
+
+        // Log periodic statistics every 30 seconds
+        setInterval(() => {
+            this.logSystemStatistics()
+        }, 30000)
     }
 
     handleConnection(client: Socket) {
@@ -76,7 +108,7 @@ export class RoomGateway
 
             this.logger.log(
                 `🔌 User connected: ${userName} (${userId}) | Socket: ${client.id} | ` +
-                    `Total connections: ${this.connectedUsers.size}`
+                    `Total connections: ${this.connectedUsers.size} | IP: ${client.handshake?.address || 'unknown'}`
             )
 
             // Send connection acknowledgment
@@ -99,25 +131,54 @@ export class RoomGateway
             const userInfo = this.connectedUsers.get(client.id)
 
             if (userInfo) {
-                // Leave all rooms user was in
-                userInfo.rooms.forEach((roomId) => {
-                    const currentCount = this.roomUserCounts.get(roomId) || 0
-                    const newCount = Math.max(0, currentCount - 1)
-                    this.roomUserCounts.set(roomId, newCount)
+                // Leave all rooms user was in and handle seat cleanup
+                userInfo.rooms.forEach(async (roomId) => {
+                    try {
+                        // Remove user from room in database
+                        await this.roomService.leaveRoom(
+                            roomId,
+                            userInfo.userId
+                        )
 
-                    // Notify room about user leaving
-                    client.to(`room:${roomId}`).emit('userLeft', {
-                        roomId,
-                        userId: userInfo.userId,
-                        userName: userInfo.userName
-                    })
+                        // Update seat state in memory
+                        await this.updateRoomSeatsState(roomId)
 
-                    this.logger.log(
-                        `📤 User ${userInfo.userName} left room ${roomId} | Room users: ${newCount}`
-                    )
+                        // Get updated seat information
+                        const updatedSeats = this.roomSeats.get(roomId) || []
+
+                        const currentCount =
+                            this.roomUserCounts.get(roomId) || 0
+                        const newCount = Math.max(0, currentCount - 1)
+                        this.roomUserCounts.set(roomId, newCount)
+
+                        // Notify room about user leaving and seat update
+                        client.to(`room:${roomId}`).emit('userLeft', {
+                            roomId,
+                            userId: userInfo.userId,
+                            userName: userInfo.userName
+                        })
+
+                        // Broadcast updated seat state
+                        this.server.to(`room:${roomId}`).emit('seatUpdated', {
+                            roomId,
+                            seats: updatedSeats
+                        })
+
+                        this.logger.log(
+                            `📤 User ${userInfo.userName} disconnected and left room ${roomId} | Room users: ${newCount}`
+                        )
+                    } catch (error) {
+                        this.logger.error(
+                            `❌ Error handling disconnect for room ${roomId}: ${error.message}`
+                        )
+                    }
                 })
 
                 this.connectedUsers.delete(client.id)
+
+                // Clean up user activity tracking
+                this.userLastActivity.delete(userInfo.userId)
+                // Keep action counts for statistics but clean up old entries periodically
 
                 this.logger.log(
                     `🔌 User disconnected: ${userInfo.userName} (${userInfo.userId}) | ` +
@@ -137,14 +198,17 @@ export class RoomGateway
     @SubscribeMessage('joinRoom')
     async handleJoinRoom(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { roomId: string }
+        @MessageBody()
+        data: { roomId: string; seatNumber?: number; password?: string }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId}`
+            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId}${
+                data.seatNumber !== undefined ? ` seat ${data.seatNumber}` : ''
+            }`
         )
 
         try {
@@ -154,7 +218,9 @@ export class RoomGateway
 
             const participant = await this.roomService.joinRoom(
                 data.roomId,
-                userId
+                userId,
+                data.password,
+                data.seatNumber
             )
 
             // Update tracking
@@ -169,21 +235,39 @@ export class RoomGateway
             // Join socket room
             client.join(`room:${data.roomId}`)
 
-            // Notify all room participants
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(data.roomId) || []
+
+            // Notify all room participants about user joining
             this.server.to(`room:${data.roomId}`).emit('userJoined', {
                 roomId: data.roomId,
                 participant,
-                userName
+                userName,
+                seatIndex: participant.seatNumber - 1 // Convert to 0-based
+            })
+
+            // Broadcast updated seat state
+            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
+                roomId: data.roomId,
+                seats: updatedSeats
             })
 
             this.logger.log(
                 `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} | ` +
-                    `Seat: ${participant.seatNumber} | Room users: ${newCount}`
+                    `Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
             )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'joinRoom')
 
             return {
                 status: 'success',
                 participant,
+                seatIndex: participant.seatNumber - 1, // Convert to 0-based
+                seats: updatedSeats,
                 roomUserCount: newCount,
                 message: `Successfully joined room ${data.roomId}`
             }
@@ -229,11 +313,25 @@ export class RoomGateway
             // Leave socket room
             client.leave(`room:${roomId}`)
 
-            // Notify all room participants
+            // Update seat state in memory
+            await this.updateRoomSeatsState(roomId)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(roomId) || []
+
+            // Notify all room participants about user leaving
             this.server.to(`room:${roomId}`).emit('userLeft', {
                 roomId,
                 userId,
                 userName
+            })
+
+            // Broadcast updated seat state
+            this.server.to(`room:${roomId}`).emit('seatUpdated', {
+                roomId,
+                seats: updatedSeats,
+                action: 'user_left',
+                userId
             })
 
             this.logger.log(
@@ -243,6 +341,7 @@ export class RoomGateway
 
             return {
                 status: 'success',
+                seats: updatedSeats,
                 roomUserCount: newCount,
                 message: `Successfully left room ${roomId}`
             }
@@ -336,6 +435,9 @@ export class RoomGateway
             this.logger.log(
                 `✅ SEND_COMMENT success: User ${userName} (${userId}) sent comment ${comment.uuid} to room ${data.roomId}`
             )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'sendComment')
 
             return {
                 status: 'success',
@@ -795,6 +897,63 @@ export class RoomGateway
         }
     }
 
+    @SubscribeMessage('getSystemStats')
+    async handleGetSystemStats(@ConnectedSocket() client: Socket) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📊 GET_SYSTEM_STATS: User ${userName} (${userId}) requested system statistics`
+        )
+
+        try {
+            const totalConnections = this.connectedUsers.size
+            const activeRooms = this.roomUserCounts.size
+            const totalRoomUsers = Array.from(
+                this.roomUserCounts.values()
+            ).reduce((sum, count) => sum + count, 0)
+            const totalSeatsTracked = Array.from(
+                this.roomSeats.values()
+            ).reduce((sum, seats) => sum + seats.length, 0)
+
+            // Get unique users across all rooms
+            const uniqueUsers = new Set<string>()
+            this.connectedUsers.forEach((user) => uniqueUsers.add(user.userId))
+
+            // Get user activity for this user
+            const userActivity = this.userActionCounts.get(userId)
+            const lastActivity = this.userLastActivity.get(userId)
+
+            return {
+                status: 'success',
+                systemStats: {
+                    totalConnections,
+                    uniqueUsers: uniqueUsers.size,
+                    activeRooms,
+                    totalRoomUsers,
+                    totalSeatsTracked,
+                    serverUptime: process.uptime
+                        ? Math.floor(process.uptime())
+                        : null
+                },
+                userActivity: userActivity
+                    ? {
+                          ...userActivity,
+                          lastActivity: lastActivity?.toISOString()
+                      }
+                    : null
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_SYSTEM_STATS failed: User ${userName} (${userId}) failed to get system stats | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+            return { status: 'error', message: error.message }
+        }
+    }
+
     // Add comment reaction functionality
     @SubscribeMessage('reactToComment')
     async handleReactToComment(
@@ -1139,5 +1298,256 @@ export class RoomGateway
             `📤 LEAVE_ROOM (legacy): Redirecting to leaveRoom handler`
         )
         return this.handleLeaveRoom(client, data.roomId)
+    }
+
+    // ==================== SEAT MANAGEMENT ====================
+
+    @SubscribeMessage('requestSeat')
+    async handleRequestSeat(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; seatIndex?: number }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `🪑 REQUEST_SEAT: User ${userName} (${userId}) requesting seat${
+                data.seatIndex !== undefined ? ` ${data.seatIndex}` : ' (auto)'
+            } in room ${data.roomId}`
+        )
+
+        try {
+            // This will be handled through joinRoom with seat parameter
+            return await this.handleJoinRoom(client, {
+                roomId: data.roomId,
+                seatNumber: data.seatIndex
+            })
+        } catch (error) {
+            this.logger.error(
+                `❌ REQUEST_SEAT failed: ${error.message}`,
+                error.stack
+            )
+            return { status: 'error', message: error.message }
+        }
+    }
+
+    @SubscribeMessage('toggleSeatLock')
+    async handleToggleSeatLock(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: { roomId: string; seatIndex: number; isLocked: boolean }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `🔒 TOGGLE_SEAT_LOCK: User ${userName} (${userId}) ${
+                data.isLocked ? 'locking' : 'unlocking'
+            } seat ${data.seatIndex} in room ${data.roomId}`
+        )
+
+        try {
+            if (!data.roomId || data.seatIndex === undefined) {
+                throw new Error('Room ID and seat index are required')
+            }
+
+            const result = await this.roomService.toggleSeatLock(
+                data.roomId,
+                data.seatIndex,
+                data.isLocked,
+                userId
+            )
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(data.roomId) || []
+
+            // Broadcast updated seat state to all room participants
+            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
+                roomId: data.roomId,
+                seats: updatedSeats,
+                action: 'lock_toggle',
+                seatIndex: data.seatIndex,
+                isLocked: data.isLocked,
+                lockedBy: userId
+            })
+
+            this.logger.log(
+                `✅ TOGGLE_SEAT_LOCK success: Seat ${data.seatIndex} ${
+                    data.isLocked ? 'locked' : 'unlocked'
+                } in room ${data.roomId}`
+            )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'seatActions')
+
+            return {
+                status: 'success',
+                result,
+                seats: updatedSeats,
+                message: `Seat ${data.seatIndex} ${
+                    data.isLocked ? 'locked' : 'unlocked'
+                } successfully`
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ TOGGLE_SEAT_LOCK failed: ${error.message}`,
+                error.stack
+            )
+            return { status: 'error', message: error.message }
+        }
+    }
+
+    @SubscribeMessage('getRoomSeats')
+    async handleGetRoomSeats(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `🪑 GET_ROOM_SEATS: User ${userName} (${userId}) requesting seats for room ${data.roomId}`
+        )
+
+        try {
+            if (!data.roomId) {
+                throw new Error('Room ID is required')
+            }
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Get current seat information
+            const seats = this.roomSeats.get(data.roomId) || []
+
+            this.logger.log(
+                `✅ GET_ROOM_SEATS success: Returned ${seats.length} seats for room ${data.roomId}`
+            )
+
+            return {
+                status: 'success',
+                seats,
+                roomId: data.roomId,
+                message: 'Room seats retrieved successfully'
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_ROOM_SEATS failed: ${error.message}`,
+                error.stack
+            )
+            return { status: 'error', message: error.message }
+        }
+    }
+
+    // ==================== HELPER METHODS ====================
+
+    /**
+     * Update room seats state in memory from database
+     */
+    private async updateRoomSeatsState(roomId: string): Promise<void> {
+        try {
+            const seats = await this.roomService.getRoomSeats(roomId)
+            this.roomSeats.set(roomId, seats)
+        } catch (error) {
+            this.logger.error(
+                `❌ Failed to update seat state for room ${roomId}: ${error.message}`
+            )
+        }
+    }
+
+    /**
+     * Track user activity for monitoring
+     */
+    private trackUserActivity(
+        userId: string,
+        action: 'joinRoom' | 'sendComment' | 'seatActions'
+    ): void {
+        // Update last activity timestamp
+        this.userLastActivity.set(userId, new Date())
+
+        // Update action counts
+        const currentCounts = this.userActionCounts.get(userId) || {
+            joinRoom: 0,
+            sendComment: 0,
+            seatActions: 0,
+            totalActions: 0
+        }
+
+        currentCounts[action]++
+        currentCounts.totalActions++
+        this.userActionCounts.set(userId, currentCounts)
+    }
+
+    /**
+     * Log periodic system statistics for monitoring
+     */
+    private logSystemStatistics(): void {
+        const totalConnections = this.connectedUsers.size
+        const activeRooms = this.roomUserCounts.size
+        const totalRoomUsers = Array.from(this.roomUserCounts.values()).reduce(
+            (sum, count) => sum + count,
+            0
+        )
+        const totalSeatsTracked = Array.from(this.roomSeats.values()).reduce(
+            (sum, seats) => sum + seats.length,
+            0
+        )
+
+        // Get unique users across all rooms
+        const uniqueUsers = new Set<string>()
+        this.connectedUsers.forEach((user) => uniqueUsers.add(user.userId))
+
+        // Get room activity breakdown
+        const roomActivity = Array.from(this.roomUserCounts.entries())
+            .filter(([roomId, count]) => count > 0)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5) // Top 5 most active rooms
+
+        // Get most active users
+        const activeUsers = Array.from(this.userActionCounts.entries())
+            .sort(([, a], [, b]) => b.totalActions - a.totalActions)
+            .slice(0, 3) // Top 3 most active users
+
+        this.logger.log(
+            `📊 SYSTEM STATISTICS:\n` +
+                `   ├─ 🔌 Total WebSocket connections: ${totalConnections}\n` +
+                `   ├─ 👥 Unique users connected: ${uniqueUsers.size}\n` +
+                `   ├─ 🏠 Active rooms: ${activeRooms}\n` +
+                `   ├─ 👤 Total room participants: ${totalRoomUsers}\n` +
+                `   ├─ 🪑 Total seats tracked: ${totalSeatsTracked}\n` +
+                `   ├─ 🔥 Top active rooms: ${
+                    roomActivity.length > 0
+                        ? roomActivity
+                              .map(([roomId, count]) => `${roomId}(${count})`)
+                              .join(', ')
+                        : 'None'
+                }\n` +
+                `   └─ ⭐ Most active users: ${
+                    activeUsers.length > 0
+                        ? activeUsers
+                              .map(
+                                  ([userId, counts]) =>
+                                      `${userId}(${counts.totalActions})`
+                              )
+                              .join(', ')
+                        : 'None'
+                }`
+        )
+
+        // Log memory usage if available
+        if (typeof process !== 'undefined' && process.memoryUsage) {
+            const memory = process.memoryUsage()
+            this.logger.debug(
+                `💾 Memory usage: RSS: ${Math.round(memory.rss / 1024 / 1024)}MB | ` +
+                    `Heap Used: ${Math.round(memory.heapUsed / 1024 / 1024)}MB | ` +
+                    `Heap Total: ${Math.round(memory.heapTotal / 1024 / 1024)}MB`
+            )
+        }
     }
 }

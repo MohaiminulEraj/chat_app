@@ -15,6 +15,7 @@ import { User } from '../user/entities/user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
+import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 
@@ -37,6 +38,8 @@ export class RoomService {
         private userRepository: Repository<User>,
         @InjectRepository(RoomRoleAssignment)
         private roomRoleRepository: Repository<RoomRoleAssignment>,
+        @InjectRepository(RoomSeat)
+        private roomSeatRepository: Repository<RoomSeat>,
         @InjectRepository(RoomComment)
         private roomCommentRepository: Repository<RoomComment>,
         private cloudinaryService: CloudinaryService
@@ -99,6 +102,9 @@ export class RoomService {
         const savedRoom = await this.roomRepository.save(room)
         const finalRoom = Array.isArray(savedRoom) ? savedRoom[0] : savedRoom
 
+        // Initialize seats for the room
+        await this.initializeRoomSeats(finalRoom.uuid, maxSeats)
+
         // If we have a current user, assign them as both owner and host by default
         if (currentUser?.uuid && finalRoom.uuid) {
             try {
@@ -117,6 +123,9 @@ export class RoomService {
                     RoomRole.HOST,
                     currentUser.uuid
                 )
+
+                // Automatically join the owner to seat 0 (host seat)
+                await this.joinRoomWithSeat(finalRoom.uuid, currentUser.uuid, 0)
             } catch (error) {
                 console.error('Error assigning default roles:', error)
                 // Continue without throwing error as room is already created
@@ -142,7 +151,8 @@ export class RoomService {
     async joinRoom(
         roomId: string,
         userId: string,
-        password?: string
+        password?: string,
+        seatNumber?: number
     ): Promise<RoomParticipant> {
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId },
@@ -175,22 +185,40 @@ export class RoomService {
             throw new ConflictException('User is already in the room')
         }
 
-        // Find available seat number
-        const occupiedSeats = room.participants.map((p) => p.seatNumber)
-        let seatNumber = 1
-        for (seatNumber = 1; seatNumber <= room.maxSeats; seatNumber++) {
-            if (!occupiedSeats.includes(seatNumber)) {
-                break
-            }
+        // Determine seat assignment
+        let assignedSeat: number
+
+        if (seatNumber !== undefined) {
+            // Validate requested seat
+            assignedSeat = await this.validateAndAssignSeat(
+                roomId,
+                seatNumber,
+                userId
+            )
+        } else {
+            // Auto-assign next available seat (excluding seat 0 unless user is host/owner)
+            assignedSeat = await this.findNextAvailableSeat(roomId, userId)
         }
 
         const participant = this.participantRepository.create({
             userId,
             roomId,
-            seatNumber
+            seatNumber: assignedSeat + 1 // Convert 0-based to 1-based for storage
         })
 
         return this.participantRepository.save(participant)
+    }
+
+    /**
+     * Join room with specific seat assignment (internal method)
+     */
+    async joinRoomWithSeat(
+        roomId: string,
+        userId: string,
+        seatIndex: number,
+        password?: string
+    ): Promise<RoomParticipant> {
+        return this.joinRoom(roomId, userId, password, seatIndex)
     }
 
     async leaveRoom(roomId: string, userId: string): Promise<void> {
@@ -501,17 +529,8 @@ export class RoomService {
             }
         })
 
-        // Build seats array
-        const seats = []
-        for (let i = 0; i < room.maxSeats; i++) {
-            const participant = participants.find((p) => p.seatNumber === i + 1)
-            seats.push({
-                index: i,
-                locked: false, // You may want to add seat locking logic later
-                occupied: !!participant,
-                occupantUserId: participant?.user.uuid || null
-            })
-        }
+        // Build seats array with lock information
+        const seats = await this.getRoomSeats(room.uuid)
 
         // Format response to match the new structure
         return {
@@ -962,5 +981,247 @@ export class RoomService {
         }
 
         return recommendedRooms
+    }
+
+    // ==================== SEAT MANAGEMENT METHODS ====================
+
+    /**
+     * Initialize seat records for a room
+     */
+    async initializeRoomSeats(roomId: string, maxSeats: number): Promise<void> {
+        const seats = []
+        for (let i = 0; i < maxSeats; i++) {
+            seats.push(
+                this.roomSeatRepository.create({
+                    roomId,
+                    seatIndex: i,
+                    isLocked: false
+                })
+            )
+        }
+        await this.roomSeatRepository.save(seats)
+    }
+
+    /**
+     * Validate and assign a specific seat to a user
+     */
+    async validateAndAssignSeat(
+        roomId: string,
+        seatIndex: number,
+        userId: string
+    ): Promise<number> {
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Validate seat index is within bounds
+        if (seatIndex < 0 || seatIndex >= room.maxSeats) {
+            throw new BadRequestException(
+                `Seat index must be between 0 and ${room.maxSeats - 1}`
+            )
+        }
+
+        // Check if seat 0 is being requested (host seat)
+        if (seatIndex === 0) {
+            const userRoles = await this.getUserRolesInRoom(roomId, userId)
+            if (
+                !userRoles.includes(RoomRole.OWNER) &&
+                !userRoles.includes(RoomRole.HOST)
+            ) {
+                throw new ForbiddenException(
+                    'Seat 0 is reserved for host/owner only'
+                )
+            }
+        }
+
+        // Check if seat is locked
+        const seatInfo = await this.roomSeatRepository.findOne({
+            where: { roomId, seatIndex }
+        })
+
+        if (seatInfo?.isLocked) {
+            throw new BadRequestException(
+                `Seat ${seatIndex} is currently locked`
+            )
+        }
+
+        // Check if seat is already occupied
+        const existingParticipant = await this.participantRepository.findOne({
+            where: { roomId, seatNumber: seatIndex + 1 } // Convert to 1-based for DB
+        })
+
+        if (existingParticipant) {
+            throw new ConflictException(`Seat ${seatIndex} is already occupied`)
+        }
+
+        return seatIndex
+    }
+
+    /**
+     * Find next available seat for a user (auto-assignment)
+     */
+    async findNextAvailableSeat(
+        roomId: string,
+        userId: string
+    ): Promise<number> {
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId },
+            relations: ['participants']
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Get locked seats
+        const lockedSeats = await this.roomSeatRepository.find({
+            where: { roomId, isLocked: true }
+        })
+        const lockedSeatIndexes = lockedSeats.map((seat) => seat.seatIndex)
+
+        // Get occupied seats
+        const occupiedSeats = room.participants.map((p) => p.seatNumber - 1) // Convert to 0-based
+
+        // Check if user can use seat 0 (host seat)
+        const userRoles = await this.getUserRolesInRoom(roomId, userId)
+        const canUseSeat0 =
+            userRoles.includes(RoomRole.OWNER) ||
+            userRoles.includes(RoomRole.HOST)
+
+        // Find first available seat
+        const startIndex = canUseSeat0 ? 0 : 1
+        for (let i = startIndex; i < room.maxSeats; i++) {
+            if (!lockedSeatIndexes.includes(i) && !occupiedSeats.includes(i)) {
+                return i
+            }
+        }
+
+        throw new BadRequestException('No available seats in the room')
+    }
+
+    /**
+     * Toggle seat lock status (only host/owner can lock seats)
+     */
+    async toggleSeatLock(
+        roomId: string,
+        seatIndex: number,
+        isLocked: boolean,
+        userId: string
+    ): Promise<{ success: boolean; seatIndex: number; isLocked: boolean }> {
+        // Verify user has permission to lock seats
+        const userRoles = await this.getUserRolesInRoom(roomId, userId)
+        if (
+            !userRoles.includes(RoomRole.OWNER) &&
+            !userRoles.includes(RoomRole.HOST)
+        ) {
+            throw new ForbiddenException(
+                'Only room owner or host can lock/unlock seats'
+            )
+        }
+
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Validate seat index
+        if (seatIndex < 0 || seatIndex >= room.maxSeats) {
+            throw new BadRequestException(
+                `Seat index must be between 0 and ${room.maxSeats - 1}`
+            )
+        }
+
+        // Don't allow locking seat 0 if it's occupied by host
+        if (seatIndex === 0 && isLocked) {
+            const hostParticipant = await this.participantRepository.findOne({
+                where: { roomId, seatNumber: 1 } // seat 0 is stored as 1 in DB
+            })
+            if (hostParticipant) {
+                throw new BadRequestException(
+                    'Cannot lock seat 0 while it is occupied by the host'
+                )
+            }
+        }
+
+        // Check if seat is currently occupied before locking
+        if (isLocked) {
+            const occupiedParticipant =
+                await this.participantRepository.findOne({
+                    where: { roomId, seatNumber: seatIndex + 1 } // Convert to 1-based
+                })
+            if (occupiedParticipant) {
+                throw new BadRequestException(
+                    `Cannot lock seat ${seatIndex} - it is currently occupied`
+                )
+            }
+        }
+
+        // Update or create seat record
+        let seatRecord = await this.roomSeatRepository.findOne({
+            where: { roomId, seatIndex }
+        })
+
+        if (!seatRecord) {
+            seatRecord = this.roomSeatRepository.create({
+                roomId,
+                seatIndex,
+                isLocked: false
+            })
+        }
+
+        seatRecord.isLocked = isLocked
+        seatRecord.lockedBy = isLocked ? userId : null
+        seatRecord.lockedAt = isLocked ? new Date() : null
+
+        await this.roomSeatRepository.save(seatRecord)
+
+        return {
+            success: true,
+            seatIndex,
+            isLocked
+        }
+    }
+
+    /**
+     * Get current seat state for a room
+     */
+    async getRoomSeats(roomId: string): Promise<any[]> {
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId },
+            relations: ['participants', 'participants.user']
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Get seat lock information
+        const seatLocks = await this.roomSeatRepository.find({
+            where: { roomId }
+        })
+
+        const seats = []
+        for (let i = 0; i < room.maxSeats; i++) {
+            const participant = room.participants.find(
+                (p) => p.seatNumber === i + 1
+            )
+            const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
+
+            seats.push({
+                index: i,
+                locked: seatLock?.isLocked || false,
+                occupied: !!participant,
+                occupantUserId: participant?.user.uuid || null
+            })
+        }
+
+        return seats
     }
 }
