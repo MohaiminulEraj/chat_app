@@ -39,6 +39,7 @@ import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole } from './entities/room-role.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
+import { RoomGateway } from './room.gateway'
 import { RoomService } from './room.service'
 
 @ApiTags('🎮 Rooms')
@@ -46,7 +47,10 @@ import { RoomService } from './room.service'
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class RoomController {
-    constructor(private readonly roomService: RoomService) {}
+    constructor(
+        private readonly roomService: RoomService,
+        private readonly roomGateway: RoomGateway
+    ) {}
 
     @Post()
     @ApiOperation({
@@ -888,6 +892,31 @@ export class RoomController {
                 userId,
                 content
             )
+
+            // Emit real-time comment event to all room participants
+            try {
+                const roomName = `room:${roomId}`
+                this.roomGateway.server.to(roomName).emit('ReceivedComment', {
+                    content: content,
+                    senderId: userId,
+                    senderName:
+                        req.user.name || req.user.email || 'Unknown User',
+                    senderImage: req.user.avatarUrl || null,
+                    createdAt: comment.createdAt || new Date().toISOString(),
+                    roomId: roomId,
+                    commentId: comment.uuid,
+                    messageType: 'text',
+                    replyToId: null,
+                    metadata: null,
+                    source: 'api' // Indicate this comment came from API
+                })
+            } catch (socketError) {
+                // Log socket error but don't fail the API response
+                console.error(
+                    'Failed to emit real-time comment event:',
+                    socketError
+                )
+            }
 
             return {
                 statusCode: HttpStatus.CREATED,

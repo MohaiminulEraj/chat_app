@@ -26,7 +26,7 @@ export class RoomGateway
     implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
     @WebSocketServer()
-    server: Server
+    public server: Server
 
     private readonly logger = new Logger(RoomGateway.name)
     private connectedUsers = new Map<
