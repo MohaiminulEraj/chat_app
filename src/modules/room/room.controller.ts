@@ -26,6 +26,7 @@ import {
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AssignRoomRoleDto, TransferOwnershipDto } from './dto/room-role.dto'
+import { CreateCommentDto } from './dto/create-comment.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
 import { JoinRoomDto } from './dto/join-room.dto'
 import { UpdateRoomDto } from './dto/update-room.dto'
@@ -63,66 +64,77 @@ export class RoomController {
                 data: {
                     type: 'object',
                     properties: {
-                        _id: { type: 'string' },
-                        name: { type: 'string' },
-                        description: { type: 'string' },
-                        country: { type: 'string' },
-                        roomAvatarUrl: { type: 'string', nullable: true },
-                        roomOwner: {
-                            type: 'object',
-                            properties: {
-                                id: { type: 'number' },
-                                uuid: { type: 'string' },
-                                name: { type: 'string' },
-                                email: { type: 'string' },
-                                phoneNumber: { type: 'string' },
-                                userType: { type: 'string' },
-                                authProvider: { type: 'string' },
-                                avatarUrl: { type: 'string' },
-                                isEmailVerified: { type: 'boolean' },
-                                isPhoneVerified: { type: 'boolean' }
-                            }
+                        roomId: {
+                            type: 'string',
+                            example: 'f560631b-1a55-45f7-ab0d-27b836bf245e'
                         },
-                        host: {
-                            type: 'object',
-                            properties: {
-                                id: { type: 'number' },
-                                uuid: { type: 'string' },
-                                name: { type: 'string' },
-                                email: { type: 'string' },
-                                phoneNumber: { type: 'string' },
-                                userType: { type: 'string' },
-                                authProvider: { type: 'string' },
-                                avatarUrl: { type: 'string' },
-                                isEmailVerified: { type: 'boolean' },
-                                isPhoneVerified: { type: 'boolean' }
-                            }
+                        roomName: {
+                            type: 'string',
+                            example: 'Dosti❤️Tak'
                         },
-                        members: {
+                        hostId: {
+                            type: 'string',
+                            example: 'u001'
+                        },
+                        participants: {
                             type: 'array',
                             items: {
                                 type: 'object',
                                 properties: {
-                                    _id: { type: 'string' },
-                                    name: { type: 'string' },
-                                    email: { type: 'string' },
-                                    image: { type: 'string' },
+                                    userId: { type: 'string', example: 'u001' },
+                                    name: {
+                                        type: 'string',
+                                        example: 'HostUser'
+                                    },
+                                    avatar: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example:
+                                            'https://i.pravatar.cc/150?img=1'
+                                    },
+                                    seatIndex: { type: 'number', example: 0 },
+                                    isSpeaking: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    micOn: { type: 'boolean', example: true },
                                     role: {
                                         type: 'string',
                                         enum: [
-                                            'owner',
                                             'host',
                                             'admin',
                                             'speaker',
-                                            'listener'
-                                        ]
-                                    },
-                                    status: { type: 'boolean' },
-                                    join: { type: 'boolean' },
-                                    invitedBy: { type: 'string' },
-                                    blocked: { type: 'boolean' }
+                                            'guest'
+                                        ],
+                                        example: 'host'
+                                    }
                                 }
                             }
+                        },
+                        seats: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    index: { type: 'number', example: 0 },
+                                    locked: { type: 'boolean', example: false },
+                                    occupied: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    occupantUserId: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example: 'u001'
+                                    }
+                                }
+                            }
+                        },
+                        maxSeats: { type: 'number', example: 8 },
+                        createdAt: {
+                            type: 'string',
+                            format: 'date-time',
+                            example: '2025-08-03T15:00:00Z'
                         }
                     }
                 }
@@ -190,68 +202,89 @@ export class RoomController {
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: 'Room details with owner, host, and members',
+        description: 'Room details with participants and seats',
         schema: {
             type: 'object',
             properties: {
-                _id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                country: { type: 'string' },
-                roomAvatarUrl: { type: 'string', nullable: true },
-                roomOwner: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room details fetched successfully'
+                },
+                data: {
                     type: 'object',
                     properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
-                        name: { type: 'string' },
-                        email: { type: 'string' },
-                        phoneNumber: { type: 'string' },
-                        userType: { type: 'string' },
-                        authProvider: { type: 'string' },
-                        avatarUrl: { type: 'string' },
-                        isEmailVerified: { type: 'boolean' },
-                        isPhoneVerified: { type: 'boolean' }
-                    }
-                },
-                host: {
-                    type: 'object',
-                    properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
-                        name: { type: 'string' },
-                        email: { type: 'string' },
-                        phoneNumber: { type: 'string' },
-                        userType: { type: 'string' },
-                        authProvider: { type: 'string' },
-                        avatarUrl: { type: 'string' },
-                        isEmailVerified: { type: 'boolean' },
-                        isPhoneVerified: { type: 'boolean' }
-                    }
-                },
-                members: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            _id: { type: 'string' },
-                            name: { type: 'string' },
-                            email: { type: 'string' },
-                            image: { type: 'string' },
-                            role: {
-                                type: 'string',
-                                enum: [
-                                    'owner',
-                                    'host',
-                                    'admin',
-                                    'speaker',
-                                    'listener'
-                                ]
-                            },
-                            status: { type: 'boolean' },
-                            join: { type: 'boolean' },
-                            invitedBy: { type: 'string' },
-                            blocked: { type: 'boolean' }
+                        roomId: {
+                            type: 'string',
+                            example: 'f560631b-1a55-45f7-ab0d-27b836bf245e'
+                        },
+                        roomName: {
+                            type: 'string',
+                            example: 'Dosti❤️Tak'
+                        },
+                        hostId: {
+                            type: 'string',
+                            example: 'u001'
+                        },
+                        participants: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    userId: { type: 'string', example: 'u001' },
+                                    name: {
+                                        type: 'string',
+                                        example: 'HostUser'
+                                    },
+                                    avatar: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example:
+                                            'https://i.pravatar.cc/150?img=1'
+                                    },
+                                    seatIndex: { type: 'number', example: 0 },
+                                    isSpeaking: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    micOn: { type: 'boolean', example: true },
+                                    role: {
+                                        type: 'string',
+                                        enum: [
+                                            'host',
+                                            'admin',
+                                            'speaker',
+                                            'guest'
+                                        ],
+                                        example: 'host'
+                                    }
+                                }
+                            }
+                        },
+                        seats: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    index: { type: 'number', example: 0 },
+                                    locked: { type: 'boolean', example: false },
+                                    occupied: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    occupantUserId: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example: 'u001'
+                                    }
+                                }
+                            }
+                        },
+                        maxSeats: { type: 'number', example: 8 },
+                        createdAt: {
+                            type: 'string',
+                            format: 'date-time',
+                            example: '2025-08-03T15:00:00Z'
                         }
                     }
                 }
@@ -283,74 +316,89 @@ export class RoomController {
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: 'Room details with owner, host, and members',
+        description: 'Room details with participants and seats',
         schema: {
             type: 'object',
             properties: {
-                _id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                country: { type: 'string' },
-                maxSeats: { type: 'number' },
-                type: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
                     type: 'string',
-                    enum: ['public', 'private', 'group', 'voice']
+                    example: 'Room details fetched successfully'
                 },
-                isLocked: { type: 'boolean' },
-                roomAvatarUrl: { type: 'string', nullable: true },
-                roomOwner: {
+                data: {
                     type: 'object',
                     properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
-                        name: { type: 'string' },
-                        email: { type: 'string' },
-                        phoneNumber: { type: 'string' },
-                        userType: { type: 'string' },
-                        authProvider: { type: 'string' },
-                        avatarUrl: { type: 'string' },
-                        isEmailVerified: { type: 'boolean' },
-                        isPhoneVerified: { type: 'boolean' }
-                    }
-                },
-                host: {
-                    type: 'object',
-                    properties: {
-                        id: { type: 'number' },
-                        uuid: { type: 'string' },
-                        name: { type: 'string' },
-                        email: { type: 'string' },
-                        phoneNumber: { type: 'string' },
-                        userType: { type: 'string' },
-                        authProvider: { type: 'string' },
-                        avatarUrl: { type: 'string' },
-                        isEmailVerified: { type: 'boolean' },
-                        isPhoneVerified: { type: 'boolean' }
-                    }
-                },
-                members: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            _id: { type: 'string' },
-                            name: { type: 'string' },
-                            email: { type: 'string' },
-                            image: { type: 'string' },
-                            role: {
-                                type: 'string',
-                                enum: [
-                                    'owner',
-                                    'host',
-                                    'admin',
-                                    'speaker',
-                                    'listener'
-                                ]
-                            },
-                            status: { type: 'boolean' },
-                            join: { type: 'boolean' },
-                            invitedBy: { type: 'string' },
-                            blocked: { type: 'boolean' }
+                        roomId: {
+                            type: 'string',
+                            example: 'f560631b-1a55-45f7-ab0d-27b836bf245e'
+                        },
+                        roomName: {
+                            type: 'string',
+                            example: 'Dosti❤️Tak'
+                        },
+                        hostId: {
+                            type: 'string',
+                            example: 'u001'
+                        },
+                        participants: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    userId: { type: 'string', example: 'u001' },
+                                    name: {
+                                        type: 'string',
+                                        example: 'HostUser'
+                                    },
+                                    avatar: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example:
+                                            'https://i.pravatar.cc/150?img=1'
+                                    },
+                                    seatIndex: { type: 'number', example: 0 },
+                                    isSpeaking: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    micOn: { type: 'boolean', example: true },
+                                    role: {
+                                        type: 'string',
+                                        enum: [
+                                            'host',
+                                            'admin',
+                                            'speaker',
+                                            'guest'
+                                        ],
+                                        example: 'host'
+                                    }
+                                }
+                            }
+                        },
+                        seats: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    index: { type: 'number', example: 0 },
+                                    locked: { type: 'boolean', example: false },
+                                    occupied: {
+                                        type: 'boolean',
+                                        example: true
+                                    },
+                                    occupantUserId: {
+                                        type: 'string',
+                                        nullable: true,
+                                        example: 'u001'
+                                    }
+                                }
+                            }
+                        },
+                        maxSeats: { type: 'number', example: 8 },
+                        createdAt: {
+                            type: 'string',
+                            format: 'date-time',
+                            example: '2025-08-03T15:00:00Z'
                         }
                     }
                 }
@@ -726,6 +774,88 @@ export class RoomController {
                 {
                     statusCode: HttpStatus.BAD_REQUEST,
                     message: error.message || 'Failed to retrieve room comments'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    @Post('comments')
+    @ApiOperation({
+        summary: 'Create a room comment',
+        description: 'Post a comment to a specific room'
+    })
+    @ApiBody({ type: CreateCommentDto })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'Comment posted successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 201 },
+                message: {
+                    type: 'string',
+                    example: 'Comment posted successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'number' },
+                        uuid: { type: 'string' },
+                        roomId: { type: 'string' },
+                        userId: { type: 'string' },
+                        message: { type: 'string' },
+                        messageType: { type: 'string', example: 'text' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        user: {
+                            type: 'object',
+                            properties: {
+                                uuid: { type: 'string' },
+                                name: { type: 'string' },
+                                avatarUrl: { type: 'string', nullable: true }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid room ID or comment content'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Room not found'
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'User not authorized to comment in this room'
+    })
+    async createRoomComment(
+        @Body() createCommentDto: CreateCommentDto,
+        @Request() req: any
+    ) {
+        try {
+            const userId = req.user.uuid
+            const { room: roomId, content } = createCommentDto
+
+            const comment = await this.roomService.addRoomComment(
+                roomId,
+                userId,
+                content
+            )
+
+            return {
+                statusCode: HttpStatus.CREATED,
+                message: 'Comment posted successfully',
+                data: comment
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to post comment'
                 },
                 HttpStatus.BAD_REQUEST
             )

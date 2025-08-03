@@ -458,10 +458,7 @@ export class RoomService {
             relations: ['user']
         })
 
-        // Find owner and host
-        const ownerRole = roleAssignments.find(
-            (role) => role.role === RoomRole.OWNER
-        )
+        // Find host
         const hostRole = roleAssignments.find(
             (role) => role.role === RoomRole.HOST
         )
@@ -469,76 +466,62 @@ export class RoomService {
         // Get all participants with their roles
         const participants = await this.participantRepository.find({
             where: { roomId: room.uuid },
-            relations: ['user']
+            relations: ['user'],
+            order: { seatNumber: 'ASC' }
         })
 
-        // Build member list with roles
-        const members = participants.map((participant) => {
+        // Build participants list with the new format
+        const participantsList = participants.map((participant) => {
             const userRoles = roleAssignments.filter(
                 (role) => role.userId === participant.userId
             )
-            const primaryRole =
-                userRoles.find((role) =>
-                    [RoomRole.OWNER, RoomRole.HOST, RoomRole.ADMIN].includes(
-                        role.role
-                    )
-                )?.role ||
-                userRoles.find((role) => role.role === RoomRole.SPEAKER)
-                    ?.role ||
-                RoomRole.LISTENER
+
+            // Determine role - convert to simple host/guest format
+            let role = 'guest'
+            if (
+                userRoles.some((r) =>
+                    [RoomRole.OWNER, RoomRole.HOST].includes(r.role)
+                )
+            ) {
+                role = 'host'
+            } else if (userRoles.some((r) => r.role === RoomRole.ADMIN)) {
+                role = 'admin'
+            } else if (userRoles.some((r) => r.role === RoomRole.SPEAKER)) {
+                role = 'speaker'
+            }
 
             return {
-                _id: participant.user.uuid,
+                userId: participant.user.uuid,
                 name: participant.user.name,
-                email: participant.user.email,
-                image: participant.user.avatarUrl,
-                role: primaryRole,
-                status: !participant.isMuted && !participant.isDeafened, // Active if not muted or deafened
-                join: true, // If they're a participant, they've joined
-                invitedBy: room.ownerId, // Simplified - could be enhanced
-                blocked: false // Simplified - could be enhanced with actual blocking logic
+                avatar: participant.user.avatarUrl || null,
+                seatIndex: participant.seatNumber - 1, // Convert to 0-based index
+                isSpeaking: participant.isSpeaking || false,
+                micOn: !participant.isMuted,
+                role: role
             }
         })
 
-        // Format response to match the requested structure
+        // Build seats array
+        const seats = []
+        for (let i = 0; i < room.maxSeats; i++) {
+            const participant = participants.find((p) => p.seatNumber === i + 1)
+            seats.push({
+                index: i,
+                locked: false, // You may want to add seat locking logic later
+                occupied: !!participant,
+                occupantUserId: participant?.user.uuid || null
+            })
+        }
+
+        // Format response to match the new structure
         return {
-            _id: room.uuid,
-            name: room.name,
-            description: room.description,
-            country: room.group?.country || 'Unknown',
+            roomId: room.uuid,
+            roomName: room.name,
+            hostId: hostRole?.user.uuid || room.ownerId,
+            participants: participantsList,
+            seats: seats,
             maxSeats: room.maxSeats,
-            type: room.type,
-            isLocked: room.isLocked,
-            roomAvatarUrl: room.roomAvatarUrl || null,
-            roomOwner: ownerRole?.user
-                ? {
-                      id: ownerRole.user.id,
-                      uuid: ownerRole.user.uuid,
-                      name: ownerRole.user.name,
-                      email: ownerRole.user.email,
-                      phoneNumber: ownerRole.user.phoneNumber,
-                      userType: ownerRole.user.userType,
-                      authProvider: ownerRole.user.authProvider,
-                      avatarUrl: ownerRole.user.avatarUrl,
-                      isEmailVerified: ownerRole.user.isEmailVerified,
-                      isPhoneVerified: ownerRole.user.isPhoneVerified
-                  }
-                : null,
-            host: hostRole?.user
-                ? {
-                      id: hostRole.user.id,
-                      uuid: hostRole.user.uuid,
-                      name: hostRole.user.name,
-                      email: hostRole.user.email,
-                      phoneNumber: hostRole.user.phoneNumber,
-                      userType: hostRole.user.userType,
-                      authProvider: hostRole.user.authProvider,
-                      avatarUrl: hostRole.user.avatarUrl,
-                      isEmailVerified: hostRole.user.isEmailVerified,
-                      isPhoneVerified: hostRole.user.isPhoneVerified
-                  }
-                : null,
-            members
+            createdAt: room.createdAt
         }
     }
 
@@ -658,7 +641,13 @@ export class RoomService {
             metadata
         })
 
-        return await this.roomCommentRepository.save(comment)
+        const savedComment = await this.roomCommentRepository.save(comment)
+
+        // Return comment with user information
+        return await this.roomCommentRepository.findOne({
+            where: { uuid: savedComment.uuid },
+            relations: ['user']
+        })
     }
 
     /**
