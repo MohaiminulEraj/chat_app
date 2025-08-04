@@ -202,7 +202,7 @@ export class RoomController {
     @ApiOperation({
         summary: 'Get room details by group ID',
         description:
-            'Get room information including owner, host, and members for a specific group'
+            'Get room information including owner, host, and members for a specific group. Host information is returned separately and excluded from participants array.'
     })
     @ApiParam({
         name: 'groupId',
@@ -325,7 +325,7 @@ export class RoomController {
     @ApiOperation({
         summary: 'Get room details by room ID',
         description:
-            'Get comprehensive room information including owner, host, members, and room settings'
+            'Get comprehensive room information including owner, host, members, and room settings. Host information is returned separately and excluded from participants array.'
     })
     @ApiParam({
         name: 'id',

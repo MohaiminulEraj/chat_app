@@ -498,36 +498,39 @@ export class RoomService {
             order: { seatNumber: 'ASC' }
         })
 
-        // Build participants list with the new format
-        const participantsList = participants.map((participant) => {
-            const userRoles = roleAssignments.filter(
-                (role) => role.userId === participant.userId
-            )
-
-            // Determine role - convert to simple host/guest format
-            let role = 'guest'
-            if (
-                userRoles.some((r) =>
-                    [RoomRole.OWNER, RoomRole.HOST].includes(r.role)
+        // Build participants list with the new format (excluding host)
+        const hostUserId = hostRole?.user.uuid || room.ownerId
+        const participantsList = participants
+            .filter((participant) => participant.userId !== hostUserId) // Exclude host from participants
+            .map((participant) => {
+                const userRoles = roleAssignments.filter(
+                    (role) => role.userId === participant.userId
                 )
-            ) {
-                role = 'host'
-            } else if (userRoles.some((r) => r.role === RoomRole.ADMIN)) {
-                role = 'admin'
-            } else if (userRoles.some((r) => r.role === RoomRole.SPEAKER)) {
-                role = 'speaker'
-            }
 
-            return {
-                userId: participant.user.uuid,
-                name: participant.user.name,
-                avatar: participant.user.avatarUrl || null,
-                seatIndex: participant.seatNumber - 1, // Convert to 0-based index
-                isSpeaking: participant.isSpeaking || false,
-                micOn: !participant.isMuted,
-                role: role
-            }
-        })
+                // Determine role - convert to simple host/guest format
+                let role = 'guest'
+                if (
+                    userRoles.some((r) =>
+                        [RoomRole.OWNER, RoomRole.HOST].includes(r.role)
+                    )
+                ) {
+                    role = 'host'
+                } else if (userRoles.some((r) => r.role === RoomRole.ADMIN)) {
+                    role = 'admin'
+                } else if (userRoles.some((r) => r.role === RoomRole.SPEAKER)) {
+                    role = 'speaker'
+                }
+
+                return {
+                    userId: participant.user.uuid,
+                    name: participant.user.name,
+                    avatar: participant.user.avatarUrl || null,
+                    seatIndex: participant.seatNumber - 1, // Convert to 0-based index
+                    isSpeaking: participant.isSpeaking || false,
+                    micOn: !participant.isMuted,
+                    role: role
+                }
+            })
 
         // Build seats array with lock information
         const seats = await this.getRoomSeats(room.uuid)
