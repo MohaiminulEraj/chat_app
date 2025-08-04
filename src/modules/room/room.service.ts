@@ -1207,17 +1207,35 @@ export class RoomService {
             throw new NotFoundException('Room not found')
         }
 
+        // Get role assignments to identify the host
+        const roleAssignments = await this.roomRoleRepository.find({
+            where: { roomId: room.uuid, isActive: true },
+            relations: ['user']
+        })
+
+        // Find host
+        const hostRole = roleAssignments.find(
+            (role) => role.role === RoomRole.HOST
+        )
+        const hostUserId = hostRole?.user.uuid || room.ownerId
+
         // Get seat lock information
         const seatLocks = await this.roomSeatRepository.find({
             where: { roomId }
         })
 
+        // Filter out participants who are the host and sort by seat number
+        const nonHostParticipants = room.participants
+            .filter((participant) => participant.userId !== hostUserId)
+            .sort((a, b) => a.seatNumber - b.seatNumber)
+
         const seats = []
         for (let i = 0; i < room.maxSeats; i++) {
-            const participant = room.participants.find(
-                (p) => p.seatNumber === i + 1
-            )
             const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
+
+            // Assign participants to seats starting from index 0
+            const participantIndex = i
+            const participant = nonHostParticipants[participantIndex] || null
 
             seats.push({
                 index: i,
