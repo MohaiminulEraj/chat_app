@@ -672,17 +672,30 @@ export class RoomGateway
     async handleToggleMute(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { roomId: string; seatIndex: number; action: string }
+        data: {
+            roomId: string
+            userInfo: {
+                userId: string
+                name: string
+                avatar: string | null
+                seatIndex: number
+                isSpeaking: boolean
+                micOn: boolean
+                role: string
+            }
+        }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
-        // Determine mute status based on action
-        const isMuted = data.action === 'mute'
+        // Determine mute status from micOn: if micOn is false, user is being muted
+        const isMuted = !data.userInfo.micOn
+        // micOn will be the updated status passed in the request
+        const micOn = data.userInfo.micOn
 
         this.logger.log(
-            `🔇 TOGGLE_MUTE: User ${userName} (${userId}) ${isMuted ? 'muting' : 'unmuting'} seat ${data.seatIndex} in room ${data.roomId}`
+            `🔇 TOGGLE_MUTE: User ${userName} (${userId}) ${isMuted ? 'muting' : 'unmuting'} seat ${data.userInfo.seatIndex} in room ${data.roomId} | micOn will be: ${micOn}`
         )
 
         try {
@@ -690,48 +703,82 @@ export class RoomGateway
             const { userId: targetUserId, userName: targetUserName } =
                 await this.roomService.updateParticipantStatusBySeat(
                     data.roomId,
-                    data.seatIndex,
+                    data.userInfo.seatIndex,
                     {
                         isMuted: isMuted
                     }
                 )
 
+            // Get updated room details to fetch participant information
+            const roomDetails = await this.roomService.getRoomDetails(
+                data.roomId
+            )
+
+            // Find the updated user info from room details
+            let updatedUserInfo = null
+
+            // Check if the target user is the host
+            if (targetUserId === roomDetails.hostId) {
+                updatedUserInfo = {
+                    userId: roomDetails.hostId,
+                    name: roomDetails.hostName,
+                    avatar: roomDetails.hostImage,
+                    seatIndex: data.userInfo.seatIndex,
+                    isSpeaking: false, // Default value
+                    micOn: micOn, // Set based on action: mute=false, unmute=true
+                    role: 'host'
+                }
+            } else {
+                // Find the user in participants
+                const participant = roomDetails.participants.find(
+                    (p) => p.userId === targetUserId
+                )
+                if (participant) {
+                    updatedUserInfo = {
+                        userId: participant.userId,
+                        name: participant.name,
+                        avatar: participant.avatar,
+                        seatIndex: participant.seatIndex,
+                        isSpeaking: participant.isSpeaking,
+                        micOn: micOn, // Set based on action: mute=false, unmute=true
+                        role: participant.role
+                    }
+                }
+            }
+
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
-            this.server
-                .to(`room:${data.roomId}`)
-                .emit('participantStatusUpdate', {
-                    roomId: data.roomId,
-                    userId: targetUserId,
-                    userName: targetUserName,
-                    seatIndex: data.seatIndex,
-                    status: { isMuted: isMuted },
-                    actionBy: {
-                        userId: userId,
-                        userName: userName
-                    }
-                })
+            // Emit the updated user info to all room participants in the expected format
+            this.server.to(`room:${data.roomId}`).emit('toggleMute', {
+                roomId: data.roomId,
+                userInfo: updatedUserInfo
+            })
 
             this.logger.log(
-                `✅ TOGGLE_MUTE success: User ${userName} (${userId}) ${isMuted ? 'muted' : 'unmuted'} seat ${data.seatIndex} (${targetUserName}) in room ${data.roomId}`
+                `✅ TOGGLE_MUTE success: User ${userName} (${userId}) ${isMuted ? 'muted' : 'unmuted'} seat ${data.userInfo.seatIndex} (${targetUserName}) in room ${data.roomId}`
             )
 
-            return {
+            // Return response in the requested format
+            const response = {
                 status: 'success',
-                seatIndex: data.seatIndex,
-                isMuted: isMuted,
-                targetUserId: targetUserId,
-                targetUserName: targetUserName,
-                message: `Successfully ${isMuted ? 'muted' : 'unmuted'} seat ${data.seatIndex}`
+                roomId: data.roomId,
+                userInfo: updatedUserInfo,
+                message: `Successfully ${isMuted ? 'muted' : 'unmuted'} seat ${data.userInfo.seatIndex}`
             }
+
+            return response
         } catch (error) {
             this.logger.error(
-                `❌ TOGGLE_MUTE failed: User ${userName} (${userId}) failed to toggle mute for seat ${data.seatIndex} in room ${data.roomId} | ` +
+                `❌ TOGGLE_MUTE failed: User ${userName} (${userId}) failed to toggle mute for seat ${data.userInfo.seatIndex} in room ${data.roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
-            return { status: 'error', message: error.message }
+            return {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId
+            }
         }
     }
 
