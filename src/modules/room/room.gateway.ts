@@ -671,42 +671,63 @@ export class RoomGateway
     @SubscribeMessage('toggleMute')
     async handleToggleMute(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { roomId: string; isMuted: boolean }
+        @MessageBody()
+        data: { roomId: string; seatIndex: number; action: string }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
+        // Determine mute status based on action
+        const isMuted = data.action === 'mute'
+
         this.logger.log(
-            `🔇 TOGGLE_MUTE: User ${userName} (${userId}) ${data.isMuted ? 'muted' : 'unmuted'} in room ${data.roomId}`
+            `🔇 TOGGLE_MUTE: User ${userName} (${userId}) ${isMuted ? 'muting' : 'unmuting'} seat ${data.seatIndex} in room ${data.roomId}`
         )
 
         try {
-            await this.roomService.updateParticipantStatus(
-                data.roomId,
-                userId,
-                {
-                    isMuted: data.isMuted
-                }
-            )
+            // Update participant status by seat index
+            const { userId: targetUserId, userName: targetUserName } =
+                await this.roomService.updateParticipantStatusBySeat(
+                    data.roomId,
+                    data.seatIndex,
+                    {
+                        isMuted: isMuted
+                    }
+                )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'seatActions')
 
             this.server
                 .to(`room:${data.roomId}`)
                 .emit('participantStatusUpdate', {
                     roomId: data.roomId,
-                    userId,
-                    userName,
-                    status: { isMuted: data.isMuted }
+                    userId: targetUserId,
+                    userName: targetUserName,
+                    seatIndex: data.seatIndex,
+                    status: { isMuted: isMuted },
+                    actionBy: {
+                        userId: userId,
+                        userName: userName
+                    }
                 })
+
+            this.logger.log(
+                `✅ TOGGLE_MUTE success: User ${userName} (${userId}) ${isMuted ? 'muted' : 'unmuted'} seat ${data.seatIndex} (${targetUserName}) in room ${data.roomId}`
+            )
 
             return {
                 status: 'success',
-                isMuted: data.isMuted,
-                message: `Successfully ${data.isMuted ? 'muted' : 'unmuted'}`
+                seatIndex: data.seatIndex,
+                isMuted: isMuted,
+                targetUserId: targetUserId,
+                targetUserName: targetUserName,
+                message: `Successfully ${isMuted ? 'muted' : 'unmuted'} seat ${data.seatIndex}`
             }
         } catch (error) {
             this.logger.error(
-                `❌ TOGGLE_MUTE failed: User ${userName} (${userId}) failed to toggle mute in room ${data.roomId} | ` +
+                `❌ TOGGLE_MUTE failed: User ${userName} (${userId}) failed to toggle mute for seat ${data.seatIndex} in room ${data.roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )

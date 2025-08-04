@@ -251,6 +251,39 @@ export class RoomService {
         }
     }
 
+    async updateParticipantStatusBySeat(
+        roomId: string,
+        seatIndex: number,
+        status: Partial<RoomParticipant>
+    ): Promise<{ userId: string; userName: string }> {
+        // Find participant by seat number (convert 0-based index to 1-based seat number)
+        const participant = await this.participantRepository.findOne({
+            where: { roomId, seatNumber: seatIndex + 1 },
+            relations: ['user']
+        })
+
+        if (!participant) {
+            throw new NotFoundException(
+                `No participant found at seat ${seatIndex}`
+            )
+        }
+
+        // Update the participant status
+        const result = await this.participantRepository.update(
+            { roomId, userId: participant.userId },
+            status
+        )
+
+        if (result.affected === 0) {
+            throw new NotFoundException('Failed to update participant status')
+        }
+
+        return {
+            userId: participant.userId,
+            userName: participant.user.name
+        }
+    }
+
     async addToWaitingList(roomId: string, userId: string): Promise<void> {
         // Check if already in waiting list
         const existing = await this.waitingListRepository.findOne({
