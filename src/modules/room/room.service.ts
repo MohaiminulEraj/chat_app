@@ -537,6 +537,8 @@ export class RoomService {
             roomId: room.uuid,
             roomName: room.name,
             hostId: hostRole?.user.uuid || room.ownerId,
+            hostName: hostRole?.user.name || room.owner.name,
+            hostImage: hostRole?.user.avatarUrl || room.owner.avatarUrl || null,
             participants: participantsList,
             seats: seats,
             maxSeats: room.maxSeats,

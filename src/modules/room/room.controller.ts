@@ -234,6 +234,15 @@ export class RoomController {
                             type: 'string',
                             example: 'u001'
                         },
+                        hostName: {
+                            type: 'string',
+                            example: 'John Doe'
+                        },
+                        hostImage: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'https://i.pravatar.cc/150?img=1'
+                        },
                         participants: {
                             type: 'array',
                             items: {
@@ -347,6 +356,15 @@ export class RoomController {
                         hostId: {
                             type: 'string',
                             example: 'u001'
+                        },
+                        hostName: {
+                            type: 'string',
+                            example: 'John Doe'
+                        },
+                        hostImage: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'https://i.pravatar.cc/150?img=1'
                         },
                         participants: {
                             type: 'array',
