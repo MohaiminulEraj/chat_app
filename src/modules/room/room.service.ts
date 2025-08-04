@@ -284,6 +284,73 @@ export class RoomService {
         }
     }
 
+    async kickUserFromSeat(
+        roomId: string,
+        seatIndex: number,
+        kickedBy: string
+    ): Promise<{ userId: string; userName: string }> {
+        // Check if the user performing the kick has permission (host/owner/admin)
+        const userRoles = await this.getUserRolesInRoom(roomId, kickedBy)
+        const canKick =
+            userRoles.includes(RoomRole.OWNER) ||
+            userRoles.includes(RoomRole.HOST) ||
+            userRoles.includes(RoomRole.ADMIN)
+
+        if (!canKick) {
+            throw new ForbiddenException(
+                'Only room owner, host, or admin can kick users'
+            )
+        }
+
+        // Find participant by seat number (convert 0-based index to 1-based seat number)
+        const participant = await this.participantRepository.findOne({
+            where: { roomId, seatNumber: seatIndex + 1 },
+            relations: ['user']
+        })
+
+        if (!participant) {
+            throw new NotFoundException(
+                `No participant found at seat ${seatIndex}`
+            )
+        }
+
+        // Check if trying to kick the room owner
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+        if (participant.userId === room?.ownerId) {
+            throw new ForbiddenException('Cannot kick the room owner')
+        }
+
+        // Check if trying to kick someone with equal or higher role
+        const targetUserRoles = await this.getUserRolesInRoom(
+            roomId,
+            participant.userId
+        )
+        const kickerIsHost = userRoles.includes(RoomRole.HOST)
+        const targetIsOwner = targetUserRoles.includes(RoomRole.OWNER)
+        const targetIsHost = targetUserRoles.includes(RoomRole.HOST)
+
+        if (targetIsOwner || (kickerIsHost && targetIsHost)) {
+            throw new ForbiddenException(
+                'Cannot kick users with equal or higher permissions'
+            )
+        }
+
+        const kickedUserInfo = {
+            userId: participant.userId,
+            userName: participant.user.name
+        }
+
+        // Remove the participant (same as leaving the room)
+        await this.participantRepository.remove(participant)
+
+        // Check waiting list and promote first user
+        await this.promoteFromWaitingList(roomId)
+
+        return kickedUserInfo
+    }
+
     async addToWaitingList(roomId: string, userId: string): Promise<void> {
         // Check if already in waiting list
         const existing = await this.waitingListRepository.findOne({

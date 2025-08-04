@@ -735,6 +735,98 @@ export class RoomGateway
         }
     }
 
+    @SubscribeMessage('kickUser')
+    async handleKickUser(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: { roomId: string; seatIndex: number; action: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `👢 KICK_USER: User ${userName} (${userId}) attempting to kick user from seat ${data.seatIndex} in room ${data.roomId}`
+        )
+
+        try {
+            // Verify action is 'kick'
+            if (data.action !== 'kick') {
+                throw new Error('Invalid action. Expected "kick"')
+            }
+
+            // Kick the user from the specified seat
+            const { userId: kickedUserId, userName: kickedUserName } =
+                await this.roomService.kickUserFromSeat(
+                    data.roomId,
+                    data.seatIndex,
+                    userId
+                )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'seatActions')
+
+            // Notify the kicked user specifically
+            this.server.to(`user:${kickedUserId}`).emit('userKicked', {
+                roomId: data.roomId,
+                seatIndex: data.seatIndex,
+                reason: 'Kicked by room moderator',
+                kickedBy: {
+                    userId: userId,
+                    userName: userName
+                }
+            })
+
+            // Notify all room participants about the kick
+            this.server.to(`room:${data.roomId}`).emit('participantKicked', {
+                roomId: data.roomId,
+                seatIndex: data.seatIndex,
+                kickedUserId: kickedUserId,
+                kickedUserName: kickedUserName,
+                kickedBy: {
+                    userId: userId,
+                    userName: userName
+                },
+                timestamp: new Date().toISOString()
+            })
+
+            // Update room seats state
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Emit updated room state
+            const updatedSeats = await this.roomService.getRoomSeats(
+                data.roomId
+            )
+            this.server.to(`room:${data.roomId}`).emit('roomSeatsUpdate', {
+                roomId: data.roomId,
+                seats: updatedSeats
+            })
+
+            this.logger.log(
+                `✅ KICK_USER success: User ${userName} (${userId}) kicked ${kickedUserName} (${kickedUserId}) from seat ${data.seatIndex} in room ${data.roomId}`
+            )
+
+            return {
+                status: 'success',
+                seatIndex: data.seatIndex,
+                kickedUserId: kickedUserId,
+                kickedUserName: kickedUserName,
+                message: `Successfully kicked ${kickedUserName} from seat ${data.seatIndex}`
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ KICK_USER failed: User ${userName} (${userId}) failed to kick user from seat ${data.seatIndex} in room ${data.roomId} | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                status: 'error',
+                message: error.message,
+                seatIndex: data.seatIndex
+            }
+        }
+    }
+
     @SubscribeMessage('toggleDeafen')
     async handleToggleDeafen(
         @ConnectedSocket() client: Socket,
