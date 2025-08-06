@@ -995,36 +995,103 @@ export class RoomGateway
     async handleKickUser(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { roomId: string; seatIndex: number; action: string }
+        data: {
+            roomId: string
+            participantID?: string
+            seatIndex?: number
+            action?: string
+        }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `👢 KICK_USER: User ${userName} (${userId}) attempting to kick user from seat ${data.seatIndex} in room ${data.roomId}`
+            `👢 KICK_USER: User ${userName} (${userId}) attempting to kick user | Data: ${JSON.stringify(data)}`
         )
 
         try {
-            // Verify action is 'kick'
-            if (data.action !== 'kick') {
-                throw new Error('Invalid action. Expected "kick"')
-            }
+            let kickedUserId: string
+            let kickedUserName: string
 
-            // Kick the user from the specified seat
-            const { userId: kickedUserId, userName: kickedUserName } =
-                await this.roomService.kickUserFromSeat(
+            // Handle Flutter pattern: {roomId, participantID}
+            if (data.participantID) {
+                this.logger.log(
+                    `👢 KICK_USER (Flutter pattern): Kicking participant ${data.participantID} from room ${data.roomId}`
+                )
+
+                // Leave room for the kicked user
+                await this.roomService.leaveRoom(
+                    data.roomId,
+                    data.participantID
+                )
+
+                kickedUserId = data.participantID
+                kickedUserName = 'Kicked User' // We'll get the actual name from connected users if available
+
+                // Try to get the actual user name from connected users
+                const kickedUserInfo = Array.from(
+                    this.connectedUsers.values()
+                ).find((user) => user.userId === data.participantID)
+                if (kickedUserInfo) {
+                    kickedUserName = kickedUserInfo.userName
+                }
+            }
+            // Handle legacy pattern: {roomId, seatIndex, action}
+            else if (data.seatIndex !== undefined) {
+                this.logger.log(
+                    `👢 KICK_USER (Legacy pattern): Kicking user from seat ${data.seatIndex} in room ${data.roomId}`
+                )
+
+                // Kick the user from the specified seat
+                const result = await this.roomService.kickUserFromSeat(
                     data.roomId,
                     data.seatIndex,
                     userId
                 )
 
+                kickedUserId = result.userId
+                kickedUserName = result.userName
+            } else {
+                throw new Error(
+                    'Invalid kick data: missing participantID or seatIndex'
+                )
+            }
+
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
+
+            // Find the kicked user's socket to disconnect them from the room
+            const kickedUserSocket = Array.from(
+                this.connectedUsers.entries()
+            ).find(([socketId, user]) => user.userId === kickedUserId)
+
+            if (kickedUserSocket) {
+                const [kickedSocketId] = kickedUserSocket
+                const kickedSocket =
+                    this.server.sockets.sockets.get(kickedSocketId)
+                if (kickedSocket) {
+                    // Remove from socket room
+                    kickedSocket.leave(`room:${data.roomId}`)
+
+                    // Update user's room tracking
+                    const kickedUserInfo =
+                        this.connectedUsers.get(kickedSocketId)
+                    if (kickedUserInfo) {
+                        kickedUserInfo.rooms.delete(data.roomId)
+                    }
+                }
+            }
+
+            // Update room user count
+            const currentCount = this.roomUserCounts.get(data.roomId) || 0
+            const newCount = Math.max(0, currentCount - 1)
+            this.roomUserCounts.set(data.roomId, newCount)
 
             // Notify the kicked user specifically
             this.server.to(`user:${kickedUserId}`).emit('userKicked', {
                 roomId: data.roomId,
+                participantID: kickedUserId,
                 seatIndex: data.seatIndex,
                 reason: 'Kicked by room moderator',
                 kickedBy: {
@@ -1036,6 +1103,7 @@ export class RoomGateway
             // Notify all room participants about the kick
             this.server.to(`room:${data.roomId}`).emit('participantKicked', {
                 roomId: data.roomId,
+                participantID: kickedUserId,
                 seatIndex: data.seatIndex,
                 kickedUserId: kickedUserId,
                 kickedUserName: kickedUserName,
@@ -1059,28 +1127,52 @@ export class RoomGateway
             })
 
             this.logger.log(
-                `✅ KICK_USER success: User ${userName} (${userId}) kicked ${kickedUserName} (${kickedUserId}) from seat ${data.seatIndex} in room ${data.roomId}`
+                `✅ KICK_USER success: User ${userName} (${userId}) kicked ${kickedUserName} (${kickedUserId}) from room ${data.roomId} | Room users: ${newCount}`
             )
 
             return {
                 status: 'success',
+                participantID: kickedUserId,
                 seatIndex: data.seatIndex,
                 kickedUserId: kickedUserId,
                 kickedUserName: kickedUserName,
-                message: `Successfully kicked ${kickedUserName} from seat ${data.seatIndex}`
+                roomUserCount: newCount,
+                message: `Successfully kicked ${kickedUserName}`
             }
         } catch (error) {
             this.logger.error(
-                `❌ KICK_USER failed: User ${userName} (${userId}) failed to kick user from seat ${data.seatIndex} in room ${data.roomId} | ` +
+                `❌ KICK_USER failed: User ${userName} (${userId}) failed to kick user | Data: ${JSON.stringify(data)} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
             return {
                 status: 'error',
                 message: error.message,
-                seatIndex: data.seatIndex
+                participantID: data.participantID,
+                seatIndex: data.seatIndex,
+                roomId: data.roomId
             }
         }
+    }
+
+    // Handle the typo version that Flutter is sending
+    @SubscribeMessage('kikUser')
+    async handleKikUser(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            participantID?: string
+            seatIndex?: number
+            action?: string
+        }
+    ) {
+        this.logger.log(
+            `👢 KIK_USER (typo handler): Redirecting to kickUser handler | Data: ${JSON.stringify(data)}`
+        )
+
+        // Redirect to the correct handler
+        return this.handleKickUser(client, data)
     }
 
     @SubscribeMessage('toggleDeafen')
