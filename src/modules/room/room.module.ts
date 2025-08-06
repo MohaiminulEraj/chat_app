@@ -14,6 +14,7 @@ import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 import { RoomController } from './room.controller'
 import { RoomGateway } from './room.gateway' // Re-enable the gateway
+import { RoomRootGateway } from './room-root.gateway' // Add root namespace gateway for debugging
 import { RoomService } from './room.service'
 
 @Module({
@@ -36,7 +37,8 @@ import { RoomService } from './room.service'
     controllers: [RoomController],
     providers: [
         RoomService,
-        RoomGateway // Re-enable the gateway
+        RoomGateway, // Re-enable the gateway
+        RoomRootGateway // Add root namespace gateway for debugging
     ],
     exports: [RoomService]
 })

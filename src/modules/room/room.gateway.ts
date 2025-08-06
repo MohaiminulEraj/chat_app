@@ -689,6 +689,24 @@ export class RoomGateway
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
+        this.logger.log(
+            `🔇 TOGGLE_MUTE received: Client ${client.id} | User ${userName} (${userId}) | Data: ${JSON.stringify(data)}`
+        )
+
+        // Validate required data
+        if (!data || !data.roomId || !data.userInfo) {
+            const errorMsg =
+                'Invalid toggleMute data: missing roomId or userInfo'
+            this.logger.error(
+                `❌ ${errorMsg} | Received: ${JSON.stringify(data)}`
+            )
+            return {
+                status: 'error',
+                message: errorMsg,
+                receivedData: data
+            }
+        }
+
         // Determine mute status from micOn: if micOn is false, user is being muted
         const isMuted = !data.userInfo.micOn
         // micOn will be the updated status passed in the request
