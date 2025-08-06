@@ -611,8 +611,9 @@ export class RoomController {
         description: 'Room is full or seat is locked/occupied'
     })
     @ApiResponse({
-        status: HttpStatus.CONFLICT,
-        description: 'User is already in the room'
+        status: HttpStatus.OK,
+        description:
+            'User was already in the room - returns existing participant info'
     })
     async joinRoom(
         @Param('id') roomId: string,
@@ -629,13 +630,24 @@ export class RoomController {
         // Get updated seat information
         const seats = await this.roomService.getRoomSeats(roomId)
 
+        // Check if this was an existing participant (joinedAt would be older)
+        const isExistingParticipant =
+            participant.joinedAt &&
+            new Date().getTime() - new Date(participant.joinedAt).getTime() >
+                1000 // More than 1 second old
+
         return {
-            statusCode: HttpStatus.CREATED,
-            message: 'Successfully joined the room',
+            statusCode: isExistingParticipant
+                ? HttpStatus.OK
+                : HttpStatus.CREATED,
+            message: isExistingParticipant
+                ? 'You are already in this room'
+                : 'Successfully joined the room',
             data: {
                 participant,
                 seatIndex: participant.seatNumber - 1, // Convert to 0-based
-                seats
+                seats,
+                isExistingParticipant
             }
         }
     }

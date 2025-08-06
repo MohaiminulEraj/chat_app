@@ -182,7 +182,10 @@ export class RoomService {
         })
 
         if (existingParticipant) {
-            throw new ConflictException('User is already in the room')
+            this.logger.log(
+                `User ${userId} is already in room ${roomId}, returning existing participant info`
+            )
+            return existingParticipant
         }
 
         // Determine seat assignment
