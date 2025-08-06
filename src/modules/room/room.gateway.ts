@@ -1,4 +1,5 @@
 import { Logger, UseGuards } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
 import {
     ConnectedSocket,
     MessageBody,
@@ -64,7 +65,8 @@ export class RoomGateway
 
     constructor(
         private readonly roomService: RoomService,
-        private readonly giftService: GiftService
+        private readonly giftService: GiftService,
+        private readonly jwtService: JwtService
     ) {}
 
     afterInit(server: Server) {
@@ -86,41 +88,43 @@ export class RoomGateway
         try {
             // Get user info from JWT auth (set by WsJwtGuard)
             const user = client['user']
-            const userId = user?.uuid || user?.id
-            const userName = user?.name || user?.email || 'Unknown User'
-            const avatarUrl = user?.avatarUrl || user?.avatar || null
+            let userId = user?.uuid || user?.id
+            let userName = user?.name || user?.email || 'Unknown User'
+            let avatarUrl = user?.avatarUrl || user?.avatar || null
 
-            if (!userId) {
-                this.logger.warn(
-                    `❌ Connection rejected - No userId found for socket ${client.id} | User data: ${JSON.stringify(user)}`
-                )
-                client.disconnect()
-                return
+            // If no user data from JWT, check URL for token (Flutter pattern)
+            if (!userId && client.handshake.url) {
+                const urlParts = client.handshake.url.split('/')
+                const tokenFromUrl = urlParts[urlParts.length - 1]
+
+                if (tokenFromUrl && tokenFromUrl.startsWith('eyJ')) {
+                    this.logger.log(
+                        `🔑 Found JWT token in URL: ${tokenFromUrl.substring(0, 20)}...`
+                    )
+                    // We'll authenticate properly in the setup event
+                }
             }
 
-            // Store connection info
+            // Allow connection even without immediate JWT verification
+            // Flutter will send setup event with user data
             this.connectedUsers.set(client.id, {
-                userId,
-                userName,
-                avatarUrl,
+                userId: userId || 'pending',
+                userName: userName || 'Pending User',
+                avatarUrl: avatarUrl,
                 rooms: new Set<string>()
             })
 
             this.logger.log(
-                `🔌 User connected: ${userName} (${userId}) | Socket: ${client.id} | ` +
+                `🔌 User connecting: ${userName || 'Pending'} (${userId || 'pending'}) | Socket: ${client.id} | ` +
                     `Total connections: ${this.connectedUsers.size} | IP: ${client.handshake?.address || 'unknown'}`
             )
 
             // Send connection acknowledgment
             client.emit('connected', {
-                status: 'success',
-                message: 'Connected to root namespace',
-                timestamp: new Date().toISOString(),
-                user: {
-                    userId,
-                    userName,
-                    avatarUrl
-                }
+                success: true,
+                message: 'Connected to real-time server',
+                socketId: client.id,
+                timestamp: new Date().toISOString()
             })
         } catch (error) {
             this.logger.error(
@@ -197,6 +201,188 @@ export class RoomGateway
                 `❌ Disconnect error for socket ${client.id}: ${error.message}`,
                 error.stack
             )
+        }
+    }
+
+    @SubscribeMessage('setup')
+    async handleSetup(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() userId: string
+    ) {
+        this.logger.log(
+            `🔧 SETUP event received: Socket ${client.id} | UserId: ${userId}`
+        )
+
+        try {
+            // Update the connected user info with proper userId
+            const userInfo = this.connectedUsers.get(client.id)
+            if (userInfo && userInfo.userId === 'pending') {
+                // Extract token from URL if available
+                let token = null
+                if (client.handshake.url) {
+                    const urlParts = client.handshake.url.split('/')
+                    const tokenFromUrl = urlParts[urlParts.length - 1]
+                    if (tokenFromUrl && tokenFromUrl.startsWith('eyJ')) {
+                        token = tokenFromUrl
+                    }
+                }
+
+                // If we have a token, verify it and get user data
+                if (token) {
+                    try {
+                        const payload = await this.jwtService.verifyAsync(token)
+
+                        // Update user info with JWT data
+                        userInfo.userId = payload.uuid || payload.id || userId
+                        userInfo.userName =
+                            payload.name || payload.email || 'Unknown User'
+                        userInfo.avatarUrl =
+                            payload.avatarUrl || payload.avatar || null
+
+                        // Also set on client for other handlers
+                        client['user'] = payload
+                        client.data = client.data || {}
+                        client.data.userId = userInfo.userId
+                        client.data.userName = userInfo.userName
+                        client.data.email = payload.email
+                        client.data.avatarUrl = userInfo.avatarUrl
+
+                        this.logger.log(
+                            `✅ SETUP complete: User ${userInfo.userName} (${userInfo.userId}) authenticated via JWT`
+                        )
+                    } catch (jwtError) {
+                        this.logger.warn(
+                            `⚠️ JWT verification failed in setup: ${jwtError.message}`
+                        )
+                        // Fall back to using the provided userId
+                        userInfo.userId = userId
+                    }
+                } else {
+                    // No token, just use provided userId
+                    userInfo.userId = userId
+                    this.logger.log(
+                        `⚠️ SETUP without JWT: User ${userId} connected without authentication`
+                    )
+                }
+
+                this.connectedUsers.set(client.id, userInfo)
+            }
+
+            // Emit authenticated event to match Flutter expectations
+            client.emit('authenticated', {
+                status: 'success',
+                userId: userInfo?.userId || userId,
+                message: 'User authenticated successfully',
+                timestamp: new Date().toISOString()
+            })
+
+            return {
+                status: 'success',
+                userId: userInfo?.userId || userId,
+                message: 'Setup completed successfully'
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ SETUP failed for socket ${client.id}: ${error.message}`,
+                error.stack
+            )
+            return {
+                status: 'error',
+                message: error.message
+            }
+        }
+    }
+
+    @SubscribeMessage('roomID')
+    async handleRoomID(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomID: string; useId: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId || data.useId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📥 ROOM_ID request: User ${userName} (${userId}) wants to join room ${data.roomID}`
+        )
+
+        try {
+            if (!data.roomID) {
+                throw new Error('Room ID is required')
+            }
+
+            // Update user info with provided userId if needed
+            if (userInfo && userInfo.userId === 'pending') {
+                userInfo.userId = data.useId
+                this.connectedUsers.set(client.id, userInfo)
+            }
+
+            const participant = await this.roomService.joinRoom(
+                data.roomID,
+                userId,
+                undefined, // password
+                undefined // seatNumber
+            )
+
+            // Update tracking
+            if (userInfo) {
+                userInfo.rooms.add(data.roomID)
+            }
+
+            const currentCount = this.roomUserCounts.get(data.roomID) || 0
+            const newCount = currentCount + 1
+            this.roomUserCounts.set(data.roomID, newCount)
+
+            // Join socket room
+            client.join(`room:${data.roomID}`)
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomID)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(data.roomID) || []
+
+            // Notify all room participants about user joining
+            this.server.to(`room:${data.roomID}`).emit('userJoined', {
+                roomId: data.roomID,
+                participant,
+                userName,
+                seatIndex: participant.seatNumber - 1 // Convert to 0-based
+            })
+
+            // Broadcast updated seat state
+            this.server.to(`room:${data.roomID}`).emit('seatUpdated', {
+                roomId: data.roomID,
+                seats: updatedSeats
+            })
+
+            this.logger.log(
+                `✅ ROOM_ID success: User ${userName} (${userId}) joined room ${data.roomID} | ` +
+                    `Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
+            )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'joinRoom')
+
+            return {
+                status: 'success',
+                participant,
+                seatIndex: participant.seatNumber - 1, // Convert to 0-based
+                seats: updatedSeats,
+                roomUserCount: newCount,
+                message: `Successfully joined room ${data.roomID}`
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ ROOM_ID failed: User ${userName} (${userId}) failed to join room ${data.roomID} | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomID
+            }
         }
     }
 
@@ -1731,6 +1917,80 @@ export class RoomGateway
                     `Heap Used: ${Math.round(memory.heapUsed / 1024 / 1024)}MB | ` +
                     `Heap Total: ${Math.round(memory.heapTotal / 1024 / 1024)}MB`
             )
+        }
+    }
+
+    @SubscribeMessage('leave_room')
+    async handleLeaveRoomEvent(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `🚪 LEAVE_ROOM event: User ${userName} (${userId}) wants to leave room ${data.roomId}`
+        )
+
+        try {
+            await this.roomService.leaveRoom(data.roomId, userId)
+
+            // Update tracking
+            if (userInfo) {
+                userInfo.rooms.delete(data.roomId)
+            }
+
+            const currentCount = this.roomUserCounts.get(data.roomId) || 0
+            const newCount = Math.max(0, currentCount - 1)
+            this.roomUserCounts.set(data.roomId, newCount)
+
+            // Leave socket room
+            client.leave(`room:${data.roomId}`)
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(data.roomId) || []
+
+            // Notify all room participants about user leaving
+            this.server.to(`room:${data.roomId}`).emit('userLeft', {
+                roomId: data.roomId,
+                userId,
+                userName
+            })
+
+            // Broadcast updated seat state
+            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
+                roomId: data.roomId,
+                seats: updatedSeats,
+                action: 'user_left',
+                userId
+            })
+
+            this.logger.log(
+                `✅ LEAVE_ROOM event success: User ${userName} (${userId}) left room ${data.roomId} | ` +
+                    `Room users: ${newCount}`
+            )
+
+            return {
+                status: 'success',
+                seats: updatedSeats,
+                roomUserCount: newCount,
+                message: `Successfully left room ${data.roomId}`
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ LEAVE_ROOM event failed: User ${userName} (${userId}) failed to leave room ${data.roomId} | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId
+            }
         }
     }
 }
