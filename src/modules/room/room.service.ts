@@ -392,16 +392,18 @@ export class RoomService {
             return
         }
 
-        // Get first in waiting list
-        const nextUser = await this.waitingListRepository
-            .createQueryBuilder('waiting')
-            .where('waiting.roomId = :roomId', { roomId })
-            .orderBy('waiting.position', 'ASC')
-            .getOne()
+        // Get first in waiting list using findOne instead of query builder
+        const nextUser = await this.waitingListRepository.findOne({
+            where: { roomId: roomId },
+            order: { position: 'ASC' }
+        })
 
         if (!nextUser) {
             return
         }
+
+        // Store position before removing for position updates
+        const removedPosition = nextUser.position
 
         // Remove from waiting list
         await this.waitingListRepository.remove(nextUser)
@@ -409,14 +411,14 @@ export class RoomService {
         // Add as participant - no password needed for promotion from waiting list
         await this.joinRoom(roomId, nextUser.userId)
 
-        // Update positions in waiting list
+        // Update positions in waiting list - decrement positions of users who were after the promoted user
         await this.waitingListRepository
             .createQueryBuilder()
             .update(RoomWaitingList)
             .set({ position: () => 'position - 1' })
             .where('roomId = :roomId AND position > :position', {
-                roomId,
-                position: nextUser.position
+                roomId: roomId,
+                position: removedPosition
             })
             .execute()
     }
