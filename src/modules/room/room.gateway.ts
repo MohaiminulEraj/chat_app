@@ -84,14 +84,15 @@ export class RoomGateway
 
     handleConnection(client: Socket) {
         try {
-            const userId = client.data?.userId
-            const userName =
-                client.data?.userName || client.data?.email || 'Unknown User'
-            const avatarUrl = client.data?.avatarUrl || null
+            // Get user info from JWT auth (set by WsJwtGuard)
+            const user = client['user']
+            const userId = user?.uuid || user?.id
+            const userName = user?.name || user?.email || 'Unknown User'
+            const avatarUrl = user?.avatarUrl || user?.avatar || null
 
             if (!userId) {
                 this.logger.warn(
-                    `❌ Connection rejected - No userId found for socket ${client.id}`
+                    `❌ Connection rejected - No userId found for socket ${client.id} | User data: ${JSON.stringify(user)}`
                 )
                 client.disconnect()
                 return
@@ -113,8 +114,13 @@ export class RoomGateway
             // Send connection acknowledgment
             client.emit('connected', {
                 status: 'success',
-                message: 'Connected to rooms namespace',
-                timestamp: new Date().toISOString()
+                message: 'Connected to root namespace',
+                timestamp: new Date().toISOString(),
+                user: {
+                    userId,
+                    userName,
+                    avatarUrl
+                }
             })
         } catch (error) {
             this.logger.error(

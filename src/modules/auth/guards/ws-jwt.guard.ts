@@ -23,7 +23,14 @@ export class WsJwtGuard implements CanActivate {
             }
 
             const payload = await this.jwtService.verifyAsync(token)
+
+            // Set user data in both places for compatibility
             client['user'] = payload
+            client.data = client.data || {}
+            client.data.userId = payload.uuid || payload.id
+            client.data.userName = payload.name
+            client.data.email = payload.email
+            client.data.avatarUrl = payload.avatarUrl || payload.avatar
 
             return true
         } catch (err) {
