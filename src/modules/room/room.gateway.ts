@@ -126,6 +126,13 @@ export class RoomGateway
                 socketId: client.id,
                 timestamp: new Date().toISOString()
             })
+
+            // Also emit connection status update
+            client.emit('connectionStatusUpdate', {
+                status: 'connected',
+                socketId: client.id,
+                timestamp: new Date().toISOString()
+            })
         } catch (error) {
             this.logger.error(
                 `❌ Connection error for socket ${client.id}: ${error.message}`,
@@ -172,6 +179,30 @@ export class RoomGateway
                             roomId,
                             seats: updatedSeats
                         })
+
+                        // Emit disconnect activity update
+                        this.server
+                            .to(`room:${roomId}`)
+                            .emit('disconnectActivityUpdate', {
+                                action: 'user_disconnected',
+                                roomId: roomId,
+                                userId: userInfo.userId,
+                                userName: userInfo.userName,
+                                roomUserCount: newCount,
+                                timestamp: new Date().toISOString()
+                            })
+
+                        // Emit room leave confirmation
+                        this.server
+                            .to(`room:${roomId}`)
+                            .emit('roomLeaveUpdate', {
+                                action: 'user_disconnected',
+                                roomId: roomId,
+                                userId: userInfo.userId,
+                                userName: userInfo.userName,
+                                roomUserCount: newCount,
+                                timestamp: new Date().toISOString()
+                            })
 
                         this.logger.log(
                             `📤 User ${userInfo.userName} disconnected and left room ${roomId} | Room users: ${newCount}`
@@ -276,6 +307,14 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             })
 
+            // Emit setup completion event
+            client.emit('setupComplete', {
+                status: 'success',
+                userId: userInfo?.userId || userId,
+                socketId: client.id,
+                timestamp: new Date().toISOString()
+            })
+
             return {
                 status: 'success',
                 userId: userInfo?.userId || userId,
@@ -354,6 +393,18 @@ export class RoomGateway
             this.server.to(`room:${data.roomID}`).emit('seatUpdated', {
                 roomId: data.roomID,
                 seats: updatedSeats
+            })
+
+            // Emit room join confirmation to all participants
+            this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
+                action: 'user_joined',
+                roomId: data.roomID,
+                userId: userId,
+                userName: userName,
+                participant: participant,
+                seatIndex: participant.seatNumber - 1,
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
             })
 
             this.logger.log(
@@ -446,6 +497,18 @@ export class RoomGateway
                 seats: updatedSeats
             })
 
+            // Emit room join confirmation to all participants
+            this.server.to(`room:${data.roomId}`).emit('roomJoinUpdate', {
+                action: 'user_joined',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                participant: participant,
+                seatIndex: participant.seatNumber - 1,
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
+            })
+
             this.logger.log(
                 `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} | ` +
                     `Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
@@ -523,6 +586,16 @@ export class RoomGateway
                 seats: updatedSeats,
                 action: 'user_left',
                 userId
+            })
+
+            // Emit room leave confirmation to all participants
+            this.server.to(`room:${roomId}`).emit('roomLeaveUpdate', {
+                action: 'user_left',
+                roomId: roomId,
+                userId: userId,
+                userName: userName,
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
             })
 
             this.logger.log(
@@ -623,6 +696,16 @@ export class RoomGateway
                 metadata: data.metadata || null
             })
 
+            // Emit comment activity update
+            this.server.to(roomName).emit('commentActivityUpdate', {
+                action: 'comment_added',
+                roomId: data.roomId,
+                commentId: comment.uuid,
+                senderId: userId,
+                senderName: userName,
+                timestamp: new Date().toISOString()
+            })
+
             this.logger.log(
                 `✅ SEND_COMMENT success: User ${userName} (${userId}) sent comment ${comment.uuid} to room ${data.roomId}`
             )
@@ -676,6 +759,16 @@ export class RoomGateway
 
             // Notify all room participants
             this.server.to(roomName).emit('commentDeleted', {
+                roomId: data.roomId,
+                commentId: data.commentId,
+                deletedBy: userId,
+                deletedByName: userName,
+                timestamp: new Date().toISOString()
+            })
+
+            // Emit comment activity update
+            this.server.to(roomName).emit('commentActivityUpdate', {
+                action: 'comment_deleted',
                 roomId: data.roomId,
                 commentId: data.commentId,
                 deletedBy: userId,
@@ -755,6 +848,18 @@ export class RoomGateway
                 transaction,
                 sender: { id: userId, name: userName },
                 receiver: { id: data.receiverId }
+            })
+
+            // Emit gift activity update
+            this.server.to(`room:${data.roomId}`).emit('giftActivityUpdate', {
+                action: 'gift_sent',
+                roomId: data.roomId,
+                transactionId: transaction.uuid,
+                senderId: userId,
+                senderName: userName,
+                receiverId: data.receiverId,
+                giftId: data.giftId,
+                timestamp: new Date().toISOString()
             })
 
             this.logger.log(
@@ -964,6 +1069,36 @@ export class RoomGateway
                 userInfo: updatedUserInfo
             })
 
+            // Emit mute status update event
+            this.server.to(`room:${data.roomId}`).emit('muteStatusUpdate', {
+                action: isMuted ? 'muted' : 'unmuted',
+                roomId: data.roomId,
+                targetUserId: targetUserId,
+                targetUserName: targetUserName,
+                seatIndex: data.userInfo.seatIndex,
+                isMuted: isMuted,
+                micOn: micOn,
+                actionBy: {
+                    userId: userId,
+                    userName: userName
+                },
+                timestamp: new Date().toISOString()
+            })
+
+            // Emit participant status change
+            this.server
+                .to(`room:${data.roomId}`)
+                .emit('participantStatusUpdate', {
+                    roomId: data.roomId,
+                    userId: targetUserId,
+                    userName: targetUserName,
+                    status: {
+                        isMuted: isMuted,
+                        micOn: micOn
+                    },
+                    timestamp: new Date().toISOString()
+                })
+
             this.logger.log(
                 `✅ TOGGLE_MUTE success: User ${userName} (${userId}) ${isMuted ? 'muted' : 'unmuted'} seat ${data.userInfo.seatIndex} (${targetUserName}) in room ${data.roomId}`
             )
@@ -1114,6 +1249,21 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             })
 
+            // Emit kick activity update
+            this.server.to(`room:${data.roomId}`).emit('kickActivityUpdate', {
+                action: 'user_kicked',
+                roomId: data.roomId,
+                kickedUserId: kickedUserId,
+                kickedUserName: kickedUserName,
+                seatIndex: data.seatIndex,
+                kickedBy: {
+                    userId: userId,
+                    userName: userName
+                },
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
+            })
+
             // Update room seats state
             await this.updateRoomSeatsState(data.roomId)
 
@@ -1124,6 +1274,17 @@ export class RoomGateway
             this.server.to(`room:${data.roomId}`).emit('roomSeatsUpdate', {
                 roomId: data.roomId,
                 seats: updatedSeats
+            })
+
+            // Emit comprehensive room update
+            this.server.to(`room:${data.roomId}`).emit('roomUpdate', {
+                action: 'participant_removed',
+                roomId: data.roomId,
+                removedUserId: kickedUserId,
+                removedUserName: kickedUserName,
+                seats: updatedSeats,
+                participantCount: newCount,
+                timestamp: new Date().toISOString()
             })
 
             this.logger.log(
@@ -1206,6 +1367,16 @@ export class RoomGateway
                     status: { isDeafened: data.isDeafened }
                 })
 
+            // Emit deafen status update
+            this.server.to(`room:${data.roomId}`).emit('deafenStatusUpdate', {
+                action: data.isDeafened ? 'deafened' : 'undeafened',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                isDeafened: data.isDeafened,
+                timestamp: new Date().toISOString()
+            })
+
             return {
                 status: 'success',
                 isDeafened: data.isDeafened,
@@ -1252,6 +1423,16 @@ export class RoomGateway
                     status: { isVideoOn: data.isVideoOn }
                 })
 
+            // Emit video status update
+            this.server.to(`room:${data.roomId}`).emit('videoStatusUpdate', {
+                action: data.isVideoOn ? 'video_on' : 'video_off',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                isVideoOn: data.isVideoOn,
+                timestamp: new Date().toISOString()
+            })
+
             return {
                 status: 'success',
                 isVideoOn: data.isVideoOn,
@@ -1296,6 +1477,18 @@ export class RoomGateway
                 userId,
                 userName,
                 status: { isSpeaking: data.isSpeaking }
+            })
+
+            // Emit speaking status update (to all participants including sender for UI feedback)
+            this.server.to(`room:${data.roomId}`).emit('speakingStatusUpdate', {
+                action: data.isSpeaking
+                    ? 'started_speaking'
+                    : 'stopped_speaking',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                isSpeaking: data.isSpeaking,
+                timestamp: new Date().toISOString()
             })
 
             return {
@@ -1542,6 +1735,67 @@ export class RoomGateway
             )
             return { status: 'error', message: error.message }
         }
+    }
+
+    // ==================== UTILITY METHODS ====================
+
+    /**
+     * Emit comprehensive room state update to all participants
+     */
+    private async emitRoomStateUpdate(
+        roomId: string,
+        action: string,
+        additionalData: any = {}
+    ) {
+        try {
+            const roomUserCount = this.roomUserCounts.get(roomId) || 0
+            const seats = this.roomSeats.get(roomId) || []
+            const participants =
+                await this.roomService.getRoomParticipants(roomId)
+
+            this.server.to(`room:${roomId}`).emit('roomStateUpdate', {
+                action,
+                roomId,
+                roomUserCount,
+                seats,
+                participantCount: participants.length,
+                timestamp: new Date().toISOString(),
+                ...additionalData
+            })
+        } catch (error) {
+            this.logger.error(
+                `Failed to emit room state update for room ${roomId}: ${error.message}`
+            )
+        }
+    }
+
+    /**
+     * Emit user activity tracking event
+     */
+    private emitUserActivityUpdate(
+        userId: string,
+        userName: string,
+        activity: string,
+        roomId?: string,
+        additionalData: any = {}
+    ) {
+        const eventData = {
+            action: activity,
+            userId,
+            userName,
+            timestamp: new Date().toISOString(),
+            ...additionalData
+        }
+
+        if (roomId) {
+            eventData.roomId = roomId
+            this.server
+                .to(`room:${roomId}`)
+                .emit('userActivityUpdate', eventData)
+        }
+
+        // Also emit to user's personal channel
+        this.server.to(`user:${userId}`).emit('activityUpdate', eventData)
     }
 
     // ==================== CALL MANAGEMENT ====================
