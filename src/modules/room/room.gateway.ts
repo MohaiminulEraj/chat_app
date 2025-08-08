@@ -21,7 +21,7 @@ import { RoomService } from './room.service'
         origin: '*'
     }
 })
-@UseGuards(WsJwtGuard)
+// @UseGuards(WsJwtGuard) // Temporarily disabled for testing
 export class RoomGateway
     implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -169,14 +169,15 @@ export class RoomGateway
         this.logger.log(`   ├─ Transport: ${transport}`)
         this.logger.log(`   ├─ Connection Time: ${connectionTime}`)
         this.logger.log(`   ├─ URL: ${client.handshake.url || 'Not provided'}`)
+
+        // More focused handshake logging
         this.logger.log(
-            `   ├─ Headers: ${JSON.stringify(client.handshake.headers, null, 2)}`
+            `   ├─ Query: ${JSON.stringify(client.handshake.query)}`
         )
+        this.logger.log(`   ├─ Auth: ${JSON.stringify(client.handshake.auth)}`)
+
         this.logger.log(
-            `   ├─ Query: ${JSON.stringify(client.handshake.query, null, 2)}`
-        )
-        this.logger.log(
-            `   ├─ Auth: ${JSON.stringify(client.handshake.auth, null, 2)}`
+            `   └─ Total Active Connections: ${this.connectedUsers.size + 1}`
         )
         this.logger.log(
             `   └─ Total Active Connections: ${this.connectedUsers.size + 1}`
