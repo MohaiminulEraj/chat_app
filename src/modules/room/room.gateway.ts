@@ -70,6 +70,7 @@ export class RoomGateway
     ) {}
 
     afterInit(server: Server) {
+        this.server = server
         this.logger.log('🚀 Room Gateway initialized successfully')
         this.logger.log(`📡 WebSocket namespace: / (root)`)
         this.logger.log(`🔄 CORS enabled for all origins`)
@@ -78,13 +79,99 @@ export class RoomGateway
         this.logger.log(`   ├─ Room user counts tracking: Ready`)
         this.logger.log(`   └─ Room seats state tracking: Ready`)
 
-        // Log periodic statistics every 30 seconds
+        // Set up global socket monitoring
+        this.setupGlobalConnectionMonitoring()
+
+        // Set up connection health monitoring
+        this.setupConnectionHealthMonitoring()
+    }
+
+    private setupGlobalConnectionMonitoring() {
+        if (this.server) {
+            // Monitor all connections
+            this.server.on('connection', (socket: Socket) => {
+                this.logger.log(
+                    `🔌 [GLOBAL] New connection detected: ${socket.id}`
+                )
+
+                // Set up socket-specific error handling
+                socket.on('error', (error) => {
+                    this.logger.error(
+                        `❌ [SOCKET] Socket error on ${socket.id}: ${error.message}`
+                    )
+                })
+
+                socket.on('disconnect', (reason) => {
+                    this.logger.log(
+                        `🔌 [GLOBAL] Socket ${socket.id} disconnected: ${reason}`
+                    )
+                })
+            })
+
+            // Monitor connection errors
+            this.server.on('connect_error', (error) => {
+                this.logger.error(
+                    `❌ [SERVER] Connection error: ${error.message}`
+                )
+            })
+        }
+    }
+
+    private setupConnectionHealthMonitoring() {
+        // Set up periodic connection health checks
+        setInterval(() => {
+            if (this.server) {
+                const connectedCount = this.server.sockets.sockets.size
+                const trackedCount = this.connectedUsers.size
+
+                this.logger.log(
+                    `💓 [HEALTH] Connections - Server: ${connectedCount}, Tracked: ${trackedCount}`
+                )
+
+                // Clean up orphaned connections
+                if (connectedCount !== trackedCount) {
+                    this.cleanupOrphanedConnections()
+                }
+            }
+        }, 30000) // Check every 30 seconds
+
+        // Set up periodic statistics logging
         setInterval(() => {
             this.logSystemStatistics()
-        }, 30000)
+        }, 60000) // Log stats every minute
+    }
+
+    private cleanupOrphanedConnections() {
+        const serverSocketIds = new Set(
+            Array.from(this.server.sockets.sockets.keys())
+        )
+
+        for (const [socketId] of this.connectedUsers) {
+            if (!serverSocketIds.has(socketId)) {
+                this.logger.log(
+                    `🧹 [CLEANUP] Removing orphaned connection: ${socketId}`
+                )
+                this.connectedUsers.delete(socketId)
+            }
+        }
     }
 
     handleConnection(client: Socket) {
+        const connectionTime = new Date().toISOString()
+        const clientIp = client.handshake.address
+        const userAgent = client.handshake.headers['user-agent']
+        const transport = client.conn.transport.name
+
+        this.logger.log(`🔌 [CONNECTION] New client connected to Room Gateway`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ IP Address: ${clientIp}`)
+        this.logger.log(`   ├─ User Agent: ${userAgent || 'Unknown'}`)
+        this.logger.log(`   ├─ Transport: ${transport}`)
+        this.logger.log(`   ├─ Connection Time: ${connectionTime}`)
+        this.logger.log(
+            `   └─ Total Active Connections: ${this.connectedUsers.size + 1}`
+        )
+
         try {
             // Get user info from JWT auth (set by WsJwtGuard)
             const user = client['user']
@@ -92,17 +179,23 @@ export class RoomGateway
             let userName = user?.name || user?.email || 'Unknown User'
             let avatarUrl = user?.avatarUrl || user?.avatar || null
 
-            // If no user data from JWT, check URL for token (Flutter pattern)
-            if (!userId && client.handshake.url) {
-                const urlParts = client.handshake.url.split('/')
-                const tokenFromUrl = urlParts[urlParts.length - 1]
+            // Try to authenticate from token if available
+            const token =
+                client.handshake.auth?.token ||
+                client.handshake.query?.token ||
+                (client.handshake.url &&
+                    this.extractTokenFromUrl(client.handshake.url))
 
-                if (tokenFromUrl && tokenFromUrl.startsWith('eyJ')) {
-                    this.logger.log(
-                        `🔑 Found JWT token in URL: ${tokenFromUrl.substring(0, 20)}...`
-                    )
-                    // We'll authenticate properly in the setup event
-                }
+            if (token && !userId) {
+                this.logger.log(
+                    `🔑 Found JWT token, attempting authentication...`
+                )
+                // We'll handle proper JWT verification in setup event
+                // For now, just log that we found a token
+                this.logger.log(`   ├─ Token Length: ${token.length} chars`)
+                this.logger.log(
+                    `   └─ Token Preview: ${token.substring(0, 20)}...`
+                )
             }
 
             // Allow connection even without immediate JWT verification
@@ -115,31 +208,88 @@ export class RoomGateway
             })
 
             this.logger.log(
-                `🔌 User connecting: ${userName || 'Pending'} (${userId || 'pending'}) | Socket: ${client.id} | ` +
-                    `Total connections: ${this.connectedUsers.size} | IP: ${client.handshake?.address || 'unknown'}`
+                `✅ Connection established: ${userName || 'Pending'} (${userId || 'pending'}) | Socket: ${client.id}`
             )
 
-            // Send connection acknowledgment
+            // Send connection acknowledgment immediately
             client.emit('connected', {
                 success: true,
-                message: 'Connected to real-time server',
+                message: 'Connected to Room Gateway',
                 socketId: client.id,
-                timestamp: new Date().toISOString()
+                timestamp: connectionTime,
+                authenticated: !!userId
             })
 
             // Also emit connection status update
             client.emit('connectionStatusUpdate', {
                 status: 'connected',
                 socketId: client.id,
-                timestamp: new Date().toISOString()
+                timestamp: connectionTime,
+                gateway: 'room'
             })
+
+            // Set up connection health monitoring
+            this.setupConnectionHealthCheck(client)
         } catch (error) {
             this.logger.error(
                 `❌ Connection error for socket ${client.id}: ${error.message}`,
                 error.stack
             )
-            client.disconnect()
+            // Don't disconnect immediately, let the client try to authenticate
+            client.emit('connectionError', {
+                error: 'Connection initialization failed',
+                message: error.message,
+                timestamp: connectionTime
+            })
         }
+    }
+
+    /**
+     * Extract JWT token from URL path
+     */
+    private extractTokenFromUrl(url: string): string | null {
+        try {
+            const urlParts = url.split('/')
+            const tokenCandidate = urlParts[urlParts.length - 1]
+
+            // Check if it looks like a JWT token (starts with eyJ)
+            if (tokenCandidate && tokenCandidate.startsWith('eyJ')) {
+                return tokenCandidate
+            }
+            return null
+        } catch (error) {
+            this.logger.warn(
+                `Failed to extract token from URL: ${error.message}`
+            )
+            return null
+        }
+    }
+
+    /**
+     * Set up connection health monitoring
+     */
+    private setupConnectionHealthCheck(client: Socket): void {
+        // Set up ping/pong for connection health
+        const pingInterval = setInterval(() => {
+            if (client.connected) {
+                client.emit('ping', { timestamp: Date.now() })
+            } else {
+                clearInterval(pingInterval)
+            }
+        }, 30000) // Ping every 30 seconds
+
+        // Handle pong responses
+        client.on('pong', (data) => {
+            const latency = Date.now() - data.timestamp
+            this.logger.debug(
+                `🏓 Pong received from ${client.id}, latency: ${latency}ms`
+            )
+        })
+
+        // Clean up interval on disconnect
+        client.on('disconnect', () => {
+            clearInterval(pingInterval)
+        })
     }
 
     handleDisconnect(client: Socket) {
@@ -246,93 +396,133 @@ export class RoomGateway
     @SubscribeMessage('setup')
     async handleSetup(
         @ConnectedSocket() client: Socket,
-        @MessageBody() userId: string
+        @MessageBody() data: any
     ) {
+        const setupStartTime = Date.now()
+        const userId = typeof data === 'string' ? data : data?.userId
+
         this.logger.log(
-            `🔧 SETUP event received: Socket ${client.id} | UserId: ${userId}`
+            `🔧 [SETUP] Setup event received: Socket ${client.id} | UserId: ${userId}`
         )
 
         try {
             // Update the connected user info with proper userId
             const userInfo = this.connectedUsers.get(client.id)
-            if (userInfo && userInfo.userId === 'pending') {
-                // Extract token from URL if available
-                let token = null
-                if (client.handshake.url) {
-                    const urlParts = client.handshake.url.split('/')
-                    const tokenFromUrl = urlParts[urlParts.length - 1]
-                    if (tokenFromUrl && tokenFromUrl.startsWith('eyJ')) {
-                        token = tokenFromUrl
-                    }
-                }
-
-                // If we have a token, verify it and get user data
-                if (token) {
-                    try {
-                        const payload = await this.jwtService.verifyAsync(token)
-
-                        // Update user info with JWT data
-                        userInfo.userId = payload.uuid || payload.id || userId
-                        userInfo.userName =
-                            payload.name || payload.email || 'Unknown User'
-                        userInfo.avatarUrl =
-                            payload.avatarUrl || payload.avatar || null
-
-                        // Also set on client for other handlers
-                        client['user'] = payload
-                        client.data = client.data || {}
-                        client.data.userId = userInfo.userId
-                        client.data.userName = userInfo.userName
-                        client.data.email = payload.email
-                        client.data.avatarUrl = userInfo.avatarUrl
-
-                        this.logger.log(
-                            `✅ SETUP complete: User ${userInfo.userName} (${userInfo.userId}) authenticated via JWT`
-                        )
-                    } catch (jwtError) {
-                        this.logger.warn(
-                            `⚠️ JWT verification failed in setup: ${jwtError.message}`
-                        )
-                        // Fall back to using the provided userId
-                        userInfo.userId = userId
-                    }
-                } else {
-                    // No token, just use provided userId
-                    userInfo.userId = userId
-                    this.logger.log(
-                        `⚠️ SETUP without JWT: User ${userId} connected without authentication`
-                    )
-                }
-
-                this.connectedUsers.set(client.id, userInfo)
+            if (!userInfo) {
+                throw new Error('User info not found for socket')
             }
+
+            let authenticatedUser = null
+
+            // Try multiple authentication methods
+            const token =
+                client.handshake.auth?.token ||
+                client.handshake.query?.token ||
+                this.extractTokenFromUrl(client.handshake.url) ||
+                data?.token
+
+            if (token) {
+                try {
+                    this.logger.log(`🔐 [SETUP] Attempting JWT verification...`)
+                    const payload = await this.jwtService.verifyAsync(token)
+
+                    authenticatedUser = {
+                        userId: payload.uuid || payload.id,
+                        userName:
+                            payload.name || payload.email || 'Unknown User',
+                        avatarUrl: payload.avatarUrl || payload.avatar || null,
+                        email: payload.email
+                    }
+
+                    this.logger.log(
+                        `✅ [SETUP] JWT verification successful: ${authenticatedUser.userName} (${authenticatedUser.userId})`
+                    )
+                } catch (jwtError) {
+                    this.logger.warn(
+                        `⚠️ [SETUP] JWT verification failed: ${jwtError.message}`
+                    )
+                    // Continue with fallback authentication
+                }
+            }
+
+            // Update user info
+            if (authenticatedUser) {
+                userInfo.userId = authenticatedUser.userId
+                userInfo.userName = authenticatedUser.userName
+                userInfo.avatarUrl = authenticatedUser.avatarUrl
+
+                // Also set on client for other handlers
+                client['user'] = {
+                    uuid: authenticatedUser.userId,
+                    id: authenticatedUser.userId,
+                    name: authenticatedUser.userName,
+                    email: authenticatedUser.email,
+                    avatarUrl: authenticatedUser.avatarUrl
+                }
+                client.data = client.data || {}
+                client.data.userId = authenticatedUser.userId
+                client.data.userName = authenticatedUser.userName
+                client.data.email = authenticatedUser.email
+                client.data.avatarUrl = authenticatedUser.avatarUrl
+            } else if (userId) {
+                // Fallback to provided userId
+                userInfo.userId = userId
+                this.logger.log(
+                    `⚠️ [SETUP] Using fallback authentication with userId: ${userId}`
+                )
+            } else {
+                throw new Error('No authentication method succeeded')
+            }
+
+            this.connectedUsers.set(client.id, userInfo)
+
+            const setupDuration = Date.now() - setupStartTime
 
             // Emit authenticated event to match Flutter expectations
             client.emit('authenticated', {
                 status: 'success',
-                userId: userInfo?.userId || userId,
+                userId: userInfo.userId,
+                userName: userInfo.userName,
                 message: 'User authenticated successfully',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                setupDuration
             })
 
             // Emit setup completion event
             client.emit('setupComplete', {
                 status: 'success',
-                userId: userInfo?.userId || userId,
+                userId: userInfo.userId,
+                userName: userInfo.userName,
                 socketId: client.id,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                setupDuration
             })
+
+            this.logger.log(
+                `✅ [SETUP] Setup completed successfully in ${setupDuration}ms: ${userInfo.userName} (${userInfo.userId})`
+            )
 
             return {
                 status: 'success',
-                userId: userInfo?.userId || userId,
+                userId: userInfo.userId,
+                userName: userInfo.userName,
                 message: 'Setup completed successfully'
             }
         } catch (error) {
+            const setupDuration = Date.now() - setupStartTime
             this.logger.error(
-                `❌ SETUP failed for socket ${client.id}: ${error.message}`,
+                `❌ [SETUP] Setup failed for socket ${client.id} in ${setupDuration}ms: ${error.message}`,
                 error.stack
             )
+
+            // Send error response but don't disconnect
+            client.emit('setupError', {
+                status: 'error',
+                error: error.message,
+                timestamp: new Date().toISOString(),
+                setupDuration
+            })
+
             return {
                 status: 'error',
                 message: error.message
