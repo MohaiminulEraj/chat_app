@@ -715,10 +715,22 @@ export class RoomService {
             order: { seatNumber: 'ASC' }
         })
 
-        // Build participants list with the new format (excluding host)
-        const hostUserId = hostRole?.user.uuid || room.ownerId
+        // Build participants list with the new format
+        const hostUserId = hostRole?.user.uuid
+        const ownerId = room.ownerId
+
+        // Determine if we should exclude a user from participants:
+        // - Exclude if user is HOST (regardless of whether they're also owner)
+        // - Include OWNER-ONLY users (who are not also hosts)
         const participantsList = participants
-            .filter((participant) => participant.userId !== hostUserId) // Exclude host from participants
+            .filter((participant) => {
+                // Exclude if user is the host
+                if (hostUserId && participant.userId === hostUserId) {
+                    return false
+                }
+                // Include everyone else (including owner-only users)
+                return true
+            })
             .map((participant) => {
                 const userRoles = roleAssignments.filter(
                     (role) => role.userId === participant.userId
