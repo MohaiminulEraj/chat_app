@@ -449,10 +449,11 @@ export class RoomGateway
     async handleJoinRoom(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { roomId: string; password?: string }
+        data: { userId: string; roomId: string; password?: string }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        // Use userId from message body, fallback to connected user info
+        const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
@@ -464,8 +465,21 @@ export class RoomGateway
                 throw new Error('Room ID is required')
             }
 
+            if (!userId) {
+                throw new Error('User ID is required')
+            }
+
             // Update tracking - user joins as observer initially for this specific room
             if (userInfo) {
+                // Update userInfo with userId from message body if it was pending
+                if (userInfo.userId === 'pending' && data.userId) {
+                    userInfo.userId = data.userId
+                    this.connectedUsers.set(client.id, userInfo)
+                    this.logger.log(
+                        `🔄 Updated pending user info with userId: ${data.userId}`
+                    )
+                }
+
                 userInfo.rooms.add(data.roomId)
                 this.logger.log(
                     `📝 User ${userName} (${userId}) tracking updated - now in rooms: [${Array.from(userInfo.rooms).join(', ')}]`
