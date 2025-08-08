@@ -605,12 +605,20 @@ export class RoomGateway
                 )
             }
 
-            // Get current room seats
+            // Get current room seats with lock information
             const currentSeats = await this.roomService.getRoomSeats(
                 data.roomId
             )
+
+            this.logger.log(
+                `🔍 DEBUG SIT_IN_SEAT: Available seats for room ${data.roomId}: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
+            )
+            this.logger.log(
+                `🔍 DEBUG SIT_IN_SEAT: Looking for seat with index: ${data.seatIndex}`
+            )
+
             const targetSeat = currentSeats.find(
-                (seat) => seat.seatIndex === data.seatIndex
+                (seat) => seat.index === data.seatIndex
             )
 
             if (!targetSeat) {
@@ -618,51 +626,45 @@ export class RoomGateway
             }
 
             // Check seat availability and lock status
-            if (targetSeat.isOccupied) {
+            if (targetSeat.occupied) {
                 throw new Error('Seat is already occupied')
             }
 
-            if (targetSeat.isLocked) {
-                // If seat is locked, require password or add to waiting list
-                if (
-                    targetSeat.password &&
-                    targetSeat.password !== data.password
-                ) {
-                    // Add to waiting list for this specific seat
-                    await this.roomService.addToWaitingList(data.roomId, userId)
+            if (targetSeat.locked) {
+                // If seat is locked, add to waiting list (simplified for now)
+                // Note: Password check would need to be implemented with RoomSeat entity directly
+                // Add to waiting list for this specific seat
+                await this.roomService.addToWaitingList(data.roomId, userId)
 
-                    const waitingList =
-                        await this.roomService.getRoomWaitingList(data.roomId)
-                    const userPosition =
-                        waitingList.find((w) => w.userId === userId)
-                            ?.position || 0
+                const waitingList = await this.roomService.getRoomWaitingList(
+                    data.roomId
+                )
+                const userPosition =
+                    waitingList.find((w) => w.userId === userId)?.position || 0
 
-                    const waitingResponse = {
-                        status: 'waiting',
-                        action: 'added_to_waiting_list',
-                        roomId: data.roomId,
-                        seatIndex: data.seatIndex,
-                        userId: userId,
-                        userName: userName,
-                        position: userPosition,
-                        message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`,
-                        timestamp: new Date().toISOString()
-                    }
-
-                    // Emit to the user
-                    client.emit('sitInSeatResponse', waitingResponse)
-
-                    // Emit to all room participants
-                    this.server
-                        .to(roomName)
-                        .emit('roomJoinUpdate', waitingResponse)
-
-                    this.logger.log(
-                        `⏳ SIT_IN_SEAT waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${data.roomId}`
-                    )
-
-                    return waitingResponse
+                const waitingResponse = {
+                    status: 'waiting',
+                    action: 'added_to_waiting_list',
+                    roomId: data.roomId,
+                    seatIndex: data.seatIndex,
+                    userId: userId,
+                    userName: userName,
+                    position: userPosition,
+                    message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`,
+                    timestamp: new Date().toISOString()
                 }
+
+                // Emit to the user
+                client.emit('sitInSeatResponse', waitingResponse)
+
+                // Emit to all room participants
+                this.server.to(roomName).emit('roomJoinUpdate', waitingResponse)
+
+                this.logger.log(
+                    `⏳ SIT_IN_SEAT waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${data.roomId}`
+                )
+
+                return waitingResponse
             }
 
             // Seat is available - proceed with sitting

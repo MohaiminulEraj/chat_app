@@ -7,7 +7,7 @@ import {
     NotFoundException
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { Repository, MoreThan } from 'typeorm'
 import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
@@ -412,15 +412,18 @@ export class RoomService {
         await this.joinRoom(roomId, nextUser.userId)
 
         // Update positions in waiting list - decrement positions of users who were after the promoted user
-        await this.waitingListRepository
-            .createQueryBuilder()
-            .update(RoomWaitingList)
-            .set({ position: () => 'position - 1' })
-            .where('roomId = :roomId AND position > :position', {
+        // Use direct repository update with findBy and update to avoid QueryBuilder UUID issues
+        const usersToUpdate = await this.waitingListRepository.find({
+            where: {
                 roomId: roomId,
-                position: removedPosition
-            })
-            .execute()
+                position: MoreThan(removedPosition)
+            }
+        })
+
+        for (const user of usersToUpdate) {
+            user.position = user.position - 1
+            await this.waitingListRepository.save(user)
+        }
     }
 
     async getRoomParticipants(roomId: string): Promise<RoomParticipant[]> {
