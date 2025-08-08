@@ -178,7 +178,7 @@ export class RoomService {
 
         // Check if user is already in the room
         const existingParticipant = await this.participantRepository.findOne({
-            where: { roomId, userId }
+            where: { roomId: roomId as string, userId: userId as string }
         })
 
         if (existingParticipant) {
@@ -226,7 +226,7 @@ export class RoomService {
 
     async leaveRoom(roomId: string, userId: string): Promise<void> {
         const participant = await this.participantRepository.findOne({
-            where: { roomId, userId }
+            where: { roomId: roomId as string, userId: userId as string }
         })
 
         if (!participant) {
@@ -355,21 +355,20 @@ export class RoomService {
     }
 
     async addToWaitingList(roomId: string, userId: string): Promise<void> {
-        // Check if already in waiting list
+        // Check if already in waiting list with explicit typing
         const existing = await this.waitingListRepository.findOne({
-            where: { roomId, userId }
+            where: { roomId: roomId as string, userId: userId as string }
         })
 
         if (existing) {
             return
         }
 
-        // Get next position
-        const lastInQueue = await this.waitingListRepository
-            .createQueryBuilder('waiting')
-            .where('waiting.roomId = :roomId', { roomId })
-            .orderBy('waiting.position', 'DESC')
-            .getOne()
+        // Get next position using find with order and explicit typing
+        const lastInQueue = await this.waitingListRepository.findOne({
+            where: { roomId: roomId as string },
+            order: { position: 'DESC' }
+        })
 
         const position = lastInQueue ? lastInQueue.position + 1 : 1
 
@@ -392,9 +391,9 @@ export class RoomService {
             return
         }
 
-        // Get first in waiting list using findOne instead of query builder
+        // Get first in waiting list using findOne with explicit typing
         const nextUser = await this.waitingListRepository.findOne({
-            where: { roomId: roomId },
+            where: { roomId: roomId as string },
             order: { position: 'ASC' }
         })
 
@@ -411,11 +410,10 @@ export class RoomService {
         // Add as participant - no password needed for promotion from waiting list
         await this.joinRoom(roomId, nextUser.userId)
 
-        // Update positions in waiting list - decrement positions of users who were after the promoted user
-        // Use direct repository update with findBy and update to avoid QueryBuilder UUID issues
+        // Update positions in waiting list with explicit typing
         const usersToUpdate = await this.waitingListRepository.find({
             where: {
-                roomId: roomId,
+                roomId: roomId as string,
                 position: MoreThan(removedPosition)
             }
         })

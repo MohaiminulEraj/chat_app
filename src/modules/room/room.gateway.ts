@@ -528,10 +528,8 @@ export class RoomGateway
                 (p) => p.userId === userId
             )
 
-            // Simplified response with only participants info
-            const response = {
-                participants: formattedParticipants // Only send participants info
-            }
+            // Return participants in the requested format
+            const response = formattedParticipants
 
             // Emit to all room participants
             this.server
@@ -696,24 +694,11 @@ export class RoomGateway
                 role: 'participant'
             }
 
-            // Create success response
-            const successResponse = {
-                status: 'success',
-                action: 'user_seated',
-                roomId: data.roomId,
-                userId: userId,
-                userName: userName,
-                participant: formattedParticipant, // Use formatted participant
-                seatIndex: data.seatIndex,
-                userRole: 'participant',
-                seats: updatedSeats,
-                roomUserCount: newCount,
-                message: `Successfully seated in seat ${data.seatIndex}`,
-                timestamp: new Date().toISOString()
-            }
+            // Return participant in the requested format (matching joinRoom response)
+            const response = formattedParticipant
 
             // Emit to the user who sat
-            client.emit('sitInSeatResponse', successResponse)
+            client.emit('sitInSeatResponse', formattedParticipant)
 
             // Notify all room participants about user sitting
             this.server.to(roomName).emit('userSeated', {
@@ -733,8 +718,10 @@ export class RoomGateway
                 userId: userId
             })
 
-            // Emit comprehensive room update
-            this.server.to(roomName).emit('roomJoinUpdate', successResponse)
+            // Emit comprehensive room update with formatted participant
+            this.server
+                .to(roomName)
+                .emit('roomJoinUpdate', formattedParticipant)
 
             // Check and promote from waiting list if needed
             await this.checkAndPromoteFromWaitingList(data.roomId)
@@ -746,7 +733,7 @@ export class RoomGateway
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
-            return successResponse
+            return response
         } catch (error) {
             this.logger.error(
                 `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${data.roomId} | ` +
