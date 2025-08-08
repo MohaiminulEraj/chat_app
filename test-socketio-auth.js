@@ -16,10 +16,9 @@ async function testSocketIOAuthentication() {
         )
 
         // Test the setup event without authentication
-        console.log('📨 Sending setup event without token...')
+        console.log('📨 Sending setup event without any user info...')
         socket.emit('setup', {
-            userId: 'test-user-123',
-            userName: 'Test User'
+            // No userId provided - should generate guest UUID
         })
     })
 
@@ -36,11 +35,10 @@ async function testSocketIOAuthentication() {
         // Close connection after successful setup
         setTimeout(() => {
             console.log(
-                '✅ Test completed successfully - no auth warnings expected'
+                '🔌 Testing disconnect (should not cause UUID errors)...'
             )
             socket.disconnect()
-            process.exit(0)
-        }, 1000)
+        }, 2000)
     })
 
     socket.on('setupError', (response) => {
@@ -56,6 +54,10 @@ async function testSocketIOAuthentication() {
 
     socket.on('disconnect', (reason) => {
         console.log('🔌 Disconnected:', reason)
+        console.log(
+            '✅ Test completed - should see no UUID errors in server logs'
+        )
+        process.exit(0)
     })
 
     // Add timeout

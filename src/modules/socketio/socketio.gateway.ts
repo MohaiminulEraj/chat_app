@@ -80,12 +80,41 @@ export class SocketIOGateway
         // Authentication disabled - always return true
         // Ensure userUuid is set if not already
         if (!client.userUuid) {
-            client.userUuid = `guest_${client.id}`
-            client.userId = client.userUuid
+            // Generate a proper UUID for guest users to avoid validation issues
+            const guestUuid = this.generateGuestUuid()
+            client.userUuid = guestUuid
+            client.userId = guestUuid
             client.userName = `Guest_${Date.now()}`
-            client.userEmail = `${client.userUuid}@guest.local`
+            client.userEmail = `${guestUuid}@guest.local`
+
+            this.logger.debug(
+                `👻 [GUEST_AUTH] Created guest user: ${client.userName} (${guestUuid})`
+            )
         }
         return true
+    }
+
+    // Generate a proper UUID for guest users
+    private generateGuestUuid(): string {
+        // Generate a UUID v4 format but mark it as a guest
+        const chars = '0123456789abcdef'
+        let uuid = 'guest-'
+        for (let i = 0; i < 8; i++)
+            uuid += chars[Math.floor(Math.random() * 16)]
+        uuid += '-'
+        for (let i = 0; i < 4; i++)
+            uuid += chars[Math.floor(Math.random() * 16)]
+        uuid += '-4' // Version 4
+        for (let i = 0; i < 3; i++)
+            uuid += chars[Math.floor(Math.random() * 16)]
+        uuid += '-'
+        uuid += chars[8 + Math.floor(Math.random() * 4)] // Variant bits
+        for (let i = 0; i < 3; i++)
+            uuid += chars[Math.floor(Math.random() * 16)]
+        uuid += '-'
+        for (let i = 0; i < 12; i++)
+            uuid += chars[Math.floor(Math.random() * 16)]
+        return uuid
     }
 
     async handleConnection(client: AuthenticatedSocket) {
@@ -421,9 +450,9 @@ export class SocketIOGateway
 
         try {
             // Skip authentication - allow all connections
-            // Use provided userId from data or generate a temporary one
+            // Use provided userId from data or generate a proper guest UUID
             const userId =
-                data?.userId || data?.userUuid || `guest_${client.id}`
+                data?.userId || data?.userUuid || this.generateGuestUuid()
             const userName =
                 data?.userName || data?.name || `Guest_${Date.now()}`
 
@@ -1484,6 +1513,14 @@ export class SocketIOGateway
 
     private async updateUserStatus(userId: string, status: string) {
         try {
+            // Skip database operations for guest users
+            if (userId.startsWith('guest_') || userId.startsWith('guest-')) {
+                this.logger.debug(
+                    `👻 [GUEST_STATUS] Skipping status update for guest user: ${userId}`
+                )
+                return
+            }
+
             await this.userService.updateStatus(userId, status as any)
 
             // Notify all friends about status change
