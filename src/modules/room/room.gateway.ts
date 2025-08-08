@@ -414,7 +414,8 @@ export class RoomGateway
                             await this.updateRoomSeatsState(roomId)
 
                             // Get updated seat information for this specific room
-                            const updatedSeats = this.roomSeats.get(roomId) || []
+                            const updatedSeats =
+                                this.roomSeats.get(roomId) || []
 
                             const currentCount =
                                 this.roomUserCounts.get(roomId) || 0
@@ -429,10 +430,12 @@ export class RoomGateway
                             })
 
                             // Broadcast updated seat state to this specific room
-                            this.server.to(`room:${roomId}`).emit('seatUpdated', {
-                                roomId,
-                                seats: updatedSeats
-                            })
+                            this.server
+                                .to(`room:${roomId}`)
+                                .emit('seatUpdated', {
+                                    roomId,
+                                    seats: updatedSeats
+                                })
 
                             // Emit disconnect activity update
                             this.server
