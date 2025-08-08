@@ -376,7 +376,7 @@ export class RoomGateway
         })
     }
 
-    handleDisconnect(client: Socket) {
+    async handleDisconnect(client: Socket) {
         try {
             const userInfo = this.connectedUsers.get(client.id)
 
@@ -386,82 +386,89 @@ export class RoomGateway
                 )
 
                 // Leave all rooms user was in and handle seat cleanup for each specific room
-                userInfo.rooms.forEach(async (roomId) => {
-                    try {
-                        this.logger.log(
-                            `🚪 Processing disconnect for user ${userInfo.userName} from room ${roomId}`
-                        )
-
-                        // Remove user only if they are a participant (seated) in this specific room
+                await Promise.all(
+                    Array.from(userInfo.rooms).map(async (roomId) => {
                         try {
-                            await this.roomService.leaveRoom(
+                            this.logger.log(
+                                `🚪 Processing disconnect for user ${userInfo.userName} from room ${roomId}`
+                            )
+
+                            // Remove user only if they are a participant (seated) in this specific room
+                            try {
+                                await this.roomService.leaveRoom(
+                                    roomId,
+                                    userInfo.userId
+                                )
+                                this.logger.log(
+                                    `✅ User ${userInfo.userName} successfully left room ${roomId}`
+                                )
+                            } catch (err) {
+                                // leaveRoom is idempotent now - this is expected for observers/hosts
+                                this.logger.debug(
+                                    `ℹ️ leaveRoom: User ${userInfo.userId} was not a seated participant in room ${roomId} (expected for observers/hosts)`
+                                )
+                                // Don't re-throw - this is normal behavior for observers/hosts
+                            }
+
+                            // Update seat state in memory for this specific room
+                            await this.updateRoomSeatsState(roomId)
+
+                            // Get updated seat information for this specific room
+                            const updatedSeats = this.roomSeats.get(roomId) || []
+
+                            const currentCount =
+                                this.roomUserCounts.get(roomId) || 0
+                            const newCount = Math.max(0, currentCount - 1)
+                            this.roomUserCounts.set(roomId, newCount)
+
+                            // Notify this specific room about user leaving and seat update
+                            client.to(`room:${roomId}`).emit('userLeft', {
                                 roomId,
-                                userInfo.userId
+                                userId: userInfo.userId,
+                                userName: userInfo.userName
+                            })
+
+                            // Broadcast updated seat state to this specific room
+                            this.server.to(`room:${roomId}`).emit('seatUpdated', {
+                                roomId,
+                                seats: updatedSeats
+                            })
+
+                            // Emit disconnect activity update
+                            this.server
+                                .to(`room:${roomId}`)
+                                .emit('disconnectActivityUpdate', {
+                                    action: 'user_disconnected',
+                                    roomId: roomId,
+                                    userId: userInfo.userId,
+                                    userName: userInfo.userName,
+                                    roomUserCount: newCount,
+                                    timestamp: new Date().toISOString()
+                                })
+
+                            // Emit room leave confirmation
+                            this.server
+                                .to(`room:${roomId}`)
+                                .emit('roomLeaveUpdate', {
+                                    action: 'user_disconnected',
+                                    roomId: roomId,
+                                    userId: userInfo.userId,
+                                    userName: userInfo.userName,
+                                    roomUserCount: newCount,
+                                    timestamp: new Date().toISOString()
+                                })
+
+                            this.logger.log(
+                                `📤 User ${userInfo.userName} disconnected and left room ${roomId} | Room users: ${newCount}`
                             )
-                        } catch (err) {
-                            // leaveRoom is idempotent now, but keep guard for older behavior
-                            this.logger.debug(
-                                `leaveRoom skipped or already removed for user ${userInfo.userId} in room ${roomId}: ${err?.message}`
+                        } catch (error) {
+                            this.logger.error(
+                                `❌ Error handling disconnect for room ${roomId}: ${error.message}`
                             )
+                            // Don't re-throw to avoid breaking the disconnect process for other rooms
                         }
-
-                        // Update seat state in memory for this specific room
-                        await this.updateRoomSeatsState(roomId)
-
-                        // Get updated seat information for this specific room
-                        const updatedSeats = this.roomSeats.get(roomId) || []
-
-                        const currentCount =
-                            this.roomUserCounts.get(roomId) || 0
-                        const newCount = Math.max(0, currentCount - 1)
-                        this.roomUserCounts.set(roomId, newCount)
-
-                        // Notify this specific room about user leaving and seat update
-                        client.to(`room:${roomId}`).emit('userLeft', {
-                            roomId,
-                            userId: userInfo.userId,
-                            userName: userInfo.userName
-                        })
-
-                        // Broadcast updated seat state to this specific room
-                        this.server.to(`room:${roomId}`).emit('seatUpdated', {
-                            roomId,
-                            seats: updatedSeats
-                        })
-
-                        // Emit disconnect activity update
-                        this.server
-                            .to(`room:${roomId}`)
-                            .emit('disconnectActivityUpdate', {
-                                action: 'user_disconnected',
-                                roomId: roomId,
-                                userId: userInfo.userId,
-                                userName: userInfo.userName,
-                                roomUserCount: newCount,
-                                timestamp: new Date().toISOString()
-                            })
-
-                        // Emit room leave confirmation
-                        this.server
-                            .to(`room:${roomId}`)
-                            .emit('roomLeaveUpdate', {
-                                action: 'user_disconnected',
-                                roomId: roomId,
-                                userId: userInfo.userId,
-                                userName: userInfo.userName,
-                                roomUserCount: newCount,
-                                timestamp: new Date().toISOString()
-                            })
-
-                        this.logger.log(
-                            `📤 User ${userInfo.userName} disconnected and left room ${roomId} | Room users: ${newCount}`
-                        )
-                    } catch (error) {
-                        this.logger.error(
-                            `❌ Error handling disconnect for room ${roomId}: ${error.message}`
-                        )
-                    }
-                })
+                    })
+                )
 
                 this.connectedUsers.delete(client.id)
 
