@@ -176,9 +176,12 @@ export class RoomService {
             throw new BadRequestException('Room is full')
         }
 
-        // Check if user is already in the room
+        // Check if user is already in this specific room
         const existingParticipant = await this.participantRepository.findOne({
-            where: { roomId: roomId as string, userId: userId as string }
+            where: {
+                roomId: roomId as string,
+                userId: userId as string
+            }
         })
 
         if (existingParticipant) {
@@ -209,7 +212,14 @@ export class RoomService {
             seatNumber: assignedSeat + 1 // Convert 0-based to 1-based for storage
         })
 
-        return this.participantRepository.save(participant)
+        const savedParticipant =
+            await this.participantRepository.save(participant)
+
+        this.logger.log(
+            `✅ Created participant: User ${userId} joined room ${roomId} at seat ${assignedSeat} (stored as ${assignedSeat + 1})`
+        )
+
+        return savedParticipant
     }
 
     /**
@@ -225,17 +235,28 @@ export class RoomService {
     }
 
     async leaveRoom(roomId: string, userId: string): Promise<void> {
+        // Find participant in the specific room only
         const participant = await this.participantRepository.findOne({
-            where: { roomId: roomId as string, userId: userId as string }
+            where: {
+                roomId: roomId as string,
+                userId: userId as string
+            }
         })
 
         if (!participant) {
-            throw new NotFoundException('Participant not found')
+            throw new NotFoundException(
+                `Participant not found in room ${roomId}`
+            )
         }
 
+        this.logger.log(
+            `🚪 Removing participant ${userId} from room ${roomId} (seat ${participant.seatNumber})`
+        )
+
+        // Remove participant from this specific room only
         await this.participantRepository.remove(participant)
 
-        // Check waiting list and promote first user
+        // Check waiting list and promote first user for this specific room only
         await this.promoteFromWaitingList(roomId)
     }
 
@@ -245,12 +266,17 @@ export class RoomService {
         status: Partial<RoomParticipant>
     ): Promise<void> {
         const result = await this.participantRepository.update(
-            { roomId, userId },
+            {
+                roomId: roomId as string,
+                userId: userId as string
+            },
             status
         )
 
         if (result.affected === 0) {
-            throw new NotFoundException('Participant not found')
+            throw new NotFoundException(
+                `Participant ${userId} not found in room ${roomId}`
+            )
         }
     }
 
@@ -259,15 +285,18 @@ export class RoomService {
         seatIndex: number,
         status: Partial<RoomParticipant>
     ): Promise<{ userId: string; userName: string }> {
-        // Find participant by seat number (convert 0-based index to 1-based seat number)
+        // Find participant by seat number in this specific room only
         const participant = await this.participantRepository.findOne({
-            where: { roomId, seatNumber: seatIndex + 1 },
+            where: {
+                roomId: roomId as string,
+                seatNumber: seatIndex + 1
+            },
             relations: ['user']
         })
 
         if (!participant) {
             throw new NotFoundException(
-                `No participant found at seat ${seatIndex}`
+                `No participant found at seat ${seatIndex} in room ${roomId}`
             )
         }
 
@@ -305,15 +334,18 @@ export class RoomService {
             )
         }
 
-        // Find participant by seat number (convert 0-based index to 1-based seat number)
+        // Find participant by seat number in this specific room only
         const participant = await this.participantRepository.findOne({
-            where: { roomId, seatNumber: seatIndex + 1 },
+            where: {
+                roomId: roomId as string,
+                seatNumber: seatIndex + 1
+            },
             relations: ['user']
         })
 
         if (!participant) {
             throw new NotFoundException(
-                `No participant found at seat ${seatIndex}`
+                `No participant found at seat ${seatIndex} in room ${roomId}`
             )
         }
 
@@ -430,11 +462,19 @@ export class RoomService {
     }
 
     async getRoomParticipants(roomId: string): Promise<RoomParticipant[]> {
-        return this.participantRepository.find({
-            where: { roomId },
+        this.logger.log(`📋 Getting participants for room ${roomId}`)
+
+        const participants = await this.participantRepository.find({
+            where: { roomId: roomId as string },
             relations: ['user'],
             order: { seatNumber: 'ASC' }
         })
+
+        this.logger.log(
+            `📋 Found ${participants.length} participants in room ${roomId}: [${participants.map((p) => `${p.user?.name || 'Unknown'}(${p.userId})`).join(', ')}]`
+        )
+
+        return participants
     }
 
     async getRoomWaitingList(roomId: string): Promise<RoomWaitingList[]> {

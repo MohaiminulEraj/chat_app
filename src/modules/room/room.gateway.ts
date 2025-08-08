@@ -147,19 +147,27 @@ export class RoomGateway
             const userInfo = this.connectedUsers.get(client.id)
 
             if (userInfo) {
-                // Leave all rooms user was in and handle seat cleanup
+                this.logger.log(
+                    `🔌 User ${userInfo.userName} (${userInfo.userId}) disconnecting from rooms: [${Array.from(userInfo.rooms).join(', ')}]`
+                )
+
+                // Leave all rooms user was in and handle seat cleanup for each specific room
                 userInfo.rooms.forEach(async (roomId) => {
                     try {
-                        // Remove user from room in database
+                        this.logger.log(
+                            `🚪 Processing disconnect for user ${userInfo.userName} from room ${roomId}`
+                        )
+
+                        // Remove user from this specific room in database
                         await this.roomService.leaveRoom(
                             roomId,
                             userInfo.userId
                         )
 
-                        // Update seat state in memory
+                        // Update seat state in memory for this specific room
                         await this.updateRoomSeatsState(roomId)
 
-                        // Get updated seat information
+                        // Get updated seat information for this specific room
                         const updatedSeats = this.roomSeats.get(roomId) || []
 
                         const currentCount =
@@ -167,14 +175,14 @@ export class RoomGateway
                         const newCount = Math.max(0, currentCount - 1)
                         this.roomUserCounts.set(roomId, newCount)
 
-                        // Notify room about user leaving and seat update
+                        // Notify this specific room about user leaving and seat update
                         client.to(`room:${roomId}`).emit('userLeft', {
                             roomId,
                             userId: userInfo.userId,
                             userName: userInfo.userName
                         })
 
-                        // Broadcast updated seat state
+                        // Broadcast updated seat state to this specific room
                         this.server.to(`room:${roomId}`).emit('seatUpdated', {
                             roomId,
                             seats: updatedSeats
@@ -456,13 +464,19 @@ export class RoomGateway
                 throw new Error('Room ID is required')
             }
 
-            // Update tracking - user joins as observer initially
+            // Update tracking - user joins as observer initially for this specific room
             if (userInfo) {
                 userInfo.rooms.add(data.roomId)
+                this.logger.log(
+                    `📝 User ${userName} (${userId}) tracking updated - now in rooms: [${Array.from(userInfo.rooms).join(', ')}]`
+                )
             }
 
-            // Join socket room for real-time updates immediately
+            // Join socket room for real-time updates immediately for this specific room
             client.join(`room:${data.roomId}`)
+            this.logger.log(
+                `🏠 User ${userName} (${userId}) joined socket room: room:${data.roomId}`
+            )
 
             // Send immediate response to client - they've joined as observer
             const immediateResponse = {
@@ -812,17 +826,23 @@ export class RoomGateway
         try {
             await this.roomService.leaveRoom(roomId, userId)
 
-            // Update tracking
+            // Update tracking - remove only this specific room
             if (userInfo) {
                 userInfo.rooms.delete(roomId)
+                this.logger.log(
+                    `📝 User ${userName} (${userId}) tracking updated - now in rooms: [${Array.from(userInfo.rooms).join(', ')}]`
+                )
             }
 
             const currentCount = this.roomUserCounts.get(roomId) || 0
             const newCount = Math.max(0, currentCount - 1)
             this.roomUserCounts.set(roomId, newCount)
 
-            // Leave socket room
+            // Leave this specific socket room only
             client.leave(`room:${roomId}`)
+            this.logger.log(
+                `🚪 User ${userName} (${userId}) left socket room: room:${roomId}`
+            )
 
             // Update seat state in memory
             await this.updateRoomSeatsState(roomId)
@@ -1463,7 +1483,7 @@ export class RoomGateway
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
-            // Find the kicked user's socket to disconnect them from the room
+            // Find the kicked user's socket to disconnect them from this specific room only
             const kickedUserSocket = Array.from(
                 this.connectedUsers.entries()
             ).find(([socketId, user]) => user.userId === kickedUserId)
@@ -1473,14 +1493,20 @@ export class RoomGateway
                 const kickedSocket =
                     this.server.sockets.sockets.get(kickedSocketId)
                 if (kickedSocket) {
-                    // Remove from socket room
+                    // Remove from this specific socket room only
                     kickedSocket.leave(`room:${data.roomId}`)
+                    this.logger.log(
+                        `🚪 Removed ${kickedUserName} (${kickedUserId}) from socket room: room:${data.roomId}`
+                    )
 
-                    // Update user's room tracking
+                    // Update user's room tracking - remove only this specific room
                     const kickedUserInfo =
                         this.connectedUsers.get(kickedSocketId)
                     if (kickedUserInfo) {
                         kickedUserInfo.rooms.delete(data.roomId)
+                        this.logger.log(
+                            `📝 Updated ${kickedUserName} tracking - now in rooms: [${Array.from(kickedUserInfo.rooms).join(', ')}]`
+                        )
                     }
                 }
             }
