@@ -387,9 +387,28 @@ export class RoomService {
             relations: ['user']
         })
 
+        // Debug: Let's see what participants exist in this room
+        if (!participant) {
+            const allParticipants = await this.participantRepository.find({
+                where: { roomId: roomId as string },
+                relations: ['user']
+            })
+            console.log(
+                `DEBUG: Looking for seat ${seatIndex} (seatNumber ${seatIndex + 1})`
+            )
+            console.log(
+                `DEBUG: Available participants in room ${roomId}:`,
+                allParticipants.map((p) => ({
+                    userId: p.userId,
+                    seatNumber: p.seatNumber,
+                    userName: p.user?.name || p.user?.email
+                }))
+            )
+        }
+
         if (!participant) {
             throw new NotFoundException(
-                `No participant found at seat ${seatIndex} in room ${roomId}`
+                `No participant found at seat ${seatIndex} (seatNumber ${seatIndex + 1}) in room ${roomId}`
             )
         }
 

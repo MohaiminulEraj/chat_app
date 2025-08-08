@@ -863,9 +863,17 @@ export class RoomGateway
     async handleJoinRoom(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { userId: string; roomId: string; password?: string }
+        data: {
+            userId: string
+            roomId?: string
+            roomID?: string
+            password?: string
+        }
     ) {
         this.logger.debug(`📥 JOIN_ROOM raw data: ${JSON.stringify(data)}`)
+
+        // Handle both roomId and roomID formats
+        const roomId = data.roomId || data.roomID
 
         // Get validated user information
         const validatedUser = await this.getUserInfo(client, data.userId)
@@ -876,7 +884,7 @@ export class RoomGateway
             const errorResponse = {
                 status: 'error',
                 message: 'User information not available',
-                roomId: data.roomId
+                roomId: roomId
             }
             client.emit('joinRoomResponse', errorResponse)
             return errorResponse
@@ -888,11 +896,11 @@ export class RoomGateway
         const userInfo = this.connectedUsers.get(client.id)
 
         this.logger.log(
-            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId} as observer`
+            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${roomId} as observer`
         )
 
         try {
-            if (!data.roomId) {
+            if (!roomId) {
                 throw new Error(
                     `Room ID is required. Received data: ${JSON.stringify(data)}`
                 )
@@ -913,23 +921,23 @@ export class RoomGateway
                     )
                 }
 
-                userInfo.rooms.add(data.roomId)
+                userInfo.rooms.add(roomId)
                 this.logger.log(
                     `📝 User ${userName} (${userId}) tracking updated - now in rooms: [${Array.from(userInfo.rooms).join(', ')}]`
                 )
             }
 
             // Join socket room for real-time updates immediately for this specific room
-            client.join(`room:${data.roomId}`)
+            client.join(`room:${roomId}`)
             this.logger.log(
-                `🏠 User ${userName} (${userId}) joined socket room: room:${data.roomId}`
+                `🏠 User ${userName} (${userId}) joined socket room: room:${roomId}`
             )
 
             // Send immediate response to client - they've joined as observer
             const immediateResponse = {
                 status: 'success',
                 action: 'joined_as_observer',
-                roomId: data.roomId,
+                roomId: roomId,
                 userId: userId,
                 userName: userName,
                 userRole: 'observer',
@@ -941,20 +949,19 @@ export class RoomGateway
             client.emit('joinRoomResponse', immediateResponse)
 
             this.logger.log(
-                `✅ JOIN_ROOM immediate: User ${userName} (${userId}) joined room ${data.roomId} as observer`
+                `✅ JOIN_ROOM immediate: User ${userName} (${userId}) joined room ${roomId} as observer`
             )
 
             // Now do the heavy database operations asynchronously
             setImmediate(async () => {
                 try {
                     // Check if room exists and user has access
-                    const roomDetails = await this.roomService.getRoomDetails(
-                        data.roomId
-                    )
+                    const roomDetails =
+                        await this.roomService.getRoomDetails(roomId)
                     if (!roomDetails) {
                         client.emit('roomError', {
                             error: 'Room not found',
-                            roomId: data.roomId
+                            roomId: roomId
                         })
                         return
                     }
@@ -966,21 +973,20 @@ export class RoomGateway
                     ) {
                         client.emit('roomError', {
                             error: 'Incorrect room password',
-                            roomId: data.roomId
+                            roomId: roomId
                         })
-                        client.leave(`room:${data.roomId}`)
+                        client.leave(`room:${roomId}`)
                         return
                     }
 
                     // Get current room state
-                    await this.updateRoomSeatsState(data.roomId)
-                    const currentSeats = this.roomSeats.get(data.roomId) || []
-                    const roomUserCount =
-                        this.roomUserCounts.get(data.roomId) || 0
+                    await this.updateRoomSeatsState(roomId)
+                    const currentSeats = this.roomSeats.get(roomId) || []
+                    const roomUserCount = this.roomUserCounts.get(roomId) || 0
 
                     // Get all participants (seated users) with proper format
                     const participants =
-                        await this.roomService.getRoomParticipants(data.roomId)
+                        await this.roomService.getRoomParticipants(roomId)
                     const formattedParticipants = participants
                         .filter(
                             (participant) =>
@@ -1001,7 +1007,7 @@ export class RoomGateway
 
                     // Get waiting list info
                     const waitingList =
-                        await this.roomService.getRoomWaitingList(data.roomId)
+                        await this.roomService.getRoomWaitingList(roomId)
                     const userInWaitingList = waitingList.find(
                         (w) => w.userId === userId
                     )
@@ -1014,7 +1020,7 @@ export class RoomGateway
                     // Send detailed room data update
                     const roomDataUpdate = {
                         action: 'room_data_loaded',
-                        roomId: data.roomId,
+                        roomId: roomId,
                         participants: formattedParticipants,
                         seats: currentSeats,
                         roomUserCount: roomUserCount,
@@ -1029,11 +1035,11 @@ export class RoomGateway
 
                     // Emit to all room participants about new observer
                     this.server
-                        .to(`room:${data.roomId}`)
+                        .to(`room:${roomId}`)
                         .emit('roomJoinUpdate', formattedParticipants)
 
                     this.logger.log(
-                        `📊 JOIN_ROOM data loaded: User ${userName} (${userId}) received room data for ${data.roomId}`
+                        `📊 JOIN_ROOM data loaded: User ${userName} (${userId}) received room data for ${roomId}`
                     )
 
                     // Track user activity
@@ -1046,7 +1052,7 @@ export class RoomGateway
 
                     client.emit('roomError', {
                         error: asyncError.message,
-                        roomId: data.roomId
+                        roomId: roomId
                     })
                 }
             })
@@ -1054,7 +1060,7 @@ export class RoomGateway
             return immediateResponse
         } catch (error) {
             this.logger.error(
-                `❌ JOIN_ROOM failed: User ${userName} (${userId}) failed to join room ${data.roomId} | ` +
+                `❌ JOIN_ROOM failed: User ${userName} (${userId}) failed to join room ${roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
@@ -1062,7 +1068,7 @@ export class RoomGateway
             const errorResponse = {
                 status: 'error',
                 message: error.message,
-                roomId: data.roomId
+                roomId: roomId
             }
 
             // Emit error response directly to the client
@@ -1078,9 +1084,23 @@ export class RoomGateway
         @MessageBody()
         data: { roomId: string; seatIndex: number; password?: string }
     ) {
+        // Get validated user information
+        const validatedUser = await this.getUserInfo(client)
+
+        if (!validatedUser) {
+            const errorResponse = {
+                status: 'error',
+                message: 'User information not available for seat operation',
+                roomId: data.roomId
+            }
+            client.emit('sitInSeatResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId, userName } = validatedUser
+
+        // Get the userInfo for tracking (from connectedUsers)
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
-        const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
             `🪑 SIT_IN_SEAT request: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${data.roomId}`
@@ -1903,9 +1923,20 @@ export class RoomGateway
             action?: string
         }
     ) {
-        const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
-        const userName = userInfo?.userName || 'Unknown User'
+        // Get validated user information
+        const validatedUser = await this.getUserInfo(client)
+
+        if (!validatedUser) {
+            const errorResponse = {
+                status: 'error',
+                message: 'User information not available for kick operation',
+                roomId: data.roomId
+            }
+            client.emit('kickUserResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId, userName } = validatedUser
 
         this.logger.log(
             `👢 KICK_USER: User ${userName} (${userId}) attempting to kick user | Data: ${JSON.stringify(data)}`
