@@ -390,8 +390,10 @@ export class RoomService {
         // Check if already in waiting list using createQueryBuilder
         const existing = await this.waitingListRepository
             .createQueryBuilder('waitingList')
-            .where('waitingList.roomId = :roomId', { roomId: roomId })
-            .andWhere('waitingList.userId = :userId', { userId: userId })
+            .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
+            .andWhere('waitingList.userId = :userId', {
+                userId: String(userId)
+            })
             .getOne()
 
         if (existing) {
@@ -401,7 +403,7 @@ export class RoomService {
         // Get next position using createQueryBuilder
         const lastInQueue = await this.waitingListRepository
             .createQueryBuilder('waitingList')
-            .where('waitingList.roomId = :roomId', { roomId: roomId })
+            .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
             .orderBy('waitingList.position', 'DESC')
             .getOne()
 
@@ -429,7 +431,7 @@ export class RoomService {
         // Get first in waiting list using createQueryBuilder for more control
         const nextUser = await this.waitingListRepository
             .createQueryBuilder('waitingList')
-            .where('waitingList.roomId = :roomId', { roomId: roomId })
+            .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
             .orderBy('waitingList.position', 'ASC')
             .getOne()
 
@@ -449,7 +451,7 @@ export class RoomService {
         // Update positions in waiting list using createQueryBuilder
         const usersToUpdate = await this.waitingListRepository
             .createQueryBuilder('waitingList')
-            .where('waitingList.roomId = :roomId', { roomId: roomId })
+            .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
             .andWhere('waitingList.position > :position', {
                 position: removedPosition
             })
@@ -481,7 +483,7 @@ export class RoomService {
         return this.waitingListRepository
             .createQueryBuilder('waitingList')
             .leftJoinAndSelect('waitingList.user', 'user')
-            .where('waitingList.roomId = :roomId', { roomId: roomId })
+            .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
             .orderBy('waitingList.position', 'ASC')
             .getMany()
     }
