@@ -2284,13 +2284,13 @@ export class RoomGateway
                     data.roomId
                 )
                 const emptySeat = availableSeats.find(
-                    (seat) => !seat.isOccupied && !seat.isLocked
+                    (seat) => !seat.occupied && !seat.locked
                 )
 
                 if (emptySeat) {
                     return await this.handleSitInSeat(client, {
                         roomId: data.roomId,
-                        seatIndex: emptySeat.seatIndex
+                        seatIndex: emptySeat.index
                     })
                 } else {
                     throw new Error('No available seats found')
@@ -2447,7 +2447,7 @@ export class RoomGateway
 
             // Find empty unlocked seats
             const emptyUnlockedSeats = availableSeats.filter(
-                (seat) => !seat.isOccupied && !seat.isLocked
+                (seat) => !seat.occupied && !seat.locked
             )
 
             if (waitingList.length > 0 && emptyUnlockedSeats.length > 0) {
@@ -2463,7 +2463,7 @@ export class RoomGateway
                     const participant = await this.roomService.joinRoomWithSeat(
                         roomId,
                         nextUser.userId,
-                        availableSeat.seatIndex
+                        availableSeat.index
                     )
 
                     // Update seat state
@@ -2477,7 +2477,7 @@ export class RoomGateway
                             roomId,
                             userId: nextUser.userId,
                             userName: nextUser.user?.name || 'Unknown User',
-                            seatIndex: availableSeat.seatIndex,
+                            seatIndex: availableSeat.index,
                             participant,
                             seats: updatedSeats,
                             message: `User promoted from waiting list to seat ${availableSeat.seatIndex}`,
@@ -2490,14 +2490,14 @@ export class RoomGateway
                         roomId,
                         userId: nextUser.userId,
                         userName: nextUser.user?.name || 'Unknown User',
-                        seatIndex: availableSeat.seatIndex,
+                        seatIndex: availableSeat.index,
                         userRole: 'participant',
                         seats: updatedSeats,
                         timestamp: new Date().toISOString()
                     })
 
                     this.logger.log(
-                        `✅ Promoted user ${nextUser.userId} from waiting list to seat ${availableSeat.seatIndex} in room ${roomId}`
+                        `✅ Promoted user ${nextUser.userId} from waiting list to seat ${availableSeat.index} in room ${roomId}`
                     )
                 } catch (error) {
                     this.logger.error(
