@@ -1658,7 +1658,8 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            roomId: string
+            roomId?: string
+            roomID?: string // Support both field names for client compatibility
             userId: string
             limit?: number
             offset?: number
@@ -1669,8 +1670,25 @@ export class RoomGateway
         const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
+        // Support both roomId and roomID for client compatibility
+        const roomId = data.roomId || data.roomID
+
+        if (!roomId) {
+            this.logger.warn(
+                `⚠️ GET_ROOM_COMMENTS denied: No roomId provided by user ${userName} (${userId})`
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: 'Room ID is required'
+            }
+
+            client.emit('getRoomCommentsResponse', errorResponse)
+            return errorResponse
+        }
+
         this.logger.log(
-            `📄 GET_ROOM_COMMENTS: User ${userName} (${userId}) requesting comments for room ${data.roomId} | ` +
+            `📄 GET_ROOM_COMMENTS: User ${userName} (${userId}) requesting comments for room ${roomId} | ` +
                 `Limit: ${data.limit || 'default'} | Offset: ${data.offset || 0}` +
                 (data.lastCommentId
                     ? ` | LastCommentId: ${data.lastCommentId}`
@@ -1679,30 +1697,29 @@ export class RoomGateway
 
         try {
             // Verify user is in the room
-            const roomName = `room:${data.roomId}`
+            const roomName = `room:${roomId}`
             const isInSocketRoom = client.rooms.has(roomName)
 
             if (!isInSocketRoom) {
                 this.logger.warn(
-                    `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not in socket room ${data.roomId}`
+                    `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not in socket room ${roomId}`
                 )
                 throw new Error('You must join the room first to view comments')
             }
 
             // Verify user is a participant in the database
-            const participants = await this.roomService.getRoomParticipants(
-                data.roomId
-            )
+            const participants =
+                await this.roomService.getRoomParticipants(roomId)
             const isParticipant = participants.some((p) => p.userId === userId)
 
             if (!isParticipant) {
                 this.logger.warn(
-                    `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not a participant in room ${data.roomId}`
+                    `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not a participant in room ${roomId}`
                 )
                 throw new Error('You must be a participant to view comments')
             }
 
-            const result = await this.roomService.getRoomComments(data.roomId)
+            const result = await this.roomService.getRoomComments(roomId)
 
             // Apply pagination if requested
             let paginatedComments = result
@@ -1713,10 +1730,10 @@ export class RoomGateway
             }
 
             this.logger.log(
-                `✅ GET_ROOM_COMMENTS success: User ${userName} (${userId}) retrieved ${paginatedComments.length}/${result.length} comments for room ${data.roomId}`
+                `✅ GET_ROOM_COMMENTS success: User ${userName} (${userId}) retrieved ${paginatedComments.length}/${result.length} comments for room ${roomId}`
             )
 
-            return {
+            const successResponse = {
                 status: 'success',
                 data: paginatedComments,
                 count: paginatedComments.length,
@@ -1724,19 +1741,26 @@ export class RoomGateway
                 hasMore: data.limit
                     ? (data.offset || 0) + (data.limit || 50) < result.length
                     : false,
-                roomId: data.roomId
+                roomId: roomId
             }
+
+            client.emit('getRoomCommentsResponse', successResponse)
+            return successResponse
         } catch (error) {
             this.logger.error(
-                `❌ GET_ROOM_COMMENTS failed: User ${userName} (${userId}) failed to get comments for room ${data.roomId} | ` +
+                `❌ GET_ROOM_COMMENTS failed: User ${userName} (${userId}) failed to get comments for room ${roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
-            return {
+
+            const errorResponse = {
                 status: 'error',
                 message: error.message,
-                roomId: data.roomId
+                roomId: roomId
             }
+
+            client.emit('getRoomCommentsResponse', errorResponse)
+            return errorResponse
         }
     }
 
