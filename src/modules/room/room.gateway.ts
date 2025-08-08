@@ -2690,6 +2690,56 @@ export class RoomGateway
                 throw new Error('User ID is required')
             }
 
+            // Check if seat is occupied before locking
+            if (data.isLocked) {
+                const currentSeats = await this.roomService.getRoomSeats(
+                    data.roomId
+                )
+                const targetSeat = currentSeats.find(
+                    (seat) => seat.index === data.seatIndex
+                )
+
+                if (targetSeat?.occupied) {
+                    this.logger.log(
+                        `🔒 Seat ${data.seatIndex} is occupied. Kicking user before locking.`
+                    )
+
+                    // First kick the user from the seat
+                    try {
+                        const kickResult =
+                            await this.roomService.kickUserFromSeat(
+                                data.roomId,
+                                data.seatIndex,
+                                userId
+                            )
+
+                        // Notify about the kick
+                        this.server
+                            .to(`room:${data.roomId}`)
+                            .emit('participantKicked', {
+                                roomId: data.roomId,
+                                seatIndex: data.seatIndex,
+                                kickedUserId: kickResult.userId,
+                                kickedUserName: kickResult.userName,
+                                reason: 'Seat being locked',
+                                kickedBy: {
+                                    userId: userId,
+                                    userName: userName
+                                },
+                                timestamp: new Date().toISOString()
+                            })
+
+                        this.logger.log(
+                            `✅ Kicked user ${kickResult.userName} from seat ${data.seatIndex} before locking`
+                        )
+                    } catch (kickError) {
+                        this.logger.warn(
+                            `⚠️ Failed to kick user from seat ${data.seatIndex}: ${kickError.message}`
+                        )
+                    }
+                }
+            }
+
             const result = await this.roomService.toggleSeatLock(
                 data.roomId,
                 data.seatIndex,

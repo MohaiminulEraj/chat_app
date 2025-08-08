@@ -1271,17 +1271,10 @@ export class RoomService {
         seatIndex: number,
         isLocked: boolean,
         userId: string
-    ): Promise<{ success: boolean; seatIndex: number; isLocked: boolean }> {
-        // Verify user has permission to lock seats
-        const userRoles = await this.getUserRolesInRoom(roomId, userId)
-        if (
-            !userRoles.includes(RoomRole.OWNER) &&
-            !userRoles.includes(RoomRole.HOST)
-        ) {
-            throw new ForbiddenException(
-                'Only room owner or host can lock/unlock seats'
-            )
-        }
+    ): Promise<{ success: boolean; seat: RoomSeat }> {
+        this.logger.log(
+            `🔒 Toggling seat lock: Room ${roomId}, Seat ${seatIndex}, Lock: ${isLocked}, User: ${userId}`
+        )
 
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId }
@@ -1291,62 +1284,65 @@ export class RoomService {
             throw new NotFoundException('Room not found')
         }
 
-        // Validate seat index
+        // Validate bounds
         if (seatIndex < 0 || seatIndex >= room.maxSeats) {
             throw new BadRequestException(
                 `Seat index must be between 0 and ${room.maxSeats - 1}`
             )
         }
 
-        // Don't allow locking seat 0 if it's occupied by host
-        if (seatIndex === 0 && isLocked) {
-            const hostParticipant = await this.participantRepository.findOne({
-                where: { roomId, seatNumber: 1 } // seat 0 is stored as 1 in DB
-            })
-            if (hostParticipant) {
-                throw new BadRequestException(
-                    'Cannot lock seat 0 while it is occupied by the host'
-                )
-            }
+        // Permission: owner or host can lock/unlock
+        const roles = await this.getUserRolesInRoom(roomId, userId)
+        const isOwner =
+            room.ownerId === userId || roles.includes(RoomRole.OWNER)
+        const isHost = roles.includes(RoomRole.HOST)
+        if (!isOwner && !isHost) {
+            throw new ForbiddenException(
+                'Only room owner/host can lock/unlock seats'
+            )
         }
 
-        // Check if seat is currently occupied before locking
-        if (isLocked) {
-            const occupiedParticipant =
-                await this.participantRepository.findOne({
-                    where: { roomId, seatNumber: seatIndex + 1 } // Convert to 1-based
-                })
-            if (occupiedParticipant) {
-                throw new BadRequestException(
-                    `Cannot lock seat ${seatIndex} - it is currently occupied`
-                )
-            }
-        }
-
-        // Update or create seat record
-        let seatRecord = await this.roomSeatRepository.findOne({
+        // Load or create seat metadata
+        let seat = await this.roomSeatRepository.findOne({
             where: { roomId, seatIndex }
         })
-
-        if (!seatRecord) {
-            seatRecord = this.roomSeatRepository.create({
+        if (!seat) {
+            seat = this.roomSeatRepository.create({
                 roomId,
                 seatIndex,
                 isLocked: false
             })
         }
 
-        seatRecord.isLocked = isLocked
-        seatRecord.lockedBy = isLocked ? userId : null
-        seatRecord.lockedAt = isLocked ? new Date() : null
-
-        await this.roomSeatRepository.save(seatRecord)
-
-        return {
-            success: true,
-            seatIndex,
-            isLocked
+        // If locking an occupied seat, remove occupant first
+        if (isLocked) {
+            const occupant = await this.participantRepository.findOne({
+                where: { roomId, seatNumber: seatIndex + 1 }
+            })
+            if (occupant) {
+                this.logger.log(
+                    `🔒 Seat ${seatIndex} is occupied by ${occupant.userId}. Removing occupant before locking.`
+                )
+                await this.participantRepository.remove(occupant)
+                await this.promoteFromWaitingList(roomId)
+                this.logger.log(
+                    `✅ Removed user ${occupant.userId} from seat ${seatIndex} before locking`
+                )
+            }
         }
+
+        // Update lock metadata
+        seat.isLocked = isLocked
+        seat.lockedBy = isLocked ? userId : null
+        seat.lockedAt = isLocked ? new Date() : null
+
+        const updatedSeat = await this.roomSeatRepository.save(seat)
+
+        this.logger.log(
+            `✅ Seat ${seatIndex} ${isLocked ? 'locked' : 'unlocked'} successfully`
+        )
+
+        return { success: true, seat: updatedSeat }
     }
 
     /**
@@ -1362,41 +1358,24 @@ export class RoomService {
             throw new NotFoundException('Room not found')
         }
 
-        // Get role assignments to identify the host
-        const roleAssignments = await this.roomRoleRepository.find({
-            where: { roomId: room.uuid, isActive: true },
-            relations: ['user']
-        })
-
-        // Find host
-        const hostRole = roleAssignments.find(
-            (role) => role.role === RoomRole.HOST
-        )
-        const hostUserId = hostRole?.user.uuid || room.ownerId
-
         // Get seat lock information
         const seatLocks = await this.roomSeatRepository.find({
             where: { roomId }
         })
 
-        // Filter out participants who are the host and sort by seat number
-        const nonHostParticipants = room.participants
-            .filter((participant) => participant.userId !== hostUserId)
-            .sort((a, b) => a.seatNumber - b.seatNumber)
-
         const seats = []
         for (let i = 0; i < room.maxSeats; i++) {
             const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
-
-            // Assign participants to seats starting from index 0
-            const participantIndex = i
-            const participant = nonHostParticipants[participantIndex] || null
+            // Find participant whose stored seatNumber matches this index (1-based in DB)
+            const participant =
+                room.participants.find((p) => p.seatNumber === i + 1) || null
 
             seats.push({
                 index: i,
                 locked: seatLock?.isLocked || false,
                 occupied: !!participant,
-                occupantUserId: participant?.user.uuid || null
+                occupantUserId:
+                    participant?.user?.uuid || participant?.userId || null
             })
         }
 
