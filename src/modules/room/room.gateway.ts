@@ -632,17 +632,38 @@ export class RoomGateway
             }
 
             // Update user info with provided userId if needed
-            if (userInfo && userInfo.userId === 'pending') {
+            if (userInfo && userInfo.userId === 'pending' && data.useId) {
                 userInfo.userId = data.useId
                 this.connectedUsers.set(client.id, userInfo)
             }
 
-            const participant = await this.roomService.joinRoom(
-                data.roomID,
-                userId,
-                undefined, // password
-                undefined // seatNumber
-            )
+            let participant: any = null
+            let joinedAsObserver = false
+            try {
+                participant = await this.roomService.joinRoom(
+                    data.roomID,
+                    userId,
+                    undefined,
+                    undefined
+                )
+            } catch (e: any) {
+                const msg: string = e?.message || ''
+                if (msg.includes('No available seats')) {
+                    joinedAsObserver = true
+                    try {
+                        await this.roomService.addToWaitingList(
+                            data.roomID,
+                            userId
+                        )
+                    } catch (wlErr: any) {
+                        this.logger.warn(
+                            `⚠️ Failed to add ${userId} to waiting list for room ${data.roomID}: ${wlErr?.message}`
+                        )
+                    }
+                } else {
+                    throw e
+                }
+            }
 
             // Update tracking
             if (userInfo) {
@@ -662,13 +683,47 @@ export class RoomGateway
             // Get updated seat information
             const updatedSeats = this.roomSeats.get(data.roomID) || []
 
-            // Notify all room participants about user joining
-            this.server.to(`room:${data.roomID}`).emit('userJoined', {
-                roomId: data.roomID,
-                participant,
-                userName,
-                seatIndex: participant.seatNumber - 1 // Convert to 0-based
-            })
+            if (participant) {
+                // Notify all room participants about user joining
+                this.server.to(`room:${data.roomID}`).emit('userJoined', {
+                    roomId: data.roomID,
+                    participant,
+                    userName,
+                    seatIndex: participant.seatNumber - 1
+                })
+
+                // Emit room join confirmation to all participants
+                this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
+                    action: 'user_joined',
+                    roomId: data.roomID,
+                    userId: userId,
+                    userName: userName,
+                    participant: participant,
+                    seatIndex: participant.seatNumber - 1,
+                    roomUserCount: newCount,
+                    timestamp: new Date().toISOString()
+                })
+
+                this.logger.log(
+                    `✅ ROOM_ID success: User ${userName} (${userId}) joined room ${data.roomID} | Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
+                )
+            } else if (joinedAsObserver) {
+                // Emit observer join update
+                this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
+                    action: 'observer_joined',
+                    roomId: data.roomID,
+                    userId: userId,
+                    userName: userName,
+                    participant: null,
+                    seatIndex: null,
+                    roomUserCount: newCount,
+                    timestamp: new Date().toISOString()
+                })
+
+                this.logger.log(
+                    `✅ ROOM_ID observer: User ${userName} (${userId}) joined room ${data.roomID} as observer | Room users: ${newCount}`
+                )
+            }
 
             // Broadcast updated seat state
             this.server.to(`room:${data.roomID}`).emit('seatUpdated', {
@@ -676,34 +731,27 @@ export class RoomGateway
                 seats: updatedSeats
             })
 
-            // Emit room join confirmation to all participants
-            this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
-                action: 'user_joined',
-                roomId: data.roomID,
-                userId: userId,
-                userName: userName,
-                participant: participant,
-                seatIndex: participant.seatNumber - 1,
-                roomUserCount: newCount,
-                timestamp: new Date().toISOString()
-            })
-
-            this.logger.log(
-                `✅ ROOM_ID success: User ${userName} (${userId}) joined room ${data.roomID} | ` +
-                    `Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
-            )
-
             // Track user activity
             this.trackUserActivity(userId, 'joinRoom')
 
-            return {
-                status: 'success',
-                participant,
-                seatIndex: participant.seatNumber - 1, // Convert to 0-based
-                seats: updatedSeats,
-                roomUserCount: newCount,
-                message: `Successfully joined room ${data.roomID}`
-            }
+            return participant
+                ? {
+                      status: 'success',
+                      participant,
+                      seatIndex: participant.seatNumber - 1,
+                      seats: updatedSeats,
+                      roomUserCount: newCount,
+                      message: `Successfully joined room ${data.roomID}`
+                  }
+                : {
+                      status: 'success',
+                      participant: null,
+                      seatIndex: null,
+                      seats: updatedSeats,
+                      roomUserCount: newCount,
+                      message:
+                          'Room is full or seats locked. Joined as observer and added to waiting list.'
+                  }
         } catch (error) {
             this.logger.error(
                 `❌ ROOM_ID failed: User ${userName} (${userId}) failed to join room ${data.roomID} | ` +
@@ -1223,65 +1271,41 @@ export class RoomGateway
                 throw new Error('You are not a participant in this room')
             }
 
+            // Add the comment via service
             const comment = await this.roomService.addRoomComment(
                 data.roomId,
                 userId,
                 data.message,
-                data.messageType || 'text',
+                (data.messageType as any) || 'text',
                 data.replyToId,
                 data.metadata
             )
 
-            // Create enhanced comment structure for real-time broadcast
-            const realtimeComment = {
-                _id: comment.uuid,
-                senderId: userId,
-                senderName: userName,
-                senderImage: userInfo.avatarUrl || null,
-                content: data.message,
-                messageType: data.messageType || 'text',
-                replyToId: data.replyToId || null,
-                metadata: data.metadata || null,
-                createdAt: comment.createdAt || new Date(),
-                isVisible: true
-            }
-
-            // Emit to all room participants (including sender)
-            this.server.to(roomName).emit('ReceivedComment', {
-                content: data.message,
-                senderId: userId,
-                senderName: userName,
-                senderImage: userInfo.avatarUrl || null,
-                createdAt: comment.createdAt || new Date().toISOString(),
+            // Emit to all room participants
+            this.server.to(roomName).emit('commentAdded', {
                 roomId: data.roomId,
-                commentId: comment.uuid,
-                messageType: data.messageType || 'text',
-                replyToId: data.replyToId || null,
-                metadata: data.metadata || null
+                comment,
+                addedBy: userId,
+                addedByName: userName,
+                timestamp: new Date().toISOString()
             })
 
-            // Emit comment activity update
+            // Emit activity update
             this.server.to(roomName).emit('commentActivityUpdate', {
                 action: 'comment_added',
                 roomId: data.roomId,
                 commentId: comment.uuid,
-                senderId: userId,
-                senderName: userName,
+                addedBy: userId,
+                addedByName: userName,
                 timestamp: new Date().toISOString()
             })
-
-            this.logger.log(
-                `✅ SEND_COMMENT success: User ${userName} (${userId}) sent comment ${comment.uuid} to room ${data.roomId}`
-            )
 
             // Track user activity
             this.trackUserActivity(userId, 'sendComment')
 
             return {
                 status: 'success',
-                comment: realtimeComment,
-                roomId: data.roomId,
-                commentId: comment.uuid
+                comment
             }
         } catch (error) {
             this.logger.error(
