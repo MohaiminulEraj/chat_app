@@ -124,8 +124,8 @@ export class RoomService {
                     currentUser.uuid
                 )
 
-                // Automatically join the owner to seat 0 (host seat)
-                await this.joinRoomWithSeat(finalRoom.uuid, currentUser.uuid, 0)
+                // Do not auto-occupy any seat for the owner/host
+                // Host will join as observer and can lock/unlock seats as needed
             } catch (error) {
                 console.error('Error assigning default roles:', error)
                 // Continue without throwing error as room is already created
@@ -1211,18 +1211,7 @@ export class RoomService {
             )
         }
 
-        // Check if seat 0 is being requested (host seat)
-        if (seatIndex === 0) {
-            const userRoles = await this.getUserRolesInRoom(roomId, userId)
-            if (
-                !userRoles.includes(RoomRole.OWNER) &&
-                !userRoles.includes(RoomRole.HOST)
-            ) {
-                throw new ForbiddenException(
-                    'Seat 0 is reserved for host/owner only'
-                )
-            }
-        }
+        // Seat 0 is no longer reserved exclusively for host; eligibility is governed by locks only
 
         // Check if seat is locked
         const seatInfo = await this.roomSeatRepository.findOne({
@@ -1272,15 +1261,8 @@ export class RoomService {
         // Get occupied seats
         const occupiedSeats = room.participants.map((p) => p.seatNumber - 1) // Convert to 0-based
 
-        // Check if user can use seat 0 (host seat)
-        const userRoles = await this.getUserRolesInRoom(roomId, userId)
-        const canUseSeat0 =
-            userRoles.includes(RoomRole.OWNER) ||
-            userRoles.includes(RoomRole.HOST)
-
-        // Find first available seat
-        const startIndex = canUseSeat0 ? 0 : 1
-        for (let i = startIndex; i < room.maxSeats; i++) {
+        // Find first available seat starting from index 0
+        for (let i = 0; i < room.maxSeats; i++) {
             if (!lockedSeatIndexes.includes(i) && !occupiedSeats.includes(i)) {
                 return i
             }

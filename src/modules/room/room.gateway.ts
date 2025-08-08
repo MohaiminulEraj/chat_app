@@ -637,31 +637,47 @@ export class RoomGateway
                 this.connectedUsers.set(client.id, userInfo)
             }
 
+            // Determine if the user is the host; hosts should not occupy a seat on join
+            const roomDetails = await this.roomService.getRoomDetails(
+                data.roomID
+            )
+
+            const isHost = roomDetails?.hostId === userId
+
             let participant: any = null
             let joinedAsObserver = false
-            try {
-                participant = await this.roomService.joinRoom(
-                    data.roomID,
-                    userId,
-                    undefined,
-                    undefined
+
+            if (isHost) {
+                // Host joins as observer; do not occupy any seat
+                joinedAsObserver = true
+                this.logger.log(
+                    `👑 ROOM_ID: Host ${userName} (${userId}) joined room ${data.roomID} as observer (no seat assigned)`
                 )
-            } catch (e: any) {
-                const msg: string = e?.message || ''
-                if (msg.includes('No available seats')) {
-                    joinedAsObserver = true
-                    try {
-                        await this.roomService.addToWaitingList(
-                            data.roomID,
-                            userId
-                        )
-                    } catch (wlErr: any) {
-                        this.logger.warn(
-                            `⚠️ Failed to add ${userId} to waiting list for room ${data.roomID}: ${wlErr?.message}`
-                        )
+            } else {
+                try {
+                    participant = await this.roomService.joinRoom(
+                        data.roomID,
+                        userId,
+                        undefined,
+                        undefined
+                    )
+                } catch (e: any) {
+                    const msg: string = e?.message || ''
+                    if (msg.includes('No available seats')) {
+                        joinedAsObserver = true
+                        try {
+                            await this.roomService.addToWaitingList(
+                                data.roomID,
+                                userId
+                            )
+                        } catch (wlErr: any) {
+                            this.logger.warn(
+                                `⚠️ Failed to add ${userId} to waiting list for room ${data.roomID}: ${wlErr?.message}`
+                            )
+                        }
+                    } else {
+                        throw e
                     }
-                } else {
-                    throw e
                 }
             }
 
@@ -710,7 +726,9 @@ export class RoomGateway
             } else if (joinedAsObserver) {
                 // Emit observer join update
                 this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
-                    action: 'observer_joined',
+                    action: isHost
+                        ? 'host_joined_as_observer'
+                        : 'observer_joined',
                     roomId: data.roomID,
                     userId: userId,
                     userName: userName,
@@ -749,8 +767,9 @@ export class RoomGateway
                       seatIndex: null,
                       seats: updatedSeats,
                       roomUserCount: newCount,
-                      message:
-                          'Room is full or seats locked. Joined as observer and added to waiting list.'
+                      message: isHost
+                          ? 'Host joined as observer (no seat assigned).'
+                          : 'Room is full or seats locked. Joined as observer and added to waiting list.'
                   }
         } catch (error) {
             this.logger.error(
