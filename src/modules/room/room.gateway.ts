@@ -1103,7 +1103,7 @@ export class RoomGateway
                 `✅ TOGGLE_MUTE success: User ${userName} (${userId}) ${isMuted ? 'muted' : 'unmuted'} seat ${data.userInfo.seatIndex} (${targetUserName}) in room ${data.roomId}`
             )
 
-            // Return response in the requested format
+            // Create response
             const response = {
                 status: 'success',
                 roomId: data.roomId,
@@ -1111,6 +1111,10 @@ export class RoomGateway
                 message: `Successfully ${isMuted ? 'muted' : 'unmuted'} seat ${data.userInfo.seatIndex}`
             }
 
+            // Emit response directly to the client that made the request
+            client.emit('toggleMuteResponse', response)
+
+            // Also return the response for any clients expecting a return value
             return response
         } catch (error) {
             this.logger.error(
@@ -1118,11 +1122,17 @@ export class RoomGateway
                     `Error: ${error.message}`,
                 error.stack
             )
-            return {
+
+            const errorResponse = {
                 status: 'error',
                 message: error.message,
                 roomId: data.roomId
             }
+
+            // Emit error response directly to the client
+            client.emit('toggleMuteResponse', errorResponse)
+
+            return errorResponse
         }
     }
 
