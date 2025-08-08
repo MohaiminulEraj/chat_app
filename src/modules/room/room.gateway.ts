@@ -2743,11 +2743,11 @@ export class RoomGateway
                     )
                     client.emit('toggleSeatLockResponse', {
                         seatIndex: data.seatIndex,
-                        isLocked: false
+                        isLocked: data.isLocked
                     })
                     return {
                         seatIndex: data.seatIndex,
-                        isLocked: false,
+                        isLocked: data.isLocked,
                         error: 'Seat is occupied'
                     }
                 }
@@ -2796,11 +2796,11 @@ export class RoomGateway
             // Emit error response to the requester with isLocked=false
             client.emit('toggleSeatLockResponse', {
                 seatIndex: data.seatIndex,
-                isLocked: false
+                isLocked: data.isLocked
             })
             return {
                 seatIndex: data.seatIndex,
-                isLocked: false, // Return false on error as seat lock operation failed
+                isLocked: data.isLocked, // Return false on error as seat lock operation failed
                 error: error.message
             }
         }
