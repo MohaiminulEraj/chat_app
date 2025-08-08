@@ -1301,7 +1301,8 @@ export class RoomGateway
                 `✅ KICK_USER success: User ${userName} (${userId}) kicked ${kickedUserName} (${kickedUserId}) from room ${data.roomId} | Room users: ${newCount}`
             )
 
-            return {
+            // Create response
+            const response = {
                 status: 'success',
                 participantID: kickedUserId,
                 seatIndex: data.seatIndex,
@@ -1310,19 +1311,31 @@ export class RoomGateway
                 roomUserCount: newCount,
                 message: `Successfully kicked ${kickedUserName}`
             }
+
+            // Emit response directly to the client that made the request
+            client.emit('kickUserResponse', response)
+
+            // Also return the response for any clients expecting a return value
+            return response
         } catch (error) {
             this.logger.error(
                 `❌ KICK_USER failed: User ${userName} (${userId}) failed to kick user | Data: ${JSON.stringify(data)} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
-            return {
+
+            const errorResponse = {
                 status: 'error',
                 message: error.message,
                 participantID: data.participantID,
                 seatIndex: data.seatIndex,
                 roomId: data.roomId
             }
+
+            // Emit error response directly to the client
+            client.emit('kickUserResponse', errorResponse)
+
+            return errorResponse
         }
     }
 
