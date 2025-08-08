@@ -165,11 +165,27 @@ export class RoomGateway
         const userId = fallbackUserId || userInfo?.userId
         let userName = userInfo?.userName
 
-        // If no userName available, try to get it from the database
-        if (!userName && userId) {
+        this.logger.debug(
+            `🔍 getUserInfo - userInfo from cache: ${JSON.stringify(userInfo)}`
+        )
+        this.logger.debug(`🔍 getUserInfo - fallbackUserId: ${fallbackUserId}`)
+        this.logger.debug(`🔍 getUserInfo - final userId: ${userId}`)
+        this.logger.debug(`🔍 getUserInfo - userName from cache: ${userName}`)
+
+        // If no userName available, or if it's a placeholder, try to get it from the database
+        if (
+            (!userName ||
+                userName === 'Unknown User' ||
+                userName === 'Pending User') &&
+            userId &&
+            userId !== 'pending'
+        ) {
             try {
                 const user = await this.roomService.findUserById(userId)
                 userName = user?.name || user?.email
+                this.logger.debug(
+                    `🔍 getUserInfo - userName from DB: ${userName}`
+                )
             } catch (error) {
                 this.logger.debug(
                     `Could not fetch user info for ${userId}: ${error.message}`
@@ -178,10 +194,22 @@ export class RoomGateway
         }
 
         // Return null if we don't have complete user information
-        if (!userId || !userName) {
+        if (
+            !userId ||
+            !userName ||
+            userId === 'pending' ||
+            userName === 'Unknown User' ||
+            userName === 'Pending User'
+        ) {
+            this.logger.debug(
+                `🔍 getUserInfo - returning null (userId: ${userId}, userName: ${userName})`
+            )
             return null
         }
 
+        this.logger.debug(
+            `🔍 getUserInfo - returning: ${JSON.stringify({ userId, userName })}`
+        )
         return { userId, userName }
     }
 
@@ -837,8 +865,12 @@ export class RoomGateway
         @MessageBody()
         data: { userId: string; roomId: string; password?: string }
     ) {
+        this.logger.debug(`📥 JOIN_ROOM raw data: ${JSON.stringify(data)}`)
+
         // Get validated user information
         const validatedUser = await this.getUserInfo(client, data.userId)
+
+        this.logger.debug(`🔍 Validated user: ${JSON.stringify(validatedUser)}`)
 
         if (!validatedUser) {
             const errorResponse = {
@@ -861,7 +893,9 @@ export class RoomGateway
 
         try {
             if (!data.roomId) {
-                throw new Error('Room ID is required')
+                throw new Error(
+                    `Room ID is required. Received data: ${JSON.stringify(data)}`
+                )
             }
 
             if (!userId) {
