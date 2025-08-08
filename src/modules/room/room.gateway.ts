@@ -1605,13 +1605,14 @@ export class RoomGateway
         @MessageBody()
         data: {
             roomId: string
+            userId: string
             limit?: number
             offset?: number
             lastCommentId?: string
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
