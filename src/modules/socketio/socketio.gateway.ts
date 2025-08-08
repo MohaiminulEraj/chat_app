@@ -75,6 +75,19 @@ export class SocketIOGateway
         }
     }
 
+    // Helper method to ensure user authentication (auth disabled)
+    private ensureAuthenticated(client: AuthenticatedSocket): boolean {
+        // Authentication disabled - always return true
+        // Ensure userUuid is set if not already
+        if (!client.userUuid) {
+            client.userUuid = `guest_${client.id}`
+            client.userId = client.userUuid
+            client.userName = `Guest_${Date.now()}`
+            client.userEmail = `${client.userUuid}@guest.local`
+        }
+        return true
+    }
+
     async handleConnection(client: AuthenticatedSocket) {
         const connectionTime = new Date().toISOString()
         const clientIp = client.handshake.address
@@ -91,32 +104,14 @@ export class SocketIOGateway
             `   └─ Total Active Connections: ${this.server.engine.clientsCount}`
         )
 
-        // Try to authenticate from query params if token is provided
-        const token =
-            client.handshake.auth?.token || client.handshake.query?.token
-        if (token) {
-            try {
-                const payload = this.jwtService.verify(token as string)
-                // Pre-authenticate the socket
-                client.userId = payload.id?.toString()
-                client.userUuid = payload.uuid
-                client.userName = payload.name || payload.email
-                client.userEmail = payload.email
-                client.userAvatarUrl = payload.avatarUrl || null
-
-                this.logger.log(
-                    `🔐 [CONNECTION] Pre-authenticated user: ${client.userName} (${client.userUuid})`
-                )
-            } catch (error) {
-                this.logger.warn(
-                    `⚠️  [CONNECTION] Invalid token in handshake: ${error.message}`
-                )
-            }
-        }
+        // Authentication disabled - skip token verification
+        this.logger.log(
+            `� [CONNECTION] Authentication disabled - allowing all connections`
+        )
 
         client.emit('connected', {
             success: true,
-            message: 'Connected to real-time server',
+            message: 'Connected to real-time server (no auth required)',
             socketId: client.id
         })
     }
@@ -418,50 +413,51 @@ export class SocketIOGateway
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: any
     ) {
-        this.logger.log(`🔧 [SETUP] User setup initiated`)
-        this.logger.log(`   ├─ Socket ID: ${client.id}`)
         this.logger.log(
-            `   ├─ User: ${client.userName || 'Anonymous'} (${client.userUuid || 'Not authenticated'})`
+            `🔧 [SETUP] User setup initiated (authentication disabled)`
         )
-        this.logger.log(`   └─ Setup Data: ${JSON.stringify(data)}`)
+        this.logger.log(`   ├─ Socket ID: ${client.id}`)
+        this.logger.log(`   ├─ Setup Data: ${JSON.stringify(data)}`)
 
         try {
-            // If user is authenticated, join their personal room
-            if (client.userUuid) {
-                const personalRoom = `user:${client.userUuid}`
-                await client.join(personalRoom)
+            // Skip authentication - allow all connections
+            // Use provided userId from data or generate a temporary one
+            const userId =
+                data?.userId || data?.userUuid || `guest_${client.id}`
+            const userName =
+                data?.userName || data?.name || `Guest_${Date.now()}`
 
-                this.logger.log(
-                    `✅ [SETUP] User joined personal room: ${personalRoom}`
-                )
+            // Set user info on socket
+            client.userUuid = userId
+            client.userId = userId
+            client.userName = userName
+            client.userEmail = data?.email || `${userId}@guest.local`
 
-                // Add to authenticated users map
-                if (!this.authenticatedUsers.has(client.userUuid)) {
-                    this.authenticatedUsers.set(client.userUuid, [])
-                }
-                this.authenticatedUsers.get(client.userUuid)?.push(client)
-                this.socketUserMap.set(client.id, client.userUuid)
+            const personalRoom = `user:${userId}`
+            await client.join(personalRoom)
 
-                // Emit successful setup
-                client.emit('setupComplete', {
-                    success: true,
-                    message: 'User setup completed successfully',
-                    userId: client.userUuid,
-                    userName: client.userName,
-                    personalRoom: personalRoom,
-                    timestamp: new Date().toISOString()
-                })
+            this.logger.log(
+                `✅ [SETUP] Guest user joined personal room: ${personalRoom}`
+            )
 
-                return { success: true, message: 'Setup completed' }
-            } else {
-                this.logger.warn(`⚠️  [SETUP] User not authenticated`)
-                client.emit('setupError', {
-                    success: false,
-                    message: 'User not authenticated',
-                    code: 'NOT_AUTHENTICATED'
-                })
-                return { success: false, error: 'User not authenticated' }
+            // Add to authenticated users map
+            if (!this.authenticatedUsers.has(userId)) {
+                this.authenticatedUsers.set(userId, [])
             }
+            this.authenticatedUsers.get(userId)?.push(client)
+            this.socketUserMap.set(client.id, userId)
+
+            // Emit successful setup
+            client.emit('setupComplete', {
+                success: true,
+                message: 'User setup completed successfully (no auth required)',
+                userId: userId,
+                userName: userName,
+                personalRoom: personalRoom,
+                timestamp: new Date().toISOString()
+            })
+
+            return { success: true, message: 'Setup completed' }
         } catch (error) {
             this.logger.error(
                 `❌ [SETUP] Setup failed: ${error.message}`,
@@ -519,10 +515,8 @@ export class SocketIOGateway
         this.logger.log(`   ├─ File URL: ${data.fileUrl ? 'Present' : 'None'}`)
         this.logger.log(`   └─ Message ID: ${messageId}`)
 
-        if (!client.userUuid) {
-            this.logger.error(`❌ [DIRECT_MESSAGE] Unauthenticated client`)
-            return { success: false, error: 'User not authenticated' }
-        }
+        // Ensure authentication (always passes with auth disabled)
+        this.ensureAuthenticated(client)
 
         if (!data.recipientId) {
             this.logger.error(`❌ [DIRECT_MESSAGE] Missing recipient ID`)
