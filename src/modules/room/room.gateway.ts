@@ -498,6 +498,23 @@ export class RoomGateway
             const currentSeats = this.roomSeats.get(data.roomId) || []
             const roomUserCount = this.roomUserCounts.get(data.roomId) || 0
 
+            // Get all participants (seated users) with proper format
+            const participants = await this.roomService.getRoomParticipants(
+                data.roomId
+            )
+            const formattedParticipants = participants.map((participant) => ({
+                userId: participant.userId,
+                name:
+                    participant.user?.name ||
+                    participant.user?.email ||
+                    'Unknown User',
+                avatar: participant.user?.avatarUrl || null,
+                seatIndex: participant.seatNumber - 1, // Convert to 0-based
+                isSpeaking: participant.isSpeaking || false,
+                micOn: !participant.isMuted, // micOn is inverse of isMuted
+                role: 'participant' // All seated users are participants
+            }))
+
             // Get waiting list info
             const waitingList = await this.roomService.getRoomWaitingList(
                 data.roomId
@@ -506,29 +523,23 @@ export class RoomGateway
                 (w) => w.userId === userId
             )
 
-            // Emit room join update for observers
+            // Check if current user is already a participant (seated)
+            const currentUserParticipant = formattedParticipants.find(
+                (p) => p.userId === userId
+            )
+
+            // Simplified response with only participants info
             const response = {
-                status: 'success',
-                action: 'room_joined_as_observer',
-                roomId: data.roomId,
-                userId: userId,
-                userName: userName,
-                userRole: 'observer',
-                seats: currentSeats,
-                roomUserCount: roomUserCount,
-                waitingListPosition: userInWaitingList?.position || null,
-                message:
-                    'Joined room as observer. Click on an empty seat to sit.',
-                timestamp: new Date().toISOString()
+                participants: formattedParticipants // Only send participants info
             }
 
             // Emit to all room participants
             this.server
                 .to(`room:${data.roomId}`)
-                .emit('roomJoinUpdate', response)
+                .emit('roomJoinUpdate', formattedParticipants)
 
             // Emit response directly to the joining client
-            client.emit('joinRoomResponse', response)
+            client.emit('joinRoomResponse', formattedParticipants)
 
             this.logger.log(
                 `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} as observer`
@@ -661,6 +672,18 @@ export class RoomGateway
             await this.updateRoomSeatsState(data.roomId)
             const updatedSeats = this.roomSeats.get(data.roomId) || []
 
+            // Format participant in the requested format (use participant data that already has user relation)
+            const formattedParticipant = {
+                userId: userId,
+                name: participant.user?.name || userName,
+                avatar:
+                    participant.user?.avatarUrl || userInfo?.avatarUrl || null,
+                seatIndex: data.seatIndex,
+                isSpeaking: false,
+                micOn: !participant.isMuted, // micOn is inverse of isMuted
+                role: 'participant'
+            }
+
             // Create success response
             const successResponse = {
                 status: 'success',
@@ -668,7 +691,7 @@ export class RoomGateway
                 roomId: data.roomId,
                 userId: userId,
                 userName: userName,
-                participant: participant,
+                participant: formattedParticipant, // Use formatted participant
                 seatIndex: data.seatIndex,
                 userRole: 'participant',
                 seats: updatedSeats,
