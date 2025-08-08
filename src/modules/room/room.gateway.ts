@@ -2688,19 +2688,16 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            userId: string
             roomId: string
             seatIndex: number
             isLocked: boolean
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        // Use userId from message body, fallback to connected user info
-        const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `🔒 TOGGLE_SEAT_LOCK: User ${userName} (${userId}) ${
+            `🔒 TOGGLE_SEAT_LOCK: User ${userName} ${
                 data.isLocked ? 'locking' : 'unlocking'
             } seat ${data.seatIndex} in room ${data.roomId}`
         )
@@ -2710,11 +2707,7 @@ export class RoomGateway
                 throw new Error('Room ID and seat index are required')
             }
 
-            if (!userId) {
-                throw new Error('User ID is required')
-            }
-
-            // Check if seat is occupied before locking
+            // Check if seat is occupied before locking; do not kick, just block
             if (data.isLocked) {
                 const currentSeats = await this.roomService.getRoomSeats(
                     data.roomId
@@ -2722,70 +2715,40 @@ export class RoomGateway
                 const targetSeat = currentSeats.find(
                     (seat) => seat.index === data.seatIndex
                 )
-
-                if (targetSeat?.occupied) {
-                    this.logger.log(
-                        `🔒 Seat ${data.seatIndex} is occupied. Kicking user before locking.`
+                if (!targetSeat) {
+                    throw new Error('Invalid seat index')
+                }
+                if (targetSeat.occupied) {
+                    this.logger.warn(
+                        `❌ TOGGLE_SEAT_LOCK blocked: Seat ${data.seatIndex} in room ${data.roomId} is occupied.`
                     )
-
-                    // First kick the user from the seat
-                    try {
-                        const kickResult =
-                            await this.roomService.kickUserFromSeat(
-                                data.roomId,
-                                data.seatIndex,
-                                userId
-                            )
-
-                        // Notify about the kick
-                        this.server
-                            .to(`room:${data.roomId}`)
-                            .emit('participantKicked', {
-                                roomId: data.roomId,
-                                seatIndex: data.seatIndex,
-                                kickedUserId: kickResult.userId,
-                                kickedUserName: kickResult.userName,
-                                reason: 'Seat being locked',
-                                kickedBy: {
-                                    userId: userId,
-                                    userName: userName
-                                },
-                                timestamp: new Date().toISOString()
-                            })
-
-                        this.logger.log(
-                            `✅ Kicked user ${kickResult.userName} from seat ${data.seatIndex} before locking`
-                        )
-                    } catch (kickError) {
-                        this.logger.warn(
-                            `⚠️ Failed to kick user from seat ${data.seatIndex}: ${kickError.message}`
-                        )
+                    client.emit('toggleSeatLockResponse', {
+                        seatIndex: data.seatIndex,
+                        isLocked: false
+                    })
+                    return {
+                        seatIndex: data.seatIndex,
+                        isLocked: false,
+                        error: 'Seat is occupied'
                     }
                 }
             }
 
-            const result = await this.roomService.toggleSeatLock(
+            // Record lock with host identity
+            const roomDetails = await this.roomService.getRoomDetails(
+                data.roomId
+            )
+            const hostId = roomDetails.hostId
+
+            await this.roomService.toggleSeatLock(
                 data.roomId,
                 data.seatIndex,
                 data.isLocked,
-                userId
+                hostId
             )
 
-            // Update seat state in memory
+            // Update seat state in memory (no broadcast per request)
             await this.updateRoomSeatsState(data.roomId)
-
-            // Get updated seat information
-            const updatedSeats = this.roomSeats.get(data.roomId) || []
-
-            // Broadcast updated seat state to all room participants
-            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
-                roomId: data.roomId,
-                seats: updatedSeats,
-                action: 'lock_toggle',
-                seatIndex: data.seatIndex,
-                isLocked: data.isLocked,
-                lockedBy: userId
-            })
 
             this.logger.log(
                 `✅ TOGGLE_SEAT_LOCK success: Seat ${data.seatIndex} ${
@@ -2793,8 +2756,7 @@ export class RoomGateway
                 } in room ${data.roomId}`
             )
 
-            // Track user activity
-            this.trackUserActivity(userId, 'seatActions')
+            // No userId usage requested for this event
 
             // Emit direct response to the requester in the requested format
             client.emit('toggleSeatLockResponse', {
