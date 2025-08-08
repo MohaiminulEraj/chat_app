@@ -156,7 +156,7 @@ export class RoomGateway
         }
     }
 
-    handleConnection(client: Socket) {
+    async handleConnection(client: Socket) {
         const connectionTime = new Date().toISOString()
         const clientIp = client.handshake.address
         const userAgent = client.handshake.headers['user-agent']
@@ -168,6 +168,16 @@ export class RoomGateway
         this.logger.log(`   ├─ User Agent: ${userAgent || 'Unknown'}`)
         this.logger.log(`   ├─ Transport: ${transport}`)
         this.logger.log(`   ├─ Connection Time: ${connectionTime}`)
+        this.logger.log(`   ├─ URL: ${client.handshake.url || 'Not provided'}`)
+        this.logger.log(
+            `   ├─ Headers: ${JSON.stringify(client.handshake.headers, null, 2)}`
+        )
+        this.logger.log(
+            `   ├─ Query: ${JSON.stringify(client.handshake.query, null, 2)}`
+        )
+        this.logger.log(
+            `   ├─ Auth: ${JSON.stringify(client.handshake.auth, null, 2)}`
+        )
         this.logger.log(
             `   └─ Total Active Connections: ${this.connectedUsers.size + 1}`
         )
@@ -186,16 +196,54 @@ export class RoomGateway
                 (client.handshake.url &&
                     this.extractTokenFromUrl(client.handshake.url))
 
+            this.logger.log(`🔐 [AUTH] Authentication sources checked:`)
+            this.logger.log(
+                `   ├─ Auth header token: ${client.handshake.auth?.token ? 'Found' : 'Not found'}`
+            )
+            this.logger.log(
+                `   ├─ Query param token: ${client.handshake.query?.token ? 'Found' : 'Not found'}`
+            )
+            this.logger.log(
+                `   ├─ URL path token: ${this.extractTokenFromUrl(client.handshake.url || '') ? 'Found' : 'Not found'}`
+            )
+            this.logger.log(
+                `   └─ Final token status: ${token ? 'Available' : 'None'}`
+            )
+
             if (token && !userId) {
                 this.logger.log(
-                    `🔑 Found JWT token, attempting authentication...`
+                    `🔑 [AUTH] Found JWT token, will authenticate in setup event...`
                 )
-                // We'll handle proper JWT verification in setup event
-                // For now, just log that we found a token
                 this.logger.log(`   ├─ Token Length: ${token.length} chars`)
                 this.logger.log(
-                    `   └─ Token Preview: ${token.substring(0, 20)}...`
+                    `   └─ Token Preview: ${token.substring(0, 30)}...`
                 )
+
+                // Try immediate JWT verification for better connection handling
+                try {
+                    const payload = await this.jwtService.verifyAsync(token)
+                    userId = payload.uuid || payload.id
+                    userName = payload.name || payload.email || 'Unknown User'
+                    avatarUrl = payload.avatarUrl || payload.avatar || null
+
+                    this.logger.log(
+                        `✅ [AUTH] Immediate JWT verification successful: ${userName} (${userId})`
+                    )
+
+                    // Set user data on client for other handlers
+                    client['user'] = payload
+                    client.data = client.data || {}
+                    client.data.userId = userId
+                    client.data.userName = userName
+                    client.data.email = payload.email
+                    client.data.avatarUrl = avatarUrl
+                } catch (jwtError) {
+                    this.logger.warn(
+                        `⚠️ [AUTH] Immediate JWT verification failed: ${jwtError.message} - Will retry in setup`
+                    )
+                }
+            } else if (!token) {
+                this.logger.log(`⚠️ [AUTH] No JWT token found in any source`)
             }
 
             // Allow connection even without immediate JWT verification
@@ -208,16 +256,23 @@ export class RoomGateway
             })
 
             this.logger.log(
-                `✅ Connection established: ${userName || 'Pending'} (${userId || 'pending'}) | Socket: ${client.id}`
+                `✅ [CONNECTION] Connection established: ${userName || 'Pending'} (${userId || 'pending'}) | Socket: ${client.id}`
             )
 
-            // Send connection acknowledgment immediately
+            // Send connection acknowledgment immediately with authentication status
             client.emit('connected', {
                 success: true,
                 message: 'Connected to Room Gateway',
                 socketId: client.id,
                 timestamp: connectionTime,
-                authenticated: !!userId
+                authenticated: !!userId,
+                authMethod: token
+                    ? userId
+                        ? 'jwt_verified'
+                        : 'jwt_pending'
+                    : 'none',
+                userId: userId || null,
+                userName: userName || null
             })
 
             // Also emit connection status update
@@ -225,7 +280,9 @@ export class RoomGateway
                 status: 'connected',
                 socketId: client.id,
                 timestamp: connectionTime,
-                gateway: 'room'
+                gateway: 'room',
+                authenticated: !!userId,
+                tokenFound: !!token
             })
 
             // Set up connection health monitoring
@@ -249,17 +306,42 @@ export class RoomGateway
      */
     private extractTokenFromUrl(url: string): string | null {
         try {
-            const urlParts = url.split('/')
-            const tokenCandidate = urlParts[urlParts.length - 1]
+            this.logger.log(`🔍 [TOKEN] Extracting token from URL: ${url}`)
 
-            // Check if it looks like a JWT token (starts with eyJ)
-            if (tokenCandidate && tokenCandidate.startsWith('eyJ')) {
-                return tokenCandidate
+            // Handle both query params and path-based tokens
+            const urlParts = url.split('/')
+
+            // Check if token is in the path (last segment)
+            const lastSegment = urlParts[urlParts.length - 1]
+            if (lastSegment && lastSegment.startsWith('eyJ')) {
+                this.logger.log(
+                    `🎯 [TOKEN] Found token in URL path: ${lastSegment.substring(0, 20)}...`
+                )
+                return lastSegment
             }
+
+            // Also check for token in query parameters
+            if (url.includes('?')) {
+                const queryString = url.split('?')[1]
+                const params = new URLSearchParams(queryString)
+                const queryToken =
+                    params.get('token') ||
+                    params.get('auth') ||
+                    params.get('jwt')
+
+                if (queryToken && queryToken.startsWith('eyJ')) {
+                    this.logger.log(
+                        `🎯 [TOKEN] Found token in query params: ${queryToken.substring(0, 20)}...`
+                    )
+                    return queryToken
+                }
+            }
+
+            this.logger.log(`⚠️ [TOKEN] No valid JWT token found in URL`)
             return null
         } catch (error) {
             this.logger.warn(
-                `Failed to extract token from URL: ${error.message}`
+                `❌ [TOKEN] Failed to extract token from URL: ${error.message}`
             )
             return null
         }
