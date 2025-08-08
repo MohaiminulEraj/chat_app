@@ -2772,6 +2772,12 @@ export class RoomGateway
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
+            // Emit direct response to the requester in the requested format
+            client.emit('toggleSeatLockResponse', {
+                seatIndex: data.seatIndex,
+                isLocked: data.isLocked
+            })
+
             return {
                 seatIndex: data.seatIndex,
                 isLocked: data.isLocked
@@ -2781,6 +2787,12 @@ export class RoomGateway
                 `❌ TOGGLE_SEAT_LOCK failed: ${error.message}`,
                 error.stack
             )
+
+            // Emit error response to the requester with isLocked=false
+            client.emit('toggleSeatLockResponse', {
+                seatIndex: data.seatIndex,
+                isLocked: false
+            })
             return {
                 seatIndex: data.seatIndex,
                 isLocked: false, // Return false on error as seat lock operation failed

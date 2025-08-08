@@ -212,8 +212,34 @@ export class RoomService {
             seatNumber: assignedSeat + 1 // Convert 0-based to 1-based for storage
         })
 
-        const savedParticipant =
-            await this.participantRepository.save(participant)
+        let savedParticipant: RoomParticipant
+        try {
+            savedParticipant =
+                await this.participantRepository.save(participant)
+        } catch (err: any) {
+            // Handle race condition: another insert may have occurred concurrently
+            const isUniqueViolation =
+                err &&
+                (err.code === '23505' ||
+                    (err.detail &&
+                        typeof err.detail === 'string' &&
+                        err.detail.includes('duplicate key')))
+            if (isUniqueViolation) {
+                this.logger.warn(
+                    `⚠️ Duplicate participant detected for user ${userId} in room ${roomId}. Returning existing participant.`
+                )
+                const existing = await this.participantRepository.findOne({
+                    where: {
+                        roomId: roomId as string,
+                        userId: userId as string
+                    }
+                })
+                if (existing) {
+                    return existing
+                }
+            }
+            throw err
+        }
 
         this.logger.log(
             `✅ Created participant: User ${userId} joined room ${roomId} at seat ${assignedSeat} (stored as ${assignedSeat + 1})`
