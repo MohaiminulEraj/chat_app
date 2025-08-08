@@ -6,6 +6,7 @@ import {
     MessageBody,
     OnGatewayConnection,
     OnGatewayDisconnect,
+    OnGatewayInit,
     SubscribeMessage,
     WebSocketGateway,
     WebSocketServer
@@ -39,7 +40,7 @@ interface AuthenticatedSocket extends Socket {
     maxHttpBufferSize: 1e6
 })
 export class SocketIOGateway
-    implements OnGatewayConnection, OnGatewayDisconnect
+    implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
     @WebSocketServer()
     server: Server
@@ -77,6 +78,31 @@ export class SocketIOGateway
                 '⚠️  [STARTUP] WARNING: Using default JWT secret! Please update JWT_SECRET in .env file'
             )
         }
+
+        // Log connection configuration
+        this.logger.log('📡 [STARTUP] Socket.IO Gateway Configuration:')
+        this.logger.log('   ├─ Namespace: / (default)')
+        this.logger.log('   ├─ Transports: websocket, polling')
+        this.logger.log('   ├─ Ping Interval: 25000ms')
+        this.logger.log('   ├─ Ping Timeout: 60000ms')
+        this.logger.log('   ├─ Upgrade Timeout: 30000ms')
+        this.logger.log('   ├─ Max HTTP Buffer: 1MB')
+        this.logger.log('   ├─ CORS: All origins allowed')
+        this.logger.log('   └─ Authentication: Disabled (Guest mode)')
+    }
+
+    afterInit(server: Server) {
+        this.server = server
+        this.logger.log('🚀 SocketIO Gateway initialized successfully')
+        this.logger.log('📡 Default namespace (/) ready for connections')
+        this.logger.log('🔄 Real-time messaging system active')
+        this.logger.log(`🌐 CORS enabled for all origins`)
+        this.logger.log(`🔧 Configuration:`)
+        this.logger.log(`   ├─ Ping Interval: 25s`)
+        this.logger.log(`   ├─ Ping Timeout: 60s`)
+        this.logger.log(`   ├─ Upgrade Timeout: 30s`)
+        this.logger.log(`   ├─ Max Buffer Size: 1MB`)
+        this.logger.log(`   └─ Transports: websocket, polling`)
     }
 
     // Helper method to ensure user authentication (auth disabled)
@@ -157,6 +183,13 @@ export class SocketIOGateway
                 `🔓 [CONNECTION] Authentication disabled - setting up guest user`
             )
 
+            // Send immediate acknowledgment
+            client.emit('connection_established', {
+                success: true,
+                socketId: client.id,
+                timestamp: new Date().toISOString()
+            })
+
             // Ensure authentication (which creates guest user)
             this.ensureAuthenticated(client)
 
@@ -181,14 +214,33 @@ export class SocketIOGateway
             this.logger.log(`   ├─ User Name: ${client.userName}`)
             this.logger.log(`   └─ Personal Room: ${personalRoom}`)
 
+            // Send comprehensive connection confirmation
             client.emit('connected', {
                 success: true,
                 message: 'Connected to real-time server (no auth required)',
                 socketId: client.id,
                 userId: client.userUuid,
                 userName: client.userName,
-                personalRoom: personalRoom
+                personalRoom: personalRoom,
+                timestamp: new Date().toISOString(),
+                server: {
+                    version: '1.0.0',
+                    features: ['chat', 'rooms', 'guest_mode'],
+                    pingInterval: 25000,
+                    pingTimeout: 60000
+                }
             })
+
+            // Also emit the old format for compatibility
+            client.emit('connect_success', {
+                socketId: client.id,
+                userId: client.userUuid,
+                userName: client.userName
+            })
+
+            this.logger.log(
+                `📤 [CONNECTION] Sent connection confirmation events`
+            )
         } catch (error) {
             this.logger.error(`❌ [CONNECTION] Connection setup failed`)
             this.logger.error(`   ├─ Socket ID: ${client.id}`)
@@ -260,6 +312,66 @@ export class SocketIOGateway
                 }
             })
         }
+    }
+
+    // ==================== CONNECTION HEALTH ====================
+    @SubscribeMessage('ping')
+    async handlePing(@ConnectedSocket() client: AuthenticatedSocket) {
+        this.logger.debug(`🏓 [PING] Received ping from ${client.id}`)
+        client.emit('pong', {
+            timestamp: new Date().toISOString(),
+            clientId: client.id
+        })
+        return { success: true, timestamp: new Date().toISOString() }
+    }
+
+    @SubscribeMessage('pong')
+    async handlePong(@ConnectedSocket() client: AuthenticatedSocket) {
+        this.logger.debug(`🏓 [PONG] Received pong from ${client.id}`)
+        return { success: true }
+    }
+
+    @SubscribeMessage('heartbeat')
+    async handleHeartbeat(@ConnectedSocket() client: AuthenticatedSocket) {
+        this.logger.debug(`💓 [HEARTBEAT] Received heartbeat from ${client.id}`)
+        client.emit('heartbeat_ack', {
+            timestamp: new Date().toISOString(),
+            server_time: Date.now()
+        })
+        return { success: true, server_time: Date.now() }
+    }
+
+    @SubscribeMessage('connection_check')
+    async handleConnectionCheck(
+        @ConnectedSocket() client: AuthenticatedSocket
+    ) {
+        this.logger.debug(
+            `🔍 [CONNECTION_CHECK] Connection check from ${client.id}`
+        )
+
+        const userInfo = client.userUuid
+            ? {
+                  userId: client.userUuid,
+                  userName: client.userName,
+                  connected: true,
+                  authenticatedUsers: this.authenticatedUsers.size,
+                  totalSockets: this.server.engine.clientsCount
+              }
+            : null
+
+        client.emit('connection_status', {
+            connected: true,
+            socketId: client.id,
+            timestamp: new Date().toISOString(),
+            server: {
+                uptime: process.uptime(),
+                memory: process.memoryUsage(),
+                connections: this.server.engine.clientsCount
+            },
+            user: userInfo
+        })
+
+        return { success: true, connected: true }
     }
 
     // ==================== AUTHENTICATION ====================

@@ -18,7 +18,6 @@ import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
 
 @WebSocketGateway({
-    namespace: '/rooms',
     cors: {
         origin: '*'
     }
@@ -74,7 +73,7 @@ export class RoomGateway
     afterInit(server: Server) {
         this.server = server
         this.logger.log('🚀 Room Gateway initialized successfully')
-        this.logger.log(`📡 WebSocket namespace: / (root)`)
+        this.logger.log(`📡 WebSocket namespace: / (root/default)`)
         this.logger.log(`🔄 CORS enabled for all origins`)
         this.logger.log(`📊 Real-time tracking initialized:`)
         this.logger.log(`   ├─ Connected users tracking: Ready`)
