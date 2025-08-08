@@ -2390,10 +2390,16 @@ export class RoomGateway
     async handleToggleSeatLock(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { roomId: string; seatIndex: number; isLocked: boolean }
+        data: {
+            userId: string
+            roomId: string
+            seatIndex: number
+            isLocked: boolean
+        }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        // Use userId from message body, fallback to connected user info
+        const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
@@ -2405,6 +2411,10 @@ export class RoomGateway
         try {
             if (!data.roomId || data.seatIndex === undefined) {
                 throw new Error('Room ID and seat index are required')
+            }
+
+            if (!userId) {
+                throw new Error('User ID is required')
             }
 
             const result = await this.roomService.toggleSeatLock(
@@ -2440,19 +2450,19 @@ export class RoomGateway
             this.trackUserActivity(userId, 'seatActions')
 
             return {
-                status: 'success',
-                result,
-                seats: updatedSeats,
-                message: `Seat ${data.seatIndex} ${
-                    data.isLocked ? 'locked' : 'unlocked'
-                } successfully`
+                seatIndex: data.seatIndex,
+                isLocked: data.isLocked
             }
         } catch (error) {
             this.logger.error(
                 `❌ TOGGLE_SEAT_LOCK failed: ${error.message}`,
                 error.stack
             )
-            return { status: 'error', message: error.message }
+            return {
+                seatIndex: data.seatIndex,
+                isLocked: false, // Return false on error as seat lock operation failed
+                error: error.message
+            }
         }
     }
 
