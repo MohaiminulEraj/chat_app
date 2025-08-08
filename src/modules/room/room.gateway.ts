@@ -441,16 +441,14 @@ export class RoomGateway
     async handleJoinRoom(
         @ConnectedSocket() client: Socket,
         @MessageBody()
-        data: { roomId: string; seatNumber?: number; password?: string }
+        data: { roomId: string; password?: string }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
         const userId = userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId}${
-                data.seatNumber !== undefined ? ` seat ${data.seatNumber}` : ''
-            }`
+            `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId} as observer`
         )
 
         try {
@@ -458,84 +456,280 @@ export class RoomGateway
                 throw new Error('Room ID is required')
             }
 
-            const participant = await this.roomService.joinRoom(
-                data.roomId,
-                userId,
-                data.password,
-                data.seatNumber
+            // Check if room exists and user has access
+            const roomDetails = await this.roomService.getRoomDetails(
+                data.roomId
+            )
+            if (!roomDetails) {
+                throw new Error('Room not found')
+            }
+
+            // Check if room requires password
+            if (
+                roomDetails.password &&
+                roomDetails.password !== data.password
+            ) {
+                throw new Error('Incorrect room password')
+            }
+
+            // Check if user is already in room
+            const existingParticipant =
+                await this.roomService.getRoomParticipants(data.roomId)
+            const isAlreadyParticipant = existingParticipant.some(
+                (p) => p.userId === userId
             )
 
-            // Update tracking
+            if (isAlreadyParticipant) {
+                this.logger.log(
+                    `👤 User ${userName} (${userId}) already in room ${data.roomId}`
+                )
+            }
+
+            // Update tracking - user joins as observer initially
             if (userInfo) {
                 userInfo.rooms.add(data.roomId)
             }
 
-            const currentCount = this.roomUserCounts.get(data.roomId) || 0
-            const newCount = currentCount + 1
-            this.roomUserCounts.set(data.roomId, newCount)
-
-            // Join socket room
+            // Join socket room for real-time updates
             client.join(`room:${data.roomId}`)
 
-            // Update seat state in memory
+            // Get current room state
             await this.updateRoomSeatsState(data.roomId)
+            const currentSeats = this.roomSeats.get(data.roomId) || []
+            const roomUserCount = this.roomUserCounts.get(data.roomId) || 0
 
-            // Get updated seat information
-            const updatedSeats = this.roomSeats.get(data.roomId) || []
+            // Get waiting list info
+            const waitingList = await this.roomService.getRoomWaitingList(
+                data.roomId
+            )
+            const userInWaitingList = waitingList.find(
+                (w) => w.userId === userId
+            )
 
-            // Notify all room participants about user joining
-            this.server.to(`room:${data.roomId}`).emit('userJoined', {
-                roomId: data.roomId,
-                participant,
-                userName,
-                seatIndex: participant.seatNumber - 1 // Convert to 0-based
-            })
-
-            // Broadcast updated seat state
-            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
-                roomId: data.roomId,
-                seats: updatedSeats
-            })
-
-            // Emit room join confirmation to all participants
-            this.server.to(`room:${data.roomId}`).emit('roomJoinUpdate', {
-                action: 'user_joined',
+            // Emit room join update for observers
+            const response = {
+                status: 'success',
+                action: 'room_joined_as_observer',
                 roomId: data.roomId,
                 userId: userId,
                 userName: userName,
-                participant: participant,
-                seatIndex: participant.seatNumber - 1,
-                roomUserCount: newCount,
+                userRole: 'observer',
+                seats: currentSeats,
+                roomUserCount: roomUserCount,
+                waitingListPosition: userInWaitingList?.position || null,
+                message:
+                    'Joined room as observer. Click on an empty seat to sit.',
                 timestamp: new Date().toISOString()
-            })
+            }
+
+            // Emit to all room participants
+            this.server
+                .to(`room:${data.roomId}`)
+                .emit('roomJoinUpdate', response)
+
+            // Emit response directly to the joining client
+            client.emit('joinRoomResponse', response)
 
             this.logger.log(
-                `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} | ` +
-                    `Seat: ${participant.seatNumber - 1} | Room users: ${newCount}`
+                `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} as observer`
             )
 
             // Track user activity
             this.trackUserActivity(userId, 'joinRoom')
 
-            return {
-                status: 'success',
-                participant,
-                seatIndex: participant.seatNumber - 1, // Convert to 0-based
-                seats: updatedSeats,
-                roomUserCount: newCount,
-                message: `Successfully joined room ${data.roomId}`
-            }
+            return response
         } catch (error) {
             this.logger.error(
                 `❌ JOIN_ROOM failed: User ${userName} (${userId}) failed to join room ${data.roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
-            return {
+
+            const errorResponse = {
                 status: 'error',
                 message: error.message,
                 roomId: data.roomId
             }
+
+            // Emit error response directly to the client
+            client.emit('joinRoomResponse', errorResponse)
+
+            return errorResponse
+        }
+    }
+
+    @SubscribeMessage('sitInSeat')
+    async handleSitInSeat(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: { roomId: string; seatIndex: number; password?: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `🪑 SIT_IN_SEAT request: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${data.roomId}`
+        )
+
+        try {
+            if (!data.roomId || data.seatIndex === undefined) {
+                throw new Error('Room ID and seat index are required')
+            }
+
+            // Check if user is in the room (as observer)
+            const roomName = `room:${data.roomId}`
+            const isInSocketRoom = client.rooms.has(roomName)
+            if (!isInSocketRoom) {
+                throw new Error('You must join the room first before sitting')
+            }
+
+            // Get current room seats
+            const currentSeats = await this.roomService.getRoomSeats(
+                data.roomId
+            )
+            const targetSeat = currentSeats.find(
+                (seat) => seat.seatIndex === data.seatIndex
+            )
+
+            if (!targetSeat) {
+                throw new Error('Invalid seat index')
+            }
+
+            // Check seat availability and lock status
+            if (targetSeat.isOccupied) {
+                throw new Error('Seat is already occupied')
+            }
+
+            if (targetSeat.isLocked) {
+                // If seat is locked, require password or add to waiting list
+                if (
+                    targetSeat.password &&
+                    targetSeat.password !== data.password
+                ) {
+                    // Add to waiting list for this specific seat
+                    await this.roomService.addToWaitingList(data.roomId, userId)
+
+                    const waitingList =
+                        await this.roomService.getRoomWaitingList(data.roomId)
+                    const userPosition =
+                        waitingList.find((w) => w.userId === userId)
+                            ?.position || 0
+
+                    const waitingResponse = {
+                        status: 'waiting',
+                        action: 'added_to_waiting_list',
+                        roomId: data.roomId,
+                        seatIndex: data.seatIndex,
+                        userId: userId,
+                        userName: userName,
+                        position: userPosition,
+                        message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`,
+                        timestamp: new Date().toISOString()
+                    }
+
+                    // Emit to the user
+                    client.emit('sitInSeatResponse', waitingResponse)
+
+                    // Emit to all room participants
+                    this.server
+                        .to(roomName)
+                        .emit('roomJoinUpdate', waitingResponse)
+
+                    this.logger.log(
+                        `⏳ SIT_IN_SEAT waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${data.roomId}`
+                    )
+
+                    return waitingResponse
+                }
+            }
+
+            // Seat is available - proceed with sitting
+            const participant = await this.roomService.joinRoomWithSeat(
+                data.roomId,
+                userId,
+                data.seatIndex,
+                data.password
+            )
+
+            // Update tracking
+            const currentCount = this.roomUserCounts.get(data.roomId) || 0
+            const newCount = currentCount + 1
+            this.roomUserCounts.set(data.roomId, newCount)
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(data.roomId)
+            const updatedSeats = this.roomSeats.get(data.roomId) || []
+
+            // Create success response
+            const successResponse = {
+                status: 'success',
+                action: 'user_seated',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                participant: participant,
+                seatIndex: data.seatIndex,
+                userRole: 'participant',
+                seats: updatedSeats,
+                roomUserCount: newCount,
+                message: `Successfully seated in seat ${data.seatIndex}`,
+                timestamp: new Date().toISOString()
+            }
+
+            // Emit to the user who sat
+            client.emit('sitInSeatResponse', successResponse)
+
+            // Notify all room participants about user sitting
+            this.server.to(roomName).emit('userSeated', {
+                roomId: data.roomId,
+                participant,
+                userName,
+                seatIndex: data.seatIndex,
+                userId: userId
+            })
+
+            // Broadcast updated seat state
+            this.server.to(roomName).emit('seatUpdated', {
+                roomId: data.roomId,
+                seats: updatedSeats,
+                action: 'user_seated',
+                seatIndex: data.seatIndex,
+                userId: userId
+            })
+
+            // Emit comprehensive room update
+            this.server.to(roomName).emit('roomJoinUpdate', successResponse)
+
+            // Check and promote from waiting list if needed
+            await this.checkAndPromoteFromWaitingList(data.roomId)
+
+            this.logger.log(
+                `✅ SIT_IN_SEAT success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${data.roomId}`
+            )
+
+            // Track user activity
+            this.trackUserActivity(userId, 'seatActions')
+
+            return successResponse
+        } catch (error) {
+            this.logger.error(
+                `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${data.roomId} | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId,
+                seatIndex: data.seatIndex
+            }
+
+            // Emit error response directly to the client
+            client.emit('sitInSeatResponse', errorResponse)
+
+            return errorResponse
         }
     }
 
@@ -2056,11 +2250,30 @@ export class RoomGateway
         )
 
         try {
-            // This will be handled through joinRoom with seat parameter
-            return await this.handleJoinRoom(client, {
-                roomId: data.roomId,
-                seatNumber: data.seatIndex
-            })
+            // Redirect to sitInSeat handler for seat-specific requests
+            if (data.seatIndex !== undefined) {
+                return await this.handleSitInSeat(client, {
+                    roomId: data.roomId,
+                    seatIndex: data.seatIndex
+                })
+            } else {
+                // Find any available seat automatically
+                const availableSeats = await this.roomService.getRoomSeats(
+                    data.roomId
+                )
+                const emptySeat = availableSeats.find(
+                    (seat) => !seat.isOccupied && !seat.isLocked
+                )
+
+                if (emptySeat) {
+                    return await this.handleSitInSeat(client, {
+                        roomId: data.roomId,
+                        seatIndex: emptySeat.seatIndex
+                    })
+                } else {
+                    throw new Error('No available seats found')
+                }
+            }
         } catch (error) {
             this.logger.error(
                 `❌ REQUEST_SEAT failed: ${error.message}`,
@@ -2195,6 +2408,84 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ Failed to update seat state for room ${roomId}: ${error.message}`
+            )
+        }
+    }
+
+    /**
+     * Check and promote users from waiting list when seats become available
+     */
+    private async checkAndPromoteFromWaitingList(
+        roomId: string
+    ): Promise<void> {
+        try {
+            const waitingList =
+                await this.roomService.getRoomWaitingList(roomId)
+            const availableSeats = await this.roomService.getRoomSeats(roomId)
+
+            // Find empty unlocked seats
+            const emptyUnlockedSeats = availableSeats.filter(
+                (seat) => !seat.isOccupied && !seat.isLocked
+            )
+
+            if (waitingList.length > 0 && emptyUnlockedSeats.length > 0) {
+                // Promote first user in waiting list
+                const nextUser = waitingList[0]
+                const availableSeat = emptyUnlockedSeats[0]
+
+                try {
+                    // Promote the user
+                    await this.roomService.promoteFromWaitingList(roomId)
+
+                    // Auto-seat the promoted user
+                    const participant = await this.roomService.joinRoomWithSeat(
+                        roomId,
+                        nextUser.userId,
+                        availableSeat.seatIndex
+                    )
+
+                    // Update seat state
+                    await this.updateRoomSeatsState(roomId)
+                    const updatedSeats = this.roomSeats.get(roomId) || []
+
+                    // Notify all room participants
+                    this.server
+                        .to(`room:${roomId}`)
+                        .emit('userPromotedFromWaitingList', {
+                            roomId,
+                            userId: nextUser.userId,
+                            userName: nextUser.user?.name || 'Unknown User',
+                            seatIndex: availableSeat.seatIndex,
+                            participant,
+                            seats: updatedSeats,
+                            message: `User promoted from waiting list to seat ${availableSeat.seatIndex}`,
+                            timestamp: new Date().toISOString()
+                        })
+
+                    // Emit room update
+                    this.server.to(`room:${roomId}`).emit('roomJoinUpdate', {
+                        action: 'user_promoted_and_seated',
+                        roomId,
+                        userId: nextUser.userId,
+                        userName: nextUser.user?.name || 'Unknown User',
+                        seatIndex: availableSeat.seatIndex,
+                        userRole: 'participant',
+                        seats: updatedSeats,
+                        timestamp: new Date().toISOString()
+                    })
+
+                    this.logger.log(
+                        `✅ Promoted user ${nextUser.userId} from waiting list to seat ${availableSeat.seatIndex} in room ${roomId}`
+                    )
+                } catch (error) {
+                    this.logger.error(
+                        `❌ Failed to promote user ${nextUser.userId} from waiting list in room ${roomId}: ${error.message}`
+                    )
+                }
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ Failed to check waiting list for room ${roomId}: ${error.message}`
             )
         }
     }
