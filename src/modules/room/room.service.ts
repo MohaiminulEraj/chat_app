@@ -45,6 +45,17 @@ export class RoomService {
         private cloudinaryService: CloudinaryService
     ) {}
 
+    async findUserById(userId: string): Promise<User | null> {
+        try {
+            return await this.userRepository.findOne({
+                where: { uuid: userId, isActive: true },
+                select: ['uuid', 'name', 'email'] // Select only needed fields
+            })
+        } catch (error) {
+            return null
+        }
+    }
+
     async createRoom(
         groupId: string,
         data: any,

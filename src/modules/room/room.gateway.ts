@@ -157,6 +157,34 @@ export class RoomGateway
         }
     }
 
+    private async getUserInfo(
+        client: Socket,
+        fallbackUserId?: string
+    ): Promise<{ userId: string; userName: string } | null> {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = fallbackUserId || userInfo?.userId
+        let userName = userInfo?.userName
+
+        // If no userName available, try to get it from the database
+        if (!userName && userId) {
+            try {
+                const user = await this.roomService.findUserById(userId)
+                userName = user?.name || user?.email
+            } catch (error) {
+                this.logger.debug(
+                    `Could not fetch user info for ${userId}: ${error.message}`
+                )
+            }
+        }
+
+        // Return null if we don't have complete user information
+        if (!userId || !userName) {
+            return null
+        }
+
+        return { userId, userName }
+    }
+
     async handleConnection(client: Socket) {
         const connectionTime = new Date().toISOString()
         const clientIp = client.handshake.address
@@ -809,10 +837,23 @@ export class RoomGateway
         @MessageBody()
         data: { userId: string; roomId: string; password?: string }
     ) {
+        // Get validated user information
+        const validatedUser = await this.getUserInfo(client, data.userId)
+
+        if (!validatedUser) {
+            const errorResponse = {
+                status: 'error',
+                message: 'User information not available',
+                roomId: data.roomId
+            }
+            client.emit('joinRoomResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId, userName } = validatedUser
+
+        // Get the userInfo for tracking (from connectedUsers)
         const userInfo = this.connectedUsers.get(client.id)
-        // Use userId from message body, fallback to connected user info
-        const userId = data.userId || userInfo?.userId
-        const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
             `📥 JOIN_ROOM request: User ${userName} (${userId}) wants to join room ${data.roomId} as observer`
@@ -906,20 +947,23 @@ export class RoomGateway
                     // Get all participants (seated users) with proper format
                     const participants =
                         await this.roomService.getRoomParticipants(data.roomId)
-                    const formattedParticipants = participants.map(
-                        (participant) => ({
+                    const formattedParticipants = participants
+                        .filter(
+                            (participant) =>
+                                participant.user?.name ||
+                                participant.user?.email
+                        )
+                        .map((participant) => ({
                             userId: participant.userId,
                             name:
                                 participant.user?.name ||
-                                participant.user?.email ||
-                                'Unknown User',
+                                participant.user?.email,
                             avatar: participant.user?.avatarUrl || null,
                             seatIndex: participant.seatNumber - 1, // Convert to 0-based
                             isSpeaking: participant.isSpeaking || false,
                             micOn: !participant.isMuted, // micOn is inverse of isMuted
                             role: 'participant' // All seated users are participants
-                        })
-                    )
+                        }))
 
                     // Get waiting list info
                     const waitingList =
