@@ -14,6 +14,7 @@ import { Server, Socket } from 'socket.io'
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard'
 import { GiftService } from '../gift/gift.service'
 import { CreateRoomCommentDto } from './dto/room-comment.dto'
+import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
 
 @WebSocketGateway({
@@ -391,11 +392,18 @@ export class RoomGateway
                             `🚪 Processing disconnect for user ${userInfo.userName} from room ${roomId}`
                         )
 
-                        // Remove user from this specific room in database
-                        await this.roomService.leaveRoom(
-                            roomId,
-                            userInfo.userId
-                        )
+                        // Remove user only if they are a participant (seated) in this specific room
+                        try {
+                            await this.roomService.leaveRoom(
+                                roomId,
+                                userInfo.userId
+                            )
+                        } catch (err) {
+                            // leaveRoom is idempotent now, but keep guard for older behavior
+                            this.logger.debug(
+                                `leaveRoom skipped or already removed for user ${userInfo.userId} in room ${roomId}: ${err?.message}`
+                            )
+                        }
 
                         // Update seat state in memory for this specific room
                         await this.updateRoomSeatsState(roomId)
@@ -1017,11 +1025,23 @@ export class RoomGateway
                 data.roomId
             )
 
+            // Check if user is the room owner
+            const roomDetails = await this.roomService.getRoomDetails(
+                data.roomId
+            )
+            const userRoles = await this.roomService.getUserRolesInRoom(
+                data.roomId,
+                userId
+            )
+            const isOwner =
+                roomDetails?.hostId === userId ||
+                userRoles.includes(RoomRole.OWNER) // Owner role check
+
             this.logger.log(
                 `🔍 DEBUG SIT_IN_SEAT: Available seats for room ${data.roomId}: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
             )
             this.logger.log(
-                `🔍 DEBUG SIT_IN_SEAT: Looking for seat with index: ${data.seatIndex}`
+                `🔍 DEBUG SIT_IN_SEAT: Looking for seat with index: ${data.seatIndex} | User is owner: ${isOwner}`
             )
 
             const targetSeat = currentSeats.find(
@@ -1032,15 +1052,51 @@ export class RoomGateway
                 throw new Error('Invalid seat index')
             }
 
-            // Check seat availability and lock status
+            // Handle occupied seat - owner can kick existing participant
             if (targetSeat.occupied) {
-                throw new Error('Seat is already occupied')
+                if (isOwner) {
+                    // Owner can kick any participant from their seat
+                    try {
+                        const kickResult =
+                            await this.roomService.kickUserFromSeat(
+                                data.roomId,
+                                data.seatIndex,
+                                userId
+                            )
+
+                        this.logger.log(
+                            `👑 OWNER PRIVILEGE: Owner ${userName} (${userId}) kicked ${kickResult.userName} (${kickResult.userId}) from seat ${data.seatIndex}`
+                        )
+
+                        // Notify the kicked user and room
+                        this.server
+                            .to(`room:${data.roomId}`)
+                            .emit('userKicked', {
+                                roomId: data.roomId,
+                                kickedUserId: kickResult.userId,
+                                kickedUserName: kickResult.userName,
+                                seatIndex: data.seatIndex,
+                                kickedBy: userId,
+                                kickedByName: userName,
+                                reason: 'Owner taking seat',
+                                timestamp: new Date().toISOString()
+                            })
+                    } catch (kickError) {
+                        this.logger.error(
+                            `❌ Failed to kick user from seat ${data.seatIndex}: ${kickError.message}`
+                        )
+                        throw new Error(
+                            `Failed to take seat: ${kickError.message}`
+                        )
+                    }
+                } else {
+                    throw new Error('Seat is already occupied')
+                }
             }
 
-            if (targetSeat.locked) {
-                // If seat is locked, add to waiting list (simplified for now)
-                // Note: Password check would need to be implemented with RoomSeat entity directly
-                // Add to waiting list for this specific seat
+            // Handle locked seat - owner can bypass lock
+            if (targetSeat.locked && !isOwner) {
+                // Non-owners cannot sit in locked seats, add to waiting list
                 await this.roomService.addToWaitingList(data.roomId, userId)
 
                 const waitingList = await this.roomService.getRoomWaitingList(
@@ -1072,6 +1128,10 @@ export class RoomGateway
                 )
 
                 return waitingResponse
+            } else if (targetSeat.locked && isOwner) {
+                this.logger.log(
+                    `👑 OWNER PRIVILEGE: Owner ${userName} (${userId}) bypassing lock on seat ${data.seatIndex}`
+                )
             }
 
             // Seat is available - proceed with sitting

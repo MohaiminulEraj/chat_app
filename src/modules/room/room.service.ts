@@ -270,9 +270,10 @@ export class RoomService {
         })
 
         if (!participant) {
-            throw new NotFoundException(
-                `Participant not found in room ${roomId}`
+            this.logger.log(
+                `ℹ️ leaveRoom: User ${userId} is not a participant in room ${roomId}; skipping removal.`
             )
+            return
         }
 
         this.logger.log(
@@ -349,8 +350,14 @@ export class RoomService {
     ): Promise<{ userId: string; userName: string }> {
         // Check if the user performing the kick has permission (host/owner/admin)
         const userRoles = await this.getUserRolesInRoom(roomId, kickedBy)
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+
+        const isOwner =
+            userRoles.includes(RoomRole.OWNER) || room?.ownerId === kickedBy
         const canKick =
-            userRoles.includes(RoomRole.OWNER) ||
+            isOwner ||
             userRoles.includes(RoomRole.HOST) ||
             userRoles.includes(RoomRole.ADMIN)
 
@@ -375,28 +382,28 @@ export class RoomService {
             )
         }
 
-        // Check if trying to kick the room owner
-        const room = await this.roomRepository.findOne({
-            where: { uuid: roomId }
-        })
-        if (participant.userId === room?.ownerId) {
-            throw new ForbiddenException('Cannot kick the room owner')
-        }
+        // Check if trying to kick someone with equal or higher role (unless kicker is owner)
+        if (!isOwner) {
+            // Check if trying to kick the room owner
+            if (participant.userId === room?.ownerId) {
+                throw new ForbiddenException('Cannot kick the room owner')
+            }
 
-        // Check if trying to kick someone with equal or higher role
-        const targetUserRoles = await this.getUserRolesInRoom(
-            roomId,
-            participant.userId
-        )
-        const kickerIsHost = userRoles.includes(RoomRole.HOST)
-        const targetIsOwner = targetUserRoles.includes(RoomRole.OWNER)
-        const targetIsHost = targetUserRoles.includes(RoomRole.HOST)
-
-        if (targetIsOwner || (kickerIsHost && targetIsHost)) {
-            throw new ForbiddenException(
-                'Cannot kick users with equal or higher permissions'
+            const targetUserRoles = await this.getUserRolesInRoom(
+                roomId,
+                participant.userId
             )
+            const kickerIsHost = userRoles.includes(RoomRole.HOST)
+            const targetIsOwner = targetUserRoles.includes(RoomRole.OWNER)
+            const targetIsHost = targetUserRoles.includes(RoomRole.HOST)
+
+            if (targetIsOwner || (kickerIsHost && targetIsHost)) {
+                throw new ForbiddenException(
+                    'Cannot kick users with equal or higher permissions'
+                )
+            }
         }
+        // Owner can kick anyone, including other hosts
 
         const kickedUserInfo = {
             userId: participant.userId,
