@@ -18,6 +18,7 @@ import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
 
 @WebSocketGateway({
+    namespace: '/rooms',
     cors: {
         origin: '*'
     }

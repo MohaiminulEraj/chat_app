@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Connection Stability Test</title>
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+            }
+            .log {
+                background: #f5f5f5;
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 5px;
+                font-family: monospace;
+                max-height: 400px;
+                overflow-y: auto;
+            }
+            .connected {
+                color: green;
+                font-weight: bold;
+            }
+            .disconnected {
+                color: red;
+                font-weight: bold;
+            }
+            .error {
+                color: red;
+            }
+            .info {
+                color: blue;
+            }
+            button {
+                margin: 5px;
+                padding: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Socket.IO Connection Stability Test</h1>
+
+        <div>
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="clearLog()">Clear Log</button>
+            <button onclick="testReconnection()">Test Reconnection</button>
+        </div>
+
+        <div>
+            <strong>Connection Status: </strong>
+            <span id="status" class="disconnected">Disconnected</span>
+        </div>
+
+        <div>
+            <strong>User Info:</strong>
+            <div id="userInfo">Not connected</div>
+        </div>
+
+        <div class="log" id="log"></div>
+
+        <script>
+            let socket
+            let reconnectCount = 0
+            const maxReconnectAttempts = 5
+
+            function log(message, type = 'info') {
+                const logDiv = document.getElementById('log')
+                const timestamp = new Date().toLocaleTimeString()
+                const className =
+                    type === 'error'
+                        ? 'error'
+                        : type === 'success'
+                          ? 'connected'
+                          : 'info'
+                logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`
+                logDiv.scrollTop = logDiv.scrollHeight
+            }
+
+            function updateStatus(status, className) {
+                const statusElement = document.getElementById('status')
+                statusElement.textContent = status
+                statusElement.className = className
+            }
+
+            function updateUserInfo(info) {
+                document.getElementById('userInfo').innerHTML = info
+            }
+
+            function connect() {
+                try {
+                    log('🔄 Attempting to connect to server...', 'info')
+
+                    // Use the production server URL from the Flutter logs
+                    socket = io('http://103.190.136.200:3000', {
+                        transports: ['websocket', 'polling'],
+                        timeout: 20000,
+                        forceNew: true,
+                        reconnection: true,
+                        reconnectionAttempts: maxReconnectAttempts,
+                        reconnectionDelay: 1000,
+                        reconnectionDelayMax: 5000,
+                        randomizationFactor: 0.5
+                    })
+
+                    // Connection events
+                    socket.on('connect', () => {
+                        log('✅ Connected to server!', 'success')
+                        updateStatus('Connected', 'connected')
+                        reconnectCount = 0
+
+                        log(`📋 Socket ID: ${socket.id}`, 'info')
+                        log(
+                            '📡 Transport: ' + socket.io.engine.transport.name,
+                            'info'
+                        )
+                    })
+
+                    socket.on('connected', (data) => {
+                        log(
+                            '🎉 Received connected event from server:',
+                            'success'
+                        )
+                        log(`   Data: ${JSON.stringify(data, null, 2)}`, 'info')
+
+                        updateUserInfo(`
+                        <strong>Socket ID:</strong> ${data.socketId}<br>
+                        <strong>User ID:</strong> ${data.userId || 'Not set'}<br>
+                        <strong>User Name:</strong> ${data.userName || 'Not set'}<br>
+                        <strong>Personal Room:</strong> ${data.personalRoom || 'Not set'}
+                    `)
+                    })
+
+                    socket.on('connectionError', (data) => {
+                        log('❌ Connection error from server:', 'error')
+                        log(
+                            `   Error: ${JSON.stringify(data, null, 2)}`,
+                            'error'
+                        )
+                    })
+
+                    socket.on('disconnect', (reason) => {
+                        log(
+                            `💔 Disconnected from server. Reason: ${reason}`,
+                            'error'
+                        )
+                        updateStatus('Disconnected', 'disconnected')
+                        updateUserInfo('Not connected')
+                    })
+
+                    socket.on('connect_error', (error) => {
+                        log(`❌ Connection error: ${error.message}`, 'error')
+                        updateStatus('Connection Error', 'disconnected')
+                    })
+
+                    socket.on('reconnect', (attemptNumber) => {
+                        log(
+                            `🔄 Reconnected after ${attemptNumber} attempts`,
+                            'success'
+                        )
+                        updateStatus('Reconnected', 'connected')
+                    })
+
+                    socket.on('reconnect_attempt', (attemptNumber) => {
+                        log(
+                            `🔄 Reconnection attempt ${attemptNumber}/${maxReconnectAttempts}`,
+                            'info'
+                        )
+                        updateStatus(
+                            `Reconnecting... (${attemptNumber}/${maxReconnectAttempts})`,
+                            'disconnected'
+                        )
+                    })
+
+                    socket.on('reconnect_error', (error) => {
+                        log(`❌ Reconnection error: ${error.message}`, 'error')
+                    })
+
+                    socket.on('reconnect_failed', () => {
+                        log(
+                            '❌ Reconnection failed after maximum attempts',
+                            'error'
+                        )
+                        updateStatus('Reconnection Failed', 'disconnected')
+                    })
+
+                    // Transport events
+                    socket.io.on('upgrade', () => {
+                        log(
+                            '🚀 Transport upgraded to: ' +
+                                socket.io.engine.transport.name,
+                            'success'
+                        )
+                    })
+
+                    socket.io.on('upgradeError', (error) => {
+                        log(
+                            '❌ Transport upgrade error: ' + error.message,
+                            'error'
+                        )
+                    })
+                } catch (error) {
+                    log(`❌ Error creating socket: ${error.message}`, 'error')
+                }
+            }
+
+            function disconnect() {
+                if (socket) {
+                    log('🔌 Manually disconnecting...', 'info')
+                    socket.disconnect()
+                    socket = null
+                }
+            }
+
+            function clearLog() {
+                document.getElementById('log').innerHTML = ''
+            }
+
+            function testReconnection() {
+                if (socket && socket.connected) {
+                    log(
+                        '🧪 Testing reconnection by forcing disconnect...',
+                        'info'
+                    )
+                    // Force disconnect to test reconnection
+                    socket.io.engine.close()
+                } else {
+                    log('❌ Not connected - cannot test reconnection', 'error')
+                }
+            }
+
+            // Auto-connect on page load
+            window.onload = function () {
+                log('📄 Page loaded - ready to connect', 'info')
+                log('🔧 Click "Connect" to test the connection', 'info')
+            }
+        </script>
+    </body>
+</html>

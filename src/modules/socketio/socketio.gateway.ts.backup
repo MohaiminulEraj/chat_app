@@ -28,15 +28,11 @@ interface AuthenticatedSocket extends Socket {
 @WebSocketGateway({
     cors: {
         origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        methods: ['GET', 'POST'],
         credentials: true
     },
     transports: ['websocket', 'polling'],
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 30000,
-    maxHttpBufferSize: 1e6
+    allowEIO3: true
 })
 export class SocketIOGateway
     implements OnGatewayConnection, OnGatewayDisconnect
@@ -81,35 +77,21 @@ export class SocketIOGateway
 
     // Helper method to ensure user authentication (auth disabled)
     private ensureAuthenticated(client: AuthenticatedSocket): boolean {
-        try {
-            // Authentication disabled - always return true
-            // Ensure userUuid is set if not already
-            if (!client.userUuid) {
-                // Generate a proper UUID for guest users to avoid validation issues
-                const guestUuid = this.generateGuestUuid()
-                client.userUuid = guestUuid
-                client.userId = guestUuid
-                client.userName = `Guest_${Date.now()}`
-                client.userEmail = `${guestUuid}@guest.local`
+        // Authentication disabled - always return true
+        // Ensure userUuid is set if not already
+        if (!client.userUuid) {
+            // Generate a proper UUID for guest users to avoid validation issues
+            const guestUuid = this.generateGuestUuid()
+            client.userUuid = guestUuid
+            client.userId = guestUuid
+            client.userName = `Guest_${Date.now()}`
+            client.userEmail = `${guestUuid}@guest.local`
 
-                this.logger.debug(
-                    `👻 [GUEST_AUTH] Created guest user: ${client.userName} (${guestUuid})`
-                )
-            }
-            return true
-        } catch (error) {
-            this.logger.error(
-                `❌ [GUEST_AUTH] Error setting up guest user: ${error.message}`
+            this.logger.debug(
+                `👻 [GUEST_AUTH] Created guest user: ${client.userName} (${guestUuid})`
             )
-            // Still return true to allow connection, but with minimal setup
-            if (!client.userUuid) {
-                client.userUuid = `guest_fallback_${Date.now()}`
-                client.userId = client.userUuid
-                client.userName = 'Guest_Fallback'
-                client.userEmail = `${client.userUuid}@guest.local`
-            }
-            return true
         }
+        return true
     }
 
     // Generate a proper UUID for guest users
@@ -151,58 +133,16 @@ export class SocketIOGateway
             `   └─ Total Active Connections: ${this.server.engine.clientsCount}`
         )
 
-        // Authentication disabled - automatically set up guest user
-        try {
-            this.logger.log(
-                `🔓 [CONNECTION] Authentication disabled - setting up guest user`
-            )
+        // Authentication disabled - skip token verification
+        this.logger.log(
+            `� [CONNECTION] Authentication disabled - allowing all connections`
+        )
 
-            // Ensure authentication (which creates guest user)
-            this.ensureAuthenticated(client)
-
-            // Add to authenticated users map
-            if (!this.authenticatedUsers.has(client.userUuid)) {
-                this.authenticatedUsers.set(client.userUuid, [])
-            }
-            this.authenticatedUsers.get(client.userUuid)?.push(client)
-            this.socketUserMap.set(client.id, client.userUuid)
-
-            // Join users personal room
-            const personalRoom = `user:${client.userUuid}`
-            await client.join(personalRoom)
-            this.logger.log(
-                `🏠 [CONNECTION] Joined personal room: ${personalRoom}`
-            )
-
-            this.logger.log(
-                `✅ [CONNECTION] Guest user setup completed successfully`
-            )
-            this.logger.log(`   ├─ User ID: ${client.userUuid}`)
-            this.logger.log(`   ├─ User Name: ${client.userName}`)
-            this.logger.log(`   └─ Personal Room: ${personalRoom}`)
-
-            client.emit('connected', {
-                success: true,
-                message: 'Connected to real-time server (no auth required)',
-                socketId: client.id,
-                userId: client.userUuid,
-                userName: client.userName,
-                personalRoom: personalRoom
-            })
-        } catch (error) {
-            this.logger.error(`❌ [CONNECTION] Connection setup failed`)
-            this.logger.error(`   ├─ Socket ID: ${client.id}`)
-            this.logger.error(`   ├─ Error: ${error.message}`)
-            this.logger.error(`   └─ Stack: ${error.stack}`)
-
-            client.emit('connectionError', {
-                success: false,
-                message: 'Connection setup failed',
-                error: error.message
-            })
-
-            // Dont disconnect - let the client retry
-        }
+        client.emit('connected', {
+            success: true,
+            message: 'Connected to real-time server (no auth required)',
+            socketId: client.id
+        })
     }
 
     async handleDisconnect(client: AuthenticatedSocket) {
