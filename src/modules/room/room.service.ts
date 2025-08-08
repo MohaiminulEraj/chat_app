@@ -1081,8 +1081,9 @@ export class RoomService {
         const recommendedRooms = []
 
         for (const room of rooms) {
-            // Get room details in the same format as getRoomByGroupId
-            const roomDetails = await this.getRoomByGroupId(room.groupId)
+            // Format room details directly instead of calling getRoomByGroupId
+            // to avoid duplicates when multiple rooms have the same groupId
+            const roomDetails = await this.formatRoomDetails(room)
 
             // Add roomAvatarUrl to the response
             if (roomDetails) {
