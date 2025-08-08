@@ -456,97 +456,138 @@ export class RoomGateway
                 throw new Error('Room ID is required')
             }
 
-            // Check if room exists and user has access
-            const roomDetails = await this.roomService.getRoomDetails(
-                data.roomId
-            )
-            if (!roomDetails) {
-                throw new Error('Room not found')
-            }
-
-            // Check if room requires password
-            if (
-                roomDetails.password &&
-                roomDetails.password !== data.password
-            ) {
-                throw new Error('Incorrect room password')
-            }
-
-            // Check if user is already in room
-            const existingParticipant =
-                await this.roomService.getRoomParticipants(data.roomId)
-            const isAlreadyParticipant = existingParticipant.some(
-                (p) => p.userId === userId
-            )
-
-            if (isAlreadyParticipant) {
-                this.logger.log(
-                    `👤 User ${userName} (${userId}) already in room ${data.roomId}`
-                )
-            }
-
             // Update tracking - user joins as observer initially
             if (userInfo) {
                 userInfo.rooms.add(data.roomId)
             }
 
-            // Join socket room for real-time updates
+            // Join socket room for real-time updates immediately
             client.join(`room:${data.roomId}`)
 
-            // Get current room state
-            await this.updateRoomSeatsState(data.roomId)
-            const currentSeats = this.roomSeats.get(data.roomId) || []
-            const roomUserCount = this.roomUserCounts.get(data.roomId) || 0
+            // Send immediate response to client - they've joined as observer
+            const immediateResponse = {
+                status: 'success',
+                action: 'joined_as_observer',
+                roomId: data.roomId,
+                userId: userId,
+                userName: userName,
+                userRole: 'observer',
+                message: 'Successfully joined room as observer',
+                timestamp: new Date().toISOString()
+            }
 
-            // Get all participants (seated users) with proper format
-            const participants = await this.roomService.getRoomParticipants(
-                data.roomId
-            )
-            const formattedParticipants = participants.map((participant) => ({
-                userId: participant.userId,
-                name:
-                    participant.user?.name ||
-                    participant.user?.email ||
-                    'Unknown User',
-                avatar: participant.user?.avatarUrl || null,
-                seatIndex: participant.seatNumber - 1, // Convert to 0-based
-                isSpeaking: participant.isSpeaking || false,
-                micOn: !participant.isMuted, // micOn is inverse of isMuted
-                role: 'participant' // All seated users are participants
-            }))
-
-            // Get waiting list info
-            const waitingList = await this.roomService.getRoomWaitingList(
-                data.roomId
-            )
-            const userInWaitingList = waitingList.find(
-                (w) => w.userId === userId
-            )
-
-            // Check if current user is already a participant (seated)
-            const currentUserParticipant = formattedParticipants.find(
-                (p) => p.userId === userId
-            )
-
-            // Return participants in the requested format
-            const response = formattedParticipants
-
-            // Emit to all room participants
-            this.server
-                .to(`room:${data.roomId}`)
-                .emit('roomJoinUpdate', formattedParticipants)
-
-            // Emit response directly to the joining client
-            client.emit('joinRoomResponse', formattedParticipants)
+            // Emit immediate response to the joining client
+            client.emit('joinRoomResponse', immediateResponse)
 
             this.logger.log(
-                `✅ JOIN_ROOM success: User ${userName} (${userId}) joined room ${data.roomId} as observer`
+                `✅ JOIN_ROOM immediate: User ${userName} (${userId}) joined room ${data.roomId} as observer`
             )
 
-            // Track user activity
-            this.trackUserActivity(userId, 'joinRoom')
+            // Now do the heavy database operations asynchronously
+            setImmediate(async () => {
+                try {
+                    // Check if room exists and user has access
+                    const roomDetails = await this.roomService.getRoomDetails(
+                        data.roomId
+                    )
+                    if (!roomDetails) {
+                        client.emit('roomError', {
+                            error: 'Room not found',
+                            roomId: data.roomId
+                        })
+                        return
+                    }
 
-            return response
+                    // Check if room requires password
+                    if (
+                        roomDetails.password &&
+                        roomDetails.password !== data.password
+                    ) {
+                        client.emit('roomError', {
+                            error: 'Incorrect room password',
+                            roomId: data.roomId
+                        })
+                        client.leave(`room:${data.roomId}`)
+                        return
+                    }
+
+                    // Get current room state
+                    await this.updateRoomSeatsState(data.roomId)
+                    const currentSeats = this.roomSeats.get(data.roomId) || []
+                    const roomUserCount =
+                        this.roomUserCounts.get(data.roomId) || 0
+
+                    // Get all participants (seated users) with proper format
+                    const participants =
+                        await this.roomService.getRoomParticipants(data.roomId)
+                    const formattedParticipants = participants.map(
+                        (participant) => ({
+                            userId: participant.userId,
+                            name:
+                                participant.user?.name ||
+                                participant.user?.email ||
+                                'Unknown User',
+                            avatar: participant.user?.avatarUrl || null,
+                            seatIndex: participant.seatNumber - 1, // Convert to 0-based
+                            isSpeaking: participant.isSpeaking || false,
+                            micOn: !participant.isMuted, // micOn is inverse of isMuted
+                            role: 'participant' // All seated users are participants
+                        })
+                    )
+
+                    // Get waiting list info
+                    const waitingList =
+                        await this.roomService.getRoomWaitingList(data.roomId)
+                    const userInWaitingList = waitingList.find(
+                        (w) => w.userId === userId
+                    )
+
+                    // Check if current user is already a participant (seated)
+                    const currentUserParticipant = formattedParticipants.find(
+                        (p) => p.userId === userId
+                    )
+
+                    // Send detailed room data update
+                    const roomDataUpdate = {
+                        action: 'room_data_loaded',
+                        roomId: data.roomId,
+                        participants: formattedParticipants,
+                        seats: currentSeats,
+                        roomUserCount: roomUserCount,
+                        waitingListPosition:
+                            userInWaitingList?.position || null,
+                        isParticipant: !!currentUserParticipant,
+                        timestamp: new Date().toISOString()
+                    }
+
+                    // Emit room data to the client
+                    client.emit('roomDataUpdate', roomDataUpdate)
+
+                    // Emit to all room participants about new observer
+                    this.server
+                        .to(`room:${data.roomId}`)
+                        .emit('roomJoinUpdate', formattedParticipants)
+
+                    this.logger.log(
+                        `📊 JOIN_ROOM data loaded: User ${userName} (${userId}) received room data for ${data.roomId}`
+                    )
+
+                    // Track user activity
+                    this.trackUserActivity(userId, 'joinRoom')
+                } catch (asyncError) {
+                    this.logger.error(
+                        `❌ JOIN_ROOM async data loading failed: ${asyncError.message}`,
+                        asyncError.stack
+                    )
+
+                    client.emit('roomError', {
+                        error: asyncError.message,
+                        roomId: data.roomId
+                    })
+                }
+            })
+
+            return immediateResponse
         } catch (error) {
             this.logger.error(
                 `❌ JOIN_ROOM failed: User ${userName} (${userId}) failed to join room ${data.roomId} | ` +
@@ -2480,7 +2521,7 @@ export class RoomGateway
                             seatIndex: availableSeat.index,
                             participant,
                             seats: updatedSeats,
-                            message: `User promoted from waiting list to seat ${availableSeat.seatIndex}`,
+                            message: `User promoted from waiting list to seat ${availableSeat.index}`,
                             timestamp: new Date().toISOString()
                         })
 
