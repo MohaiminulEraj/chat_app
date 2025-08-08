@@ -588,11 +588,21 @@ export class RoomGateway
                 throw new Error('Room ID and seat index are required')
             }
 
-            // Check if user is in the room (as observer)
+            // Check if user is in the room (as observer) - if not, join them
             const roomName = `room:${data.roomId}`
             const isInSocketRoom = client.rooms.has(roomName)
             if (!isInSocketRoom) {
-                throw new Error('You must join the room first before sitting')
+                // Automatically join the socket room if user is not already in it
+                client.join(roomName)
+
+                // Update tracking
+                if (userInfo) {
+                    userInfo.rooms.add(data.roomId)
+                }
+
+                this.logger.log(
+                    `🔄 Auto-joined socket room: User ${userName} (${userId}) automatically joined room ${data.roomId} for sitting`
+                )
             }
 
             // Get current room seats
