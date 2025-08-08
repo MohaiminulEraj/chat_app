@@ -761,8 +761,8 @@ export class RoomService {
                 }
             })
 
-        // Build seats array with lock information
-        const seats = await this.getRoomSeats(room.uuid)
+        // Build seats array with lock information - exclude host from seat occupancy
+        const seats = await this.getRoomSeats(room.uuid, hostUserId)
 
         // Format response to match the new structure
         return {
@@ -1405,7 +1405,7 @@ export class RoomService {
     /**
      * Get current seat state for a room
      */
-    async getRoomSeats(roomId: string): Promise<any[]> {
+    async getRoomSeats(roomId: string, hostUserId?: string): Promise<any[]> {
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId },
             relations: ['participants', 'participants.user']
@@ -1424,8 +1424,17 @@ export class RoomService {
         for (let i = 0; i < room.maxSeats; i++) {
             const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
             // Find participant whose stored seatNumber matches this index (1-based in DB)
-            const participant =
+            let participant =
                 room.participants.find((p) => p.seatNumber === i + 1) || null
+
+            // If hostUserId is provided and this participant is the host, don't show them as occupying the seat
+            if (
+                participant &&
+                hostUserId &&
+                participant.userId === hostUserId
+            ) {
+                participant = null
+            }
 
             seats.push({
                 index: i,
