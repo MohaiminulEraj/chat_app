@@ -958,6 +958,13 @@ export class RoomGateway
                 return null
             }
 
+            // Check if user is the host - hosts should never receive joinRoomResponse
+            const isHost = roomDetails.hostId === userId
+
+            this.logger.debug(
+                `🔍 JOIN_ROOM: User ${userId} host status: ${isHost ? 'HOST' : 'REGULAR_USER'}`
+            )
+
             // Get current participant data for this user
             const participants =
                 await this.roomService.getRoomParticipants(roomId)
@@ -973,30 +980,38 @@ export class RoomGateway
                 `🔍 JOIN_ROOM: User ${userId} participant status: ${currentUserParticipant ? 'SEATED' : 'OBSERVER'}`
             )
 
-            // Format participant data if user is seated
-            const participantData = currentUserParticipant
-                ? {
-                      userId: currentUserParticipant.userId,
-                      name:
-                          currentUserParticipant.user?.name ||
-                          currentUserParticipant.user?.email,
-                      avatar: currentUserParticipant.user?.avatarUrl || null,
-                      seatIndex: currentUserParticipant.seatNumber - 1, // Convert to 0-based
-                      isSpeaking: currentUserParticipant.isSpeaking || false,
-                      micOn: !currentUserParticipant.isMuted, // micOn is inverse of isMuted
-                      role: 'participant' // All seated users are participants
-                  }
-                : null // User is observer
+            // Format participant data if user is seated AND not the host
+            const participantData =
+                currentUserParticipant && !isHost
+                    ? {
+                          userId: currentUserParticipant.userId, // Ensure this matches the requesting user
+                          name:
+                              currentUserParticipant.user?.name ||
+                              currentUserParticipant.user?.email ||
+                              userName,
+                          avatar:
+                              currentUserParticipant.user?.avatarUrl || null,
+                          seatIndex: currentUserParticipant.seatNumber - 1, // Convert to 0-based
+                          isSpeaking:
+                              currentUserParticipant.isSpeaking || false,
+                          micOn: !currentUserParticipant.isMuted, // micOn is inverse of isMuted
+                          role: 'participant' // All seated users are participants
+                      }
+                    : null // User is observer or host
 
-            // Only emit joinRoomResponse when user is actually seated (has participant data)
-            if (participantData) {
+            // Only emit joinRoomResponse when user is actually seated AND not the host
+            if (participantData && !isHost) {
                 this.logger.log(
-                    `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData.name}`
+                    `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData.name} (${participantData.userId})`
                 )
                 this.logger.debug(
                     `📤 JOIN_ROOM: Response data: ${JSON.stringify(participantData)}`
                 )
                 client.emit('joinRoomResponse', participantData)
+            } else if (isHost) {
+                this.logger.log(
+                    `👑 JOIN_ROOM: User ${userName} (${userId}) is host - no joinRoomResponse emitted`
+                )
             } else {
                 this.logger.log(
                     `ℹ️ JOIN_ROOM: User ${userName} (${userId}) joined as observer - no joinRoomResponse emitted`
@@ -1004,7 +1019,7 @@ export class RoomGateway
             }
 
             this.logger.log(
-                `✅ JOIN_ROOM complete: User ${userName} (${userId}) joined room ${roomId} as ${participantData ? 'participant' : 'observer'}`
+                `✅ JOIN_ROOM complete: User ${userName} (${userId}) joined room ${roomId} as ${isHost ? 'host' : participantData ? 'participant' : 'observer'}`
             )
 
             // Now do the additional room data operations asynchronously
