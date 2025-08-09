@@ -3522,10 +3522,11 @@ export class RoomGateway
     @SubscribeMessage('requestSeat')
     async handleRequestSeat(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { roomId: string; seatIndex?: number }
+        @MessageBody()
+        data: { userId: string; roomId: string; seatIndex?: number }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        const userId = data?.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
