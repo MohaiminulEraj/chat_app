@@ -1427,6 +1427,337 @@ export class RoomGateway
         }
     }
 
+    @SubscribeMessage('acceptParticipant')
+    async handleAcceptParticipant(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId?: string
+            participantId: string
+            seatIndex?: number
+        }
+    ) {
+        // Support both roomId and roomID for client compatibility
+        const roomId = data.roomId
+
+        if (!roomId || !data.participantId) {
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: 'Room ID and participant ID are required'
+            }
+            client.emit('acceptParticipantResponse', errorResponse)
+            return errorResponse
+        }
+
+        // Get host information
+        const hostInfo = await this.getUserInfo(client)
+        if (!hostInfo) {
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: 'Host information not available'
+            }
+            client.emit('acceptParticipantResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId: hostId, userName: hostName } = hostInfo
+
+        this.logger.log(
+            `✅ ACCEPT_PARTICIPANT request: Host ${hostName} (${hostId}) accepting participant ${data.participantId} in room ${roomId}`
+        )
+
+        try {
+            // Verify host permissions
+            const roomDetails = await this.roomService.getRoomDetails(roomId)
+            const hostRoles = await this.roomService.getUserRolesInRoom(
+                roomId,
+                hostId
+            )
+            const isHost =
+                roomDetails?.hostId === hostId ||
+                hostRoles.includes(RoomRole.OWNER)
+
+            if (!isHost) {
+                throw new Error('Only room host can accept participants')
+            }
+
+            // Get participant information
+            const participantInfo = await this.roomService.findUserById(
+                data.participantId
+            )
+            if (!participantInfo) {
+                throw new Error('Participant not found')
+            }
+
+            // Remove from waiting list
+            await this.removeUserFromWaitingList(roomId, data.participantId)
+
+            // If seat index provided, try to seat the participant
+            let seatIndex = data.seatIndex
+            if (seatIndex !== undefined) {
+                // Check if seat is available
+                const currentSeats = await this.roomService.getRoomSeats(roomId)
+                const targetSeat = currentSeats.find(
+                    (seat) => seat.index === seatIndex
+                )
+
+                if (!targetSeat) {
+                    throw new Error('Invalid seat index')
+                }
+
+                if (targetSeat.occupied) {
+                    throw new Error('Seat is already occupied')
+                }
+
+                // Seat the participant
+                const participant = await this.roomService.joinRoomWithSeat(
+                    roomId,
+                    data.participantId,
+                    seatIndex
+                )
+
+                // Update seat state in memory
+                await this.updateRoomSeatsState(roomId)
+            } else {
+                // Just add to room without specific seat
+                await this.roomService.joinRoom(roomId, data.participantId)
+            }
+
+            // Create response
+            const acceptResponse = {
+                status: 'accepted',
+                user: {
+                    id: data.participantId,
+                    name: participantInfo.name || 'Unknown',
+                    email: participantInfo.email || '',
+                    sitIndex: seatIndex?.toString() || '',
+                    image: participantInfo.avatarUrl || ''
+                }
+            }
+
+            // Emit to host
+            client.emit('acceptParticipantResponse', acceptResponse)
+
+            // Notify the accepted participant
+            const participantSockets = Array.from(this.connectedUsers.entries())
+                .filter(
+                    ([_, userInfo]) => userInfo.userId === data.participantId
+                )
+                .map(([socketId]) => socketId)
+
+            participantSockets.forEach((socketId) => {
+                const participantSocket =
+                    this.server.sockets.sockets.get(socketId)
+                if (participantSocket) {
+                    participantSocket.emit('sitInSeatResponse', acceptResponse)
+
+                    // Auto-join the socket room
+                    participantSocket.join(`room:${roomId}`)
+                }
+            })
+
+            // Broadcast to room
+            this.server.to(`room:${roomId}`).emit('participantAccepted', {
+                roomId,
+                participantId: data.participantId,
+                participantName: participantInfo.name,
+                seatIndex,
+                acceptedBy: hostId,
+                acceptedByName: hostName,
+                timestamp: new Date().toISOString()
+            })
+
+            this.logger.log(
+                `✅ ACCEPT_PARTICIPANT success: Participant ${participantInfo.name} (${data.participantId}) accepted by host ${hostName} (${hostId}) in room ${roomId}`
+            )
+
+            return acceptResponse
+        } catch (error) {
+            this.logger.error(
+                `❌ ACCEPT_PARTICIPANT failed: Host ${hostName} (${hostId}) failed to accept participant ${data.participantId} in room ${roomId} | Error: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: data.participantId || '',
+                    name: '',
+                    email: '',
+                    sitIndex: data.seatIndex?.toString() || '',
+                    image: ''
+                },
+                message: error.message
+            }
+
+            client.emit('acceptParticipantResponse', errorResponse)
+            return errorResponse
+        }
+    }
+
+    @SubscribeMessage('rejectParticipant')
+    async handleRejectParticipant(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId?: string
+            participantId: string
+            reason?: string
+        }
+    ) {
+        // Support both roomId and roomID for client compatibility
+        const roomId = data.roomId
+
+        if (!roomId || !data.participantId) {
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: 'Room ID and participant ID are required'
+            }
+            client.emit('rejectParticipantResponse', errorResponse)
+            return errorResponse
+        }
+
+        // Get host information
+        const hostInfo = await this.getUserInfo(client)
+        if (!hostInfo) {
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: 'Host information not available'
+            }
+            client.emit('rejectParticipantResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId: hostId, userName: hostName } = hostInfo
+
+        this.logger.log(
+            `❌ REJECT_PARTICIPANT request: Host ${hostName} (${hostId}) rejecting participant ${data.participantId} in room ${roomId}`
+        )
+
+        try {
+            // Verify host permissions
+            const roomDetails = await this.roomService.getRoomDetails(roomId)
+            const hostRoles = await this.roomService.getUserRolesInRoom(
+                roomId,
+                hostId
+            )
+            const isHost =
+                roomDetails?.hostId === hostId ||
+                hostRoles.includes(RoomRole.OWNER)
+
+            if (!isHost) {
+                throw new Error('Only room host can reject participants')
+            }
+
+            // Get participant information
+            const participantInfo = await this.roomService.findUserById(
+                data.participantId
+            )
+            if (!participantInfo) {
+                throw new Error('Participant not found')
+            }
+
+            // Remove from waiting list
+            await this.removeUserFromWaitingList(roomId, data.participantId)
+
+            // Create response
+            const rejectResponse = {
+                status: 'rejected',
+                user: {
+                    id: data.participantId,
+                    name: participantInfo.name || 'Unknown',
+                    email: participantInfo.email || '',
+                    sitIndex: '',
+                    image: participantInfo.avatarUrl || ''
+                },
+                reason: data.reason || 'Rejected by host'
+            }
+
+            // Emit to host
+            client.emit('rejectParticipantResponse', rejectResponse)
+
+            // Notify the rejected participant
+            const participantSockets = Array.from(this.connectedUsers.entries())
+                .filter(
+                    ([_, userInfo]) => userInfo.userId === data.participantId
+                )
+                .map(([socketId]) => socketId)
+
+            participantSockets.forEach((socketId) => {
+                const participantSocket =
+                    this.server.sockets.sockets.get(socketId)
+                if (participantSocket) {
+                    participantSocket.emit('sitInSeatResponse', rejectResponse)
+                }
+            })
+
+            // Broadcast to room
+            this.server.to(`room:${roomId}`).emit('participantRejected', {
+                roomId,
+                participantId: data.participantId,
+                participantName: participantInfo.name,
+                rejectedBy: hostId,
+                rejectedByName: hostName,
+                reason: data.reason || 'Rejected by host',
+                timestamp: new Date().toISOString()
+            })
+
+            this.logger.log(
+                `❌ REJECT_PARTICIPANT success: Participant ${participantInfo.name} (${data.participantId}) rejected by host ${hostName} (${hostId}) in room ${roomId}`
+            )
+
+            return rejectResponse
+        } catch (error) {
+            this.logger.error(
+                `❌ REJECT_PARTICIPANT failed: Host ${hostName} (${hostId}) failed to reject participant ${data.participantId} in room ${roomId} | Error: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'rejected',
+                user: {
+                    id: data.participantId || '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: error.message
+            }
+
+            client.emit('rejectParticipantResponse', errorResponse)
+            return errorResponse
+        }
+    }
+
     @SubscribeMessage('leaveRoom')
     async handleLeaveRoom(
         @ConnectedSocket() client: Socket,
@@ -3368,6 +3699,47 @@ export class RoomGateway
             this.logger.error(
                 `❌ Failed to check waiting list for room ${roomId}: ${error.message}`
             )
+        }
+    }
+
+    /**
+     * Remove a specific user from the waiting list
+     */
+    private async removeUserFromWaitingList(
+        roomId: string,
+        userId: string
+    ): Promise<void> {
+        try {
+            // Use the waiting list repository directly since there's no service method
+            const waitingListRepository =
+                this.roomService['waitingListRepository']
+
+            // Find and remove the waiting list entry
+            const waitingEntry = await waitingListRepository
+                .createQueryBuilder('waitingList')
+                .where('waitingList.roomId = :roomId', {
+                    roomId: String(roomId)
+                })
+                .andWhere('waitingList.userId = :userId', {
+                    userId: String(userId)
+                })
+                .getOne()
+
+            if (waitingEntry) {
+                await waitingListRepository.remove(waitingEntry)
+                this.logger.log(
+                    `✅ Removed user ${userId} from waiting list in room ${roomId}`
+                )
+            } else {
+                this.logger.log(
+                    `⚠️ User ${userId} not found in waiting list for room ${roomId}`
+                )
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ Failed to remove user ${userId} from waiting list in room ${roomId}: ${error.message}`
+            )
+            throw error
         }
     }
 
