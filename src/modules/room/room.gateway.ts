@@ -962,8 +962,16 @@ export class RoomGateway
             // Get current participant data for this user
             const participants =
                 await this.roomService.getRoomParticipants(roomId)
+            this.logger.debug(
+                `🔍 JOIN_ROOM: Found ${participants.length} participants in room ${roomId}`
+            )
+
             const currentUserParticipant = participants.find(
                 (participant) => participant.userId === userId
+            )
+
+            this.logger.debug(
+                `🔍 JOIN_ROOM: User ${userId} participant status: ${currentUserParticipant ? 'SEATED' : 'OBSERVER'}`
             )
 
             // Format participant data if user is seated
@@ -984,6 +992,9 @@ export class RoomGateway
             // Send immediate response with participant data (or null if observer)
             this.logger.log(
                 `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData ? participantData.name : 'none (observer)'}`
+            )
+            this.logger.debug(
+                `📤 JOIN_ROOM: Response data: ${JSON.stringify(participantData)}`
             )
             client.emit('joinRoomResponse', participantData)
 
@@ -1302,6 +1313,14 @@ export class RoomGateway
 
             // Emit to the user who sat
             client.emit('sitInSeatResponse', formattedParticipant)
+
+            // ALSO emit joinRoomResponse for Flutter compatibility
+            // This ensures Flutter gets participant data when user sits in seat
+            client.emit('joinRoomResponse', formattedParticipant)
+
+            this.logger.log(
+                `📤 SIT_IN_SEAT: Emitted both sitInSeatResponse and joinRoomResponse for participant: ${formattedParticipant.name}`
+            )
 
             // Notify all room participants about user sitting
             this.server.to(roomName).emit('userSeated', {
