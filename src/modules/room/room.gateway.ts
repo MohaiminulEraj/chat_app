@@ -1525,6 +1525,28 @@ export class RoomGateway
                     throw new Error('Seat is already occupied')
                 }
 
+                // Unlock the seat before seating the participant
+                if (targetSeat.locked) {
+                    this.logger.log(
+                        `🔓 ACCEPT_PARTICIPANT: Unlocking seat ${seatIndex} for accepted participant ${data.participantId} in room ${roomId}`
+                    )
+
+                    const unlockResult = await this.roomService.toggleSeatLock(
+                        roomId,
+                        seatIndex,
+                        false, // isLocked = false (unlock)
+                        hostId
+                    )
+
+                    if (!unlockResult.success) {
+                        throw new Error('Failed to unlock seat for participant')
+                    }
+
+                    this.logger.log(
+                        `✅ ACCEPT_PARTICIPANT: Successfully unlocked seat ${seatIndex} for participant ${data.participantId}`
+                    )
+                }
+
                 // Seat the participant
                 const participant = await this.roomService.joinRoomWithSeat(
                     roomId,
@@ -1583,8 +1605,25 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             })
 
+            // Broadcast updated seat state to all participants
+            if (seatIndex !== undefined) {
+                const updatedSeats = this.roomSeats.get(roomId) || []
+                this.server.to(`room:${roomId}`).emit('seatUpdated', {
+                    roomId,
+                    seats: updatedSeats,
+                    action: 'participant_accepted_and_seated',
+                    seatIndex,
+                    participantId: data.participantId,
+                    participantName: participantInfo.name
+                })
+
+                this.logger.log(
+                    `📤 ACCEPT_PARTICIPANT: Broadcasted seat update for seat ${seatIndex} in room ${roomId}`
+                )
+            }
+
             this.logger.log(
-                `✅ ACCEPT_PARTICIPANT success: Participant ${participantInfo.name} (${data.participantId}) accepted by host ${hostName} (${hostId}) in room ${roomId}`
+                `✅ ACCEPT_PARTICIPANT success: Participant ${participantInfo.name} (${data.participantId}) accepted by host ${hostName} (${hostId}) in room ${roomId}${seatIndex !== undefined ? ` and seated in seat ${seatIndex}` : ''}`
             )
 
             return acceptResponse
