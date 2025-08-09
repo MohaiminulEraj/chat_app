@@ -1523,8 +1523,18 @@ export class RoomGateway
             )
             const isParticipant = participants.some((p) => p.userId === userId)
 
+            this.logger.log(
+                `🔍 SEND_COMMENT: Participant check - User ${userId} | IsParticipant: ${isParticipant} | Total participants: ${participants.length}`
+            )
+
+            // Allow both participants and observers to send comments
+            // Only require being in the socket room
             if (!isParticipant) {
-                throw new Error('You are not a participant in this room')
+                this.logger.warn(
+                    `⚠️ SEND_COMMENT: User ${userName} (${userId}) is not a participant but allowing as observer in room ${data.room}`
+                )
+                // Don't throw error - allow observers to comment
+                // throw new Error('You are not a participant in this room')
             }
 
             // Add the comment via service
@@ -1536,6 +1546,14 @@ export class RoomGateway
                 data.replyToId,
                 data.metadata
             )
+
+            // Emit direct response to the sender first
+            client.emit('sendCommentResponse', {
+                status: 'success',
+                comment,
+                roomId: data.room,
+                timestamp: new Date().toISOString()
+            })
 
             // Emit to all room participants
             this.server.to(roomName).emit('commentAdded', {
@@ -1559,6 +1577,10 @@ export class RoomGateway
             // Track user activity
             this.trackUserActivity(userId, 'sendComment')
 
+            this.logger.log(
+                `✅ SEND_COMMENT success: User ${userName} (${userId}) sent comment to room ${data.room} | Response emitted`
+            )
+
             return {
                 status: 'success',
                 comment
@@ -1569,6 +1591,15 @@ export class RoomGateway
                     `Error: ${error.message}`,
                 error.stack
             )
+
+            // Emit direct error response to the sender
+            client.emit('sendCommentResponse', {
+                status: 'error',
+                message: error.message,
+                roomId: data.room,
+                timestamp: new Date().toISOString()
+            })
+
             return {
                 status: 'error',
                 message: error.message,

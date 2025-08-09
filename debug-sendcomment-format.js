@@ -62,6 +62,12 @@ socket.on('connect', () => {
 })
 
 // Listen for comment responses
+socket.on('sendCommentResponse', (data) => {
+    console.log('\n📥 SEND COMMENT RESPONSE:')
+    console.log('   Status:', data.status)
+    console.log('   Data:', JSON.stringify(data, null, 2))
+})
+
 socket.on('commentAdded', (data) => {
     console.log('\n📥 COMMENT ADDED:')
     console.log('   Data:', JSON.stringify(data, null, 2))
