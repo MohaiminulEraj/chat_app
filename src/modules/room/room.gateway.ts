@@ -1434,9 +1434,9 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            roomId?: string
+            roomId: string
             participantId: string
-            seatIndex?: number
+            seatIndex: number
         }
     ) {
         // Support both roomId and roomID for client compatibility
@@ -1593,7 +1593,7 @@ export class RoomGateway
                 await this.roomService.joinRoom(roomId, data.participantId)
             }
 
-            // Create response
+            // Create response in standard format
             const acceptResponse = {
                 status: 'accepted',
                 user: {
@@ -1609,6 +1609,20 @@ export class RoomGateway
                         ? `Accepted and seated in seat ${seatIndex}`
                         : 'Accepted as observer'
             }
+
+            // Create joinRoomResponse compatible format
+            const joinRoomResponseFormat =
+                seatIndex !== undefined
+                    ? {
+                          userId: data.participantId,
+                          name: participantInfo.name || 'Unknown',
+                          avatar: participantInfo.avatarUrl || null,
+                          seatIndex: seatIndex,
+                          isSpeaking: false,
+                          micOn: true, // Default to unmuted for newly accepted participants
+                          role: 'participant'
+                      }
+                    : null
 
             // Emit to host
             client.emit('acceptParticipantResponse', acceptResponse)
@@ -1648,6 +1662,18 @@ export class RoomGateway
                         participantSocket.emit(
                             'sitInSeatResponse',
                             acceptResponse
+                        )
+
+                        // ALSO emit joinRoomResponse for Flutter compatibility with consistent format
+                        if (joinRoomResponseFormat) {
+                            participantSocket.emit(
+                                'joinRoomResponse',
+                                joinRoomResponseFormat
+                            )
+                        }
+
+                        this.logger.log(
+                            `📤 ACCEPT_PARTICIPANT: Emitted both sitInSeatResponse and joinRoomResponse for participant: ${participantInfo.name}`
                         )
                     }
 

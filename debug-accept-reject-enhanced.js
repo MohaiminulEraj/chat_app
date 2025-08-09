@@ -112,10 +112,15 @@ hostSocket.on('setupComplete', (data) => {
 })
 
 hostSocket.on('acceptParticipantResponse', (data) => {
-    console.log(
-        '📤 Host received acceptParticipantResponse:',
-        JSON.stringify(data, null, 2)
-    )
+    console.log('📤 Host received acceptParticipantResponse:')
+    console.log('   Format: Standard accept/reject format')
+    console.log('   Status:', data.status)
+    console.log('   User ID:', data.user?.id)
+    console.log('   User Name:', data.user?.name)
+    console.log('   Seat Index:', data.user?.sitIndex)
+    console.log('   Seated:', data.seated)
+    console.log('   Message:', data.message)
+    console.log('   Full Response:', JSON.stringify(data, null, 2))
 })
 
 hostSocket.on('participantAccepted', (data) => {
@@ -153,10 +158,16 @@ participantSocket.on('participantAcceptanceNotification', (data) => {
 })
 
 participantSocket.on('joinRoomResponse', (data) => {
-    console.log(
-        '🏠 Participant received joinRoomResponse:',
-        JSON.stringify(data, null, 2)
-    )
+    console.log('🏠 Participant received joinRoomResponse:')
+    console.log('   Format: Flutter-compatible participant format')
+    console.log('   User ID:', data.userId)
+    console.log('   Name:', data.name)
+    console.log('   Avatar:', data.avatar)
+    console.log('   Seat Index:', data.seatIndex)
+    console.log('   Is Speaking:', data.isSpeaking)
+    console.log('   Mic On:', data.micOn)
+    console.log('   Role:', data.role)
+    console.log('   Full Response:', JSON.stringify(data, null, 2))
 })
 
 participantSocket.on('participantAccepted', (data) => {
