@@ -1475,21 +1475,40 @@ export class RoomGateway
     @SubscribeMessage('sendComment')
     async handleSendComment(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: CreateRoomCommentDto & { roomId: string }
+        @MessageBody()
+        data: {
+            room: string // Room ID
+            content: string // Message content
+            sender: string // User ID of sender
+            messageType?: string // Optional message type (default: 'text')
+            replyToId?: string // Optional reply to comment ID
+            metadata?: any // Optional metadata
+        }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        const userId = data.sender || userInfo?.userId // Use sender from data as fallback
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `💬 SEND_COMMENT request: User ${userName} (${userId}) sending comment to room ${data.roomId} | ` +
-                `Type: ${data.messageType || 'text'} | Length: ${data.message?.length || 0} chars` +
+            `💬 SEND_COMMENT request: User ${userName} (${userId}) sending comment to room ${data.room} | ` +
+                `Type: ${data.messageType || 'text'} | Length: ${data.content?.length || 0} chars` +
                 (data.replyToId ? ` | Reply to: ${data.replyToId}` : '')
         )
 
         try {
+            // Validate new message format
+            if (!data.room) {
+                throw new Error('Room ID (room) is required')
+            }
+            if (!data.content) {
+                throw new Error('Content is required')
+            }
+            if (!data.sender) {
+                throw new Error('Sender ID is required')
+            }
+
             // Verify user is actually in the room (socket room membership)
-            const roomName = `room:${data.roomId}`
+            const roomName = `room:${data.room}`
             const isInSocketRoom = client.rooms.has(roomName)
 
             if (!isInSocketRoom) {
@@ -1500,7 +1519,7 @@ export class RoomGateway
 
             // Verify participant status in database
             const participants = await this.roomService.getRoomParticipants(
-                data.roomId
+                data.room
             )
             const isParticipant = participants.some((p) => p.userId === userId)
 
@@ -1510,9 +1529,9 @@ export class RoomGateway
 
             // Add the comment via service
             const comment = await this.roomService.addRoomComment(
-                data.roomId,
+                data.room,
                 userId,
-                data.message,
+                data.content,
                 (data.messageType as any) || 'text',
                 data.replyToId,
                 data.metadata
@@ -1520,7 +1539,7 @@ export class RoomGateway
 
             // Emit to all room participants
             this.server.to(roomName).emit('commentAdded', {
-                roomId: data.roomId,
+                roomId: data.room,
                 comment,
                 addedBy: userId,
                 addedByName: userName,
@@ -1530,7 +1549,7 @@ export class RoomGateway
             // Emit activity update
             this.server.to(roomName).emit('commentActivityUpdate', {
                 action: 'comment_added',
-                roomId: data.roomId,
+                roomId: data.room,
                 commentId: comment.uuid,
                 addedBy: userId,
                 addedByName: userName,
@@ -1546,14 +1565,14 @@ export class RoomGateway
             }
         } catch (error) {
             this.logger.error(
-                `❌ SEND_COMMENT failed: User ${userName} (${userId}) failed to send comment to room ${data.roomId} | ` +
+                `❌ SEND_COMMENT failed: User ${userName} (${userId}) failed to send comment to room ${data.room} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
             return {
                 status: 'error',
                 message: error.message,
-                roomId: data.roomId
+                roomId: data.room
             }
         }
     }
