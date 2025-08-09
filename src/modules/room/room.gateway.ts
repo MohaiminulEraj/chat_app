@@ -1141,7 +1141,14 @@ export class RoomGateway
 
         if (!roomId) {
             const errorResponse = {
-                status: 'error',
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
                 message: 'Room ID is required'
             }
             client.emit('sitInSeatResponse', errorResponse)
@@ -1153,9 +1160,15 @@ export class RoomGateway
 
         if (!validatedUser) {
             const errorResponse = {
-                status: 'error',
-                message: 'User information not available for seat operation',
-                roomId: roomId
+                status: 'rejected',
+                user: {
+                    id: '',
+                    name: '',
+                    email: '',
+                    sitIndex: '',
+                    image: ''
+                },
+                message: 'User information not available for seat operation'
             }
             client.emit('sitInSeatResponse', errorResponse)
             return errorResponse
@@ -1272,14 +1285,16 @@ export class RoomGateway
 
                 const waitingResponse = {
                     status: 'waiting',
+                    user: {
+                        id: userId,
+                        name: userName,
+                        email: '',
+                        sitIndex: data.seatIndex.toString(),
+                        image: userInfo?.avatarUrl || ''
+                    },
                     action: 'added_to_waiting_list',
-                    roomId: roomId,
-                    seatIndex: data.seatIndex,
-                    userId: userId,
-                    userName: userName,
                     position: userPosition,
-                    message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`,
-                    timestamp: new Date().toISOString()
+                    message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`
                 }
 
                 // Emit to the user
@@ -1316,8 +1331,21 @@ export class RoomGateway
             await this.updateRoomSeatsState(roomId)
             const updatedSeats = this.roomSeats.get(roomId) || []
 
-            // Format participant in the requested format (use participant data that already has user relation)
-            const formattedParticipant = {
+            // Format participant in the new requested format
+            const sitInSeatResponse = {
+                status: 'accepted',
+                user: {
+                    id: userId,
+                    name: participant.user?.name || userName,
+                    email: participant.user?.email || '',
+                    sitIndex: data.seatIndex.toString(),
+                    image:
+                        participant.user?.avatarUrl || userInfo?.avatarUrl || ''
+                }
+            }
+
+            // Keep the old format for joinRoomResponse compatibility
+            const joinRoomFormattedParticipant = {
                 userId: userId,
                 name: participant.user?.name || userName,
                 avatar:
@@ -1328,18 +1356,15 @@ export class RoomGateway
                 role: 'participant'
             }
 
-            // Return participant in the requested format (matching joinRoom response)
-            const response = formattedParticipant
+            // Emit to the user who sat with new format
+            client.emit('sitInSeatResponse', sitInSeatResponse)
 
-            // Emit to the user who sat
-            client.emit('sitInSeatResponse', formattedParticipant)
-
-            // ALSO emit joinRoomResponse for Flutter compatibility
+            // ALSO emit joinRoomResponse for Flutter compatibility with old format
             // This ensures Flutter gets participant data when user sits in seat
-            client.emit('joinRoomResponse', formattedParticipant)
+            client.emit('joinRoomResponse', joinRoomFormattedParticipant)
 
             this.logger.log(
-                `📤 SIT_IN_SEAT: Emitted both sitInSeatResponse and joinRoomResponse for participant: ${formattedParticipant.name}`
+                `📤 SIT_IN_SEAT: Emitted both sitInSeatResponse and joinRoomResponse for participant: ${sitInSeatResponse.user.name}`
             )
 
             // Notify all room participants about user sitting
@@ -1363,7 +1388,7 @@ export class RoomGateway
             // Emit comprehensive room update with formatted participant
             this.server
                 .to(roomName)
-                .emit('roomJoinUpdate', formattedParticipant)
+                .emit('roomJoinUpdate', joinRoomFormattedParticipant)
 
             // Check and promote from waiting list if needed
             await this.checkAndPromoteFromWaitingList(roomId)
@@ -1375,7 +1400,7 @@ export class RoomGateway
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
-            return response
+            return sitInSeatResponse
         } catch (error) {
             this.logger.error(
                 `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | ` +
@@ -1384,10 +1409,15 @@ export class RoomGateway
             )
 
             const errorResponse = {
-                status: 'error',
-                message: error.message,
-                roomId: roomId,
-                seatIndex: data.seatIndex
+                status: 'rejected',
+                user: {
+                    id: userId || '',
+                    name: userName || '',
+                    email: '',
+                    sitIndex: data.seatIndex?.toString() || '',
+                    image: ''
+                },
+                message: error.message
             }
 
             // Emit error response directly to the client
