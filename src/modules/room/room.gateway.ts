@@ -1505,23 +1505,52 @@ export class RoomGateway
                 throw new Error('Participant not found')
             }
 
+            // Get the seat index from waiting list if not provided in data
+            let seatIndex = data.seatIndex
+            if (seatIndex === undefined) {
+                // Get seat index from waiting list
+                const waitingList =
+                    await this.roomService.getRoomWaitingList(roomId)
+                const waitingParticipant = waitingList.find(
+                    (w) => w.id === data.participantId
+                )
+                if (waitingParticipant && waitingParticipant.sitIndex) {
+                    seatIndex = parseInt(waitingParticipant.sitIndex)
+                    this.logger.log(
+                        `🔍 ACCEPT_PARTICIPANT: Found participant ${data.participantId} waiting for seat ${seatIndex} in room ${roomId}`
+                    )
+                }
+            }
+
             // Remove from waiting list
             await this.removeUserFromWaitingList(roomId, data.participantId)
 
-            // If seat index provided, try to seat the participant
-            let seatIndex = data.seatIndex
+            // If seat index available, try to seat the participant
             if (seatIndex !== undefined) {
                 // Check if seat is available
                 const currentSeats = await this.roomService.getRoomSeats(roomId)
+
+                this.logger.log(
+                    `🔍 ACCEPT_PARTICIPANT: Looking for seat ${seatIndex} in room ${roomId}. Available seats: ${currentSeats.map((s) => s.index).join(', ')}`
+                )
+
                 const targetSeat = currentSeats.find(
                     (seat) => seat.index === seatIndex
                 )
 
                 if (!targetSeat) {
-                    throw new Error('Invalid seat index')
+                    this.logger.error(
+                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndex} not found in room ${roomId}. Available seats: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
+                    )
+                    throw new Error(
+                        `Invalid seat index: ${seatIndex}. Available seats: ${currentSeats.map((s) => s.index).join(', ')}`
+                    )
                 }
 
                 if (targetSeat.occupied) {
+                    this.logger.error(
+                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndex} is already occupied in room ${roomId}`
+                    )
                     throw new Error('Seat is already occupied')
                 }
 
@@ -1557,7 +1586,10 @@ export class RoomGateway
                 // Update seat state in memory
                 await this.updateRoomSeatsState(roomId)
             } else {
-                // Just add to room without specific seat
+                // No seat available - add to room as observer
+                this.logger.log(
+                    `👁️ ACCEPT_PARTICIPANT: No seat specified for participant ${data.participantId}, adding as observer to room ${roomId}`
+                )
                 await this.roomService.joinRoom(roomId, data.participantId)
             }
 
@@ -1570,7 +1602,12 @@ export class RoomGateway
                     email: participantInfo.email || '',
                     sitIndex: seatIndex?.toString() || '',
                     image: participantInfo.avatarUrl || ''
-                }
+                },
+                seated: seatIndex !== undefined,
+                message:
+                    seatIndex !== undefined
+                        ? `Accepted and seated in seat ${seatIndex}`
+                        : 'Accepted as observer'
             }
 
             // Emit to host
@@ -1587,10 +1624,39 @@ export class RoomGateway
                 const participantSocket =
                     this.server.sockets.sockets.get(socketId)
                 if (participantSocket) {
-                    participantSocket.emit('sitInSeatResponse', acceptResponse)
+                    // Send acceptance notification
+                    participantSocket.emit(
+                        'participantAcceptanceNotification',
+                        {
+                            status: 'accepted',
+                            roomId,
+                            seatIndex,
+                            seated: seatIndex !== undefined,
+                            message:
+                                seatIndex !== undefined
+                                    ? `You have been accepted and seated in seat ${seatIndex}. You can now join the room.`
+                                    : 'You have been accepted as an observer. You can now join the room.',
+                            canJoinRoom: true,
+                            canSitInSeat: seatIndex !== undefined,
+                            acceptedBy: hostName,
+                            timestamp: new Date().toISOString()
+                        }
+                    )
 
-                    // Auto-join the socket room
+                    // Also send sitInSeatResponse for compatibility
+                    if (seatIndex !== undefined) {
+                        participantSocket.emit(
+                            'sitInSeatResponse',
+                            acceptResponse
+                        )
+                    }
+
+                    // Auto-join the socket room so they can receive real-time updates
                     participantSocket.join(`room:${roomId}`)
+
+                    this.logger.log(
+                        `📤 ACCEPT_PARTICIPANT: Notified participant ${data.participantId} via socket ${socketId}`
+                    )
                 }
             })
 
