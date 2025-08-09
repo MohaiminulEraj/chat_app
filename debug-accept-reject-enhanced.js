@@ -60,10 +60,10 @@ async function runTest() {
         )
 
         // Participant tries to sit in seat (should be added to waiting list)
-        console.log('🪑 Participant attempting to sit in seat 0...')
+        console.log('🪑 Participant attempting to sit in seat 1...')
         participantSocket.emit('sitInSeat', {
             roomId: ROOM_ID,
-            seatIndex: 0,
+            seatIndex: 1,
             userId: PARTICIPANT_USER_ID
         })
         await wait(2000)
@@ -71,11 +71,11 @@ async function runTest() {
         console.log('\n📋 Test Phase 3: Host accepts participant...')
 
         // Host accepts participant (with seat index)
-        console.log('✅ Host accepting participant for seat 0...')
+        console.log('✅ Host accepting participant for seat 1...')
         hostSocket.emit('acceptParticipant', {
             roomId: ROOM_ID,
             participantId: PARTICIPANT_USER_ID,
-            seatIndex: 0
+            seatIndex: 1
         })
         await wait(2000)
 

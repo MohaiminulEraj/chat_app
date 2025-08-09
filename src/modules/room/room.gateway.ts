@@ -1527,29 +1527,35 @@ export class RoomGateway
 
             // If seat index available, try to seat the participant
             if (seatIndex !== undefined) {
+                // Ensure seatIndex is a number for comparison
+                const seatIndexNumber =
+                    typeof seatIndex === 'string'
+                        ? parseInt(seatIndex)
+                        : seatIndex
+
                 // Check if seat is available
                 const currentSeats = await this.roomService.getRoomSeats(roomId)
 
                 this.logger.log(
-                    `🔍 ACCEPT_PARTICIPANT: Looking for seat ${seatIndex} in room ${roomId}. Available seats: ${currentSeats.map((s) => s.index).join(', ')}`
+                    `🔍 ACCEPT_PARTICIPANT: Looking for seat ${seatIndexNumber} (type: ${typeof seatIndexNumber}) in room ${roomId}. Available seats: ${currentSeats.map((s) => `${s.index}(${typeof s.index})`).join(', ')}`
                 )
 
                 const targetSeat = currentSeats.find(
-                    (seat) => seat.index === seatIndex
+                    (seat) => seat.index === seatIndexNumber
                 )
 
                 if (!targetSeat) {
                     this.logger.error(
-                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndex} not found in room ${roomId}. Available seats: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
+                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndexNumber} not found in room ${roomId}. Available seats: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
                     )
                     throw new Error(
-                        `Invalid seat index: ${seatIndex}. Available seats: ${currentSeats.map((s) => s.index).join(', ')}`
+                        `Invalid seat index: ${seatIndexNumber}. Available seats: ${currentSeats.map((s) => s.index).join(', ')}`
                     )
                 }
 
                 if (targetSeat.occupied) {
                     this.logger.error(
-                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndex} is already occupied in room ${roomId}`
+                        `❌ ACCEPT_PARTICIPANT: Seat ${seatIndexNumber} is already occupied in room ${roomId}`
                     )
                     throw new Error('Seat is already occupied')
                 }
@@ -1557,12 +1563,12 @@ export class RoomGateway
                 // Unlock the seat before seating the participant
                 if (targetSeat.locked) {
                     this.logger.log(
-                        `🔓 ACCEPT_PARTICIPANT: Unlocking seat ${seatIndex} for accepted participant ${data.participantId} in room ${roomId}`
+                        `🔓 ACCEPT_PARTICIPANT: Unlocking seat ${seatIndexNumber} for accepted participant ${data.participantId} in room ${roomId}`
                     )
 
                     const unlockResult = await this.roomService.toggleSeatLock(
                         roomId,
-                        seatIndex,
+                        seatIndexNumber,
                         false, // isLocked = false (unlock)
                         hostId
                     )
@@ -1572,7 +1578,7 @@ export class RoomGateway
                     }
 
                     this.logger.log(
-                        `✅ ACCEPT_PARTICIPANT: Successfully unlocked seat ${seatIndex} for participant ${data.participantId}`
+                        `✅ ACCEPT_PARTICIPANT: Successfully unlocked seat ${seatIndexNumber} for participant ${data.participantId}`
                     )
                 }
 
@@ -1580,11 +1586,14 @@ export class RoomGateway
                 const participant = await this.roomService.joinRoomWithSeat(
                     roomId,
                     data.participantId,
-                    seatIndex
+                    seatIndexNumber
                 )
 
                 // Update seat state in memory
                 await this.updateRoomSeatsState(roomId)
+
+                // Update seatIndex to the normalized number for subsequent use
+                seatIndex = seatIndexNumber
             } else {
                 // No seat available - add to room as observer
                 this.logger.log(
