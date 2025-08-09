@@ -67,6 +67,9 @@ export class RoomGateway
     // Comment emission tracking to prevent duplicates
     private sentCommentResponses = new Map<string, Set<string>>() // commentId -> Set of clientIds
 
+    // SitInSeat response tracking to prevent duplicates
+    private sentSitInSeatResponses = new Map<string, Set<string>>() // requestKey -> Set of clientIds
+
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService,
@@ -1134,14 +1137,59 @@ export class RoomGateway
         @MessageBody()
         data: {
             roomId?: string
-            roomID?: string // Support both field names for client compatibility
             seatIndex: number
             userId?: string // Allow client to send userId for validation
             password?: string
         }
     ) {
+        const requestId = Math.random().toString(36).substr(2, 9) // Generate unique request ID
+
         // Support both roomId and roomID for client compatibility
-        const roomId = data.roomId || data.roomID
+        const roomId = data.roomId
+
+        this.logger.log(
+            `🪑 SIT_IN_SEAT request [${requestId}]: Client ${client.id} wants to sit in seat ${data.seatIndex} in room ${roomId}`
+        )
+
+        // Helper function to emit sitInSeatResponse with duplicate prevention
+        const emitSitInSeatResponse = (response: any, responseType: string) => {
+            const requestKey = `${requestId}-${client.id}-${data.seatIndex}-${roomId}`
+
+            // Check for duplicate emissions
+            if (!this.sentSitInSeatResponses.has(requestKey)) {
+                this.sentSitInSeatResponses.set(requestKey, new Set())
+            }
+
+            const clientsForRequest =
+                this.sentSitInSeatResponses.get(requestKey)
+            if (clientsForRequest.has(client.id)) {
+                this.logger.warn(
+                    `⚠️ SIT_IN_SEAT [${requestId}]: Duplicate emission prevented for ${responseType} to client ${client.id}`
+                )
+                return false
+            }
+
+            // Mark this client as having received this response
+            clientsForRequest.add(client.id)
+
+            this.logger.log(
+                `📤 SIT_IN_SEAT [${requestId}]: About to emit sitInSeatResponse (${responseType}) to client ${client.id} | Status: ${response.status}`
+            )
+
+            client.emit('sitInSeatResponse', response)
+
+            this.logger.log(
+                `✅ SIT_IN_SEAT [${requestId}]: Successfully emitted sitInSeatResponse (${responseType}) to client ${client.id} | Response: ${JSON.stringify(response)}`
+            )
+
+            // Clean up old request tracking (prevent memory leaks)
+            if (this.sentSitInSeatResponses.size > 500) {
+                const firstKey = this.sentSitInSeatResponses.keys().next().value
+                this.sentSitInSeatResponses.delete(firstKey)
+            }
+
+            return true
+        }
 
         if (!roomId) {
             const errorResponse = {
@@ -1155,7 +1203,8 @@ export class RoomGateway
                 },
                 message: 'Room ID is required'
             }
-            client.emit('sitInSeatResponse', errorResponse)
+
+            emitSitInSeatResponse(errorResponse, 'ROOM_ID_ERROR')
             return errorResponse
         }
 
@@ -1174,7 +1223,8 @@ export class RoomGateway
                 },
                 message: 'User information not available for seat operation'
             }
-            client.emit('sitInSeatResponse', errorResponse)
+
+            emitSitInSeatResponse(errorResponse, 'USER_VALIDATION_ERROR')
             return errorResponse
         }
 
@@ -1184,7 +1234,7 @@ export class RoomGateway
         const userInfo = this.connectedUsers.get(client.id)
 
         this.logger.log(
-            `🪑 SIT_IN_SEAT request: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${roomId}`
+            `🪑 SIT_IN_SEAT [${requestId}]: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${roomId}`
         )
 
         try {
@@ -1205,7 +1255,7 @@ export class RoomGateway
                 }
 
                 this.logger.log(
-                    `🔄 Auto-joined socket room: User ${userName} (${userId}) automatically joined room ${roomId} for sitting`
+                    `🔄 Auto-joined socket room [${requestId}]: User ${userName} (${userId}) automatically joined room ${roomId} for sitting`
                 )
             }
 
@@ -1303,13 +1353,13 @@ export class RoomGateway
                 }
 
                 // Emit to the user
-                client.emit('sitInSeatResponse', waitingResponse)
+                emitSitInSeatResponse(waitingResponse, 'WAITING_LIST')
 
                 // Emit to all room participants
                 this.server.to(roomName).emit('roomJoinUpdate', waitingResponse)
 
                 this.logger.log(
-                    `⏳ SIT_IN_SEAT waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${roomId}`
+                    `⏳ SIT_IN_SEAT [${requestId}] waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${roomId}`
                 )
 
                 return waitingResponse
@@ -1361,8 +1411,16 @@ export class RoomGateway
                 role: 'participant'
             }
 
+            this.logger.log(
+                `📤 SIT_IN_SEAT [${requestId}]: About to emit sitInSeatResponse (SUCCESS) to client ${client.id} | Status: accepted | User: ${sitInSeatResponse.user.name} | Seat: ${data.seatIndex}`
+            )
+
             // Emit to the user who sat with new format
-            client.emit('sitInSeatResponse', sitInSeatResponse)
+            emitSitInSeatResponse(sitInSeatResponse, 'SUCCESS')
+
+            this.logger.log(
+                `✅ SIT_IN_SEAT [${requestId}]: Successfully emitted sitInSeatResponse (SUCCESS) to client ${client.id} | Response: ${JSON.stringify(sitInSeatResponse)}`
+            )
 
             // ALSO emit joinRoomResponse for Flutter compatibility with old format
             // This ensures Flutter gets participant data when user sits in seat
@@ -1399,7 +1457,7 @@ export class RoomGateway
             await this.checkAndPromoteFromWaitingList(roomId)
 
             this.logger.log(
-                `✅ SIT_IN_SEAT success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
+                `✅ SIT_IN_SEAT [${requestId}] success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
             )
 
             // Track user activity
@@ -1408,7 +1466,7 @@ export class RoomGateway
             return sitInSeatResponse
         } catch (error) {
             this.logger.error(
-                `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | ` +
+                `❌ SIT_IN_SEAT [${requestId}] failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
@@ -1426,7 +1484,7 @@ export class RoomGateway
             }
 
             // Emit error response directly to the client
-            client.emit('sitInSeatResponse', errorResponse)
+            emitSitInSeatResponse(errorResponse, 'CATCH_ERROR')
 
             return errorResponse
         }
