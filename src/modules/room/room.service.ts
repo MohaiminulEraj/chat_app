@@ -542,13 +542,30 @@ export class RoomService {
         return participants
     }
 
-    async getRoomWaitingList(roomId: string): Promise<RoomWaitingList[]> {
-        return this.waitingListRepository
+    async getRoomWaitingList(roomId: string): Promise<
+        Array<{
+            id: string
+            name: string
+            email: string
+            sitIndex: string
+            image: string
+        }>
+    > {
+        const waitingListEntries = await this.waitingListRepository
             .createQueryBuilder('waitingList')
             .leftJoinAndSelect('waitingList.user', 'user')
             .where('waitingList.roomId = :roomId', { roomId: String(roomId) })
             .orderBy('waitingList.position', 'ASC')
             .getMany()
+
+        // Format the response to match the socket response format
+        return waitingListEntries.map((entry) => ({
+            id: entry.userId,
+            name: entry.user?.name || 'Unknown User',
+            email: entry.user?.email || '',
+            sitIndex: entry.position?.toString() || '',
+            image: entry.user?.avatarUrl || ''
+        }))
     }
 
     async updateRoom(roomId: string, data: any): Promise<Room> {

@@ -1055,7 +1055,7 @@ export class RoomGateway
                     const waitingList =
                         await this.roomService.getRoomWaitingList(roomId)
                     const userInWaitingList = waitingList.find(
-                        (w) => w.userId === userId
+                        (w) => w.id === userId
                     )
 
                     // Send detailed room data update
@@ -1065,8 +1065,9 @@ export class RoomGateway
                         participants: formattedParticipants,
                         seats: currentSeats,
                         roomUserCount: roomUserCount,
-                        waitingListPosition:
-                            userInWaitingList?.position || null,
+                        waitingListPosition: userInWaitingList?.sitIndex
+                            ? parseInt(userInWaitingList.sitIndex)
+                            : null,
                         isParticipant: !!participantData,
                         timestamp: new Date().toISOString()
                     }
@@ -1280,8 +1281,9 @@ export class RoomGateway
 
                 const waitingList =
                     await this.roomService.getRoomWaitingList(roomId)
-                const userPosition =
-                    waitingList.find((w) => w.userId === userId)?.position || 0
+                const userPosition = parseInt(
+                    waitingList.find((w) => w.id === userId)?.sitIndex || '0'
+                )
 
                 const waitingResponse = {
                     status: 'waiting',
@@ -3652,7 +3654,7 @@ export class RoomGateway
                     // Auto-seat the promoted user
                     const participant = await this.roomService.joinRoomWithSeat(
                         roomId,
-                        nextUser.userId,
+                        nextUser.id,
                         availableSeat.index
                     )
 
@@ -3665,8 +3667,8 @@ export class RoomGateway
                         .to(`room:${roomId}`)
                         .emit('userPromotedFromWaitingList', {
                             roomId,
-                            userId: nextUser.userId,
-                            userName: nextUser.user?.name || 'Unknown User',
+                            userId: nextUser.id,
+                            userName: nextUser.name || 'Unknown User',
                             seatIndex: availableSeat.index,
                             participant,
                             seats: updatedSeats,
@@ -3678,8 +3680,8 @@ export class RoomGateway
                     this.server.to(`room:${roomId}`).emit('roomJoinUpdate', {
                         action: 'user_promoted_and_seated',
                         roomId,
-                        userId: nextUser.userId,
-                        userName: nextUser.user?.name || 'Unknown User',
+                        userId: nextUser.id,
+                        userName: nextUser.name || 'Unknown User',
                         seatIndex: availableSeat.index,
                         userRole: 'participant',
                         seats: updatedSeats,
@@ -3687,11 +3689,11 @@ export class RoomGateway
                     })
 
                     this.logger.log(
-                        `✅ Promoted user ${nextUser.userId} from waiting list to seat ${availableSeat.index} in room ${roomId}`
+                        `✅ Promoted user ${nextUser.id} from waiting list to seat ${availableSeat.index} in room ${roomId}`
                     )
                 } catch (error) {
                     this.logger.error(
-                        `❌ Failed to promote user ${nextUser.userId} from waiting list in room ${roomId}: ${error.message}`
+                        `❌ Failed to promote user ${nextUser.id} from waiting list in room ${roomId}: ${error.message}`
                     )
                 }
             }
