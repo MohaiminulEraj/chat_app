@@ -1685,12 +1685,25 @@ export class RoomGateway
             lastCommentId?: string
         }
     ) {
+        // Add console log for immediate debugging
+        console.log('🔥 GET_ROOM_COMMENTS: Handler called!', {
+            socketId: client.id,
+            data: JSON.stringify(data)
+        })
+
         const userInfo = this.connectedUsers.get(client.id)
         const userId = data.userId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
 
         // Support both roomId and roomID for client compatibility
         const roomId = data.roomId || data.roomID
+
+        this.logger.log(
+            `📄 GET_ROOM_COMMENTS: Processing request from ${userName} (${userId}) for room ${roomId}`
+        )
+        this.logger.debug(
+            `📄 GET_ROOM_COMMENTS: Raw data: ${JSON.stringify(data)}`
+        )
 
         if (!roomId) {
             this.logger.warn(
@@ -1702,6 +1715,26 @@ export class RoomGateway
                 message: 'Room ID is required'
             }
 
+            this.logger.log(
+                `📤 GET_ROOM_COMMENTS: Emitting error response to socket ${client.id}`
+            )
+            client.emit('getRoomCommentsResponse', errorResponse)
+            return errorResponse
+        }
+
+        if (!userId) {
+            this.logger.warn(
+                `⚠️ GET_ROOM_COMMENTS denied: No userId provided for room ${roomId}`
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: 'User ID is required'
+            }
+
+            this.logger.log(
+                `📤 GET_ROOM_COMMENTS: Emitting error response to socket ${client.id}`
+            )
             client.emit('getRoomCommentsResponse', errorResponse)
             return errorResponse
         }
@@ -1714,10 +1747,25 @@ export class RoomGateway
                     : '')
         )
 
+        // TEMPORARY: Send immediate test response to verify connection
+        const testResponse = {
+            status: 'debug',
+            message: 'Handler is working - this is a test response',
+            roomId: roomId,
+            userId: userId,
+            timestamp: new Date().toISOString()
+        }
+        console.log('🔥 GET_ROOM_COMMENTS: Sending test response', testResponse)
+        client.emit('getRoomCommentsResponse', testResponse)
+
         try {
             // Verify user is in the room
             const roomName = `room:${roomId}`
             const isInSocketRoom = client.rooms.has(roomName)
+
+            this.logger.log(
+                `🔍 GET_ROOM_COMMENTS: Checking room membership for ${userName} (${userId}) in ${roomName} | InRoom: ${isInSocketRoom}`
+            )
 
             if (!isInSocketRoom) {
                 this.logger.warn(
@@ -1726,19 +1774,33 @@ export class RoomGateway
                 throw new Error('You must join the room first to view comments')
             }
 
-            // Verify user is a participant in the database
+            // Check if user has access to the room (either as participant or observer)
+            // Allow both participants and observers to view comments
             const participants =
                 await this.roomService.getRoomParticipants(roomId)
             const isParticipant = participants.some((p) => p.userId === userId)
 
-            if (!isParticipant) {
-                this.logger.warn(
-                    `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not a participant in room ${roomId}`
-                )
-                throw new Error('You must be a participant to view comments')
-            }
+            this.logger.log(
+                `🔍 GET_ROOM_COMMENTS: User access check for ${userName} (${userId}) | IsParticipant: ${isParticipant}`
+            )
+
+            // Note: Removed the strict participant requirement to allow observers to view comments
+            // if (!isParticipant) {
+            //     this.logger.warn(
+            //         `⚠️ GET_ROOM_COMMENTS denied: User ${userName} (${userId}) is not a participant in room ${roomId}`
+            //     )
+            //     throw new Error('You must be a participant to view comments')
+            // }
+
+            this.logger.log(
+                `📊 GET_ROOM_COMMENTS: Fetching comments from database for room ${roomId}`
+            )
 
             const result = await this.roomService.getRoomComments(roomId)
+
+            this.logger.log(
+                `📊 GET_ROOM_COMMENTS: Retrieved ${result.length} comments from database for room ${roomId}`
+            )
 
             // Apply pagination if requested
             let paginatedComments = result
@@ -1763,6 +1825,12 @@ export class RoomGateway
                 roomId: roomId
             }
 
+            this.logger.log(
+                `📤 GET_ROOM_COMMENTS: Emitting success response to socket ${client.id}`
+            )
+            this.logger.debug(
+                `📤 GET_ROOM_COMMENTS: Response data: ${JSON.stringify(successResponse)}`
+            )
             client.emit('getRoomCommentsResponse', successResponse)
             return successResponse
         } catch (error) {
@@ -1778,6 +1846,12 @@ export class RoomGateway
                 roomId: roomId
             }
 
+            this.logger.log(
+                `📤 GET_ROOM_COMMENTS: Emitting error response to socket ${client.id}`
+            )
+            this.logger.debug(
+                `📤 GET_ROOM_COMMENTS: Error response: ${JSON.stringify(errorResponse)}`
+            )
             client.emit('getRoomCommentsResponse', errorResponse)
             return errorResponse
         }
