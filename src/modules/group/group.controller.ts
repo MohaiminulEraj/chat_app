@@ -194,6 +194,51 @@ export class GroupController {
         }
     }
 
+    @Get(':id')
+    @ApiOperation({
+        summary: 'Get group details',
+        description:
+            'Get detailed information about a specific group including members, roles, settings, and rooms'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Group UUID',
+        type: 'string'
+    })
+    @ApiQuery({
+        name: 'includeRelations',
+        description:
+            'Whether to include related data (members, roles, settings, rooms)',
+        required: false,
+        type: 'boolean'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Group details retrieved successfully',
+        type: Group
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Group not found'
+    })
+    async getGroupDetails(
+        @Param('id') groupId: string,
+        @Query('includeRelations') includeRelations: string = 'true'
+    ) {
+        const includeRel = includeRelations === 'true'
+        const data = await this.groupService.getGroupById(groupId, includeRel)
+
+        if (!data) {
+            throw new BadRequestException('Group not found')
+        }
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Group details retrieved successfully',
+            data
+        }
+    }
+
     @Get(':id/members')
     @ApiOperation({
         summary: 'Get group members',

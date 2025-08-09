@@ -840,4 +840,45 @@ export class GroupService {
             order: { priority: 'DESC' }
         })
     }
+
+    async getGroupDetails(groupId: string): Promise<Group | null> {
+        const group = await this.groupRepository.findOne({
+            where: { uuid: groupId },
+            relations: [
+                'owner',
+                'members',
+                'members.user',
+                'members.role',
+                'roles',
+                'settings',
+                'rooms'
+            ],
+            order: {
+                members: {
+                    joinedAt: 'ASC'
+                },
+                roles: {
+                    priority: 'DESC'
+                },
+                rooms: {
+                    createdAt: 'DESC'
+                }
+            }
+        })
+
+        return group
+    }
+
+    async getGroupById(
+        groupId: string,
+        includeRelations: boolean = true
+    ): Promise<Group | null> {
+        if (!includeRelations) {
+            return this.groupRepository.findOne({
+                where: { uuid: groupId }
+            })
+        }
+
+        return this.getGroupDetails(groupId)
+    }
 }
