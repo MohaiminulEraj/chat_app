@@ -890,17 +890,39 @@ export class RoomService {
         message: string,
         messageType: 'text' | 'emoji' | 'sticker' | 'system' = 'text',
         replyToId?: string,
-        metadata?: any
+        metadata?: any,
+        allowObservers: boolean = true // New parameter to allow observers to comment
     ): Promise<RoomComment> {
-        // Verify the user is a participant in the room
+        // First verify the room exists and user has access
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId, isActive: true }
+        })
+
+        if (!room) {
+            throw new NotFoundException('Room not found')
+        }
+
+        // Check if user is a participant (seated)
         const participant = await this.participantRepository.findOne({
             where: { roomId, userId }
         })
 
-        if (!participant) {
+        // If not a participant and observers are not allowed, throw error
+        if (!participant && !allowObservers) {
             throw new ForbiddenException(
                 'You must be a participant in the room to comment'
             )
+        }
+
+        // If not a participant but observers are allowed, verify user exists
+        if (!participant && allowObservers) {
+            const user = await this.userRepository.findOne({
+                where: { uuid: userId }
+            })
+
+            if (!user) {
+                throw new ForbiddenException('User not found or invalid')
+            }
         }
 
         // If replying to a comment, verify it exists

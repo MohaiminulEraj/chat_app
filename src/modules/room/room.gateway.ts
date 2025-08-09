@@ -2055,14 +2055,15 @@ export class RoomGateway
                 // throw new Error('You are not a participant in this room')
             }
 
-            // Add the comment via service
+            // Add the comment via service - allow observers to comment
             const comment = await this.roomService.addRoomComment(
                 data.room,
                 userId,
                 data.content,
                 (data.messageType as any) || 'text',
                 data.replyToId,
-                data.metadata
+                data.metadata,
+                true // allowObservers = true
             )
 
             // Emit direct response to the sender first
