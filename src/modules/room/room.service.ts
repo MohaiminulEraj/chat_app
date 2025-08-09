@@ -720,10 +720,17 @@ export class RoomService {
             relations: ['user']
         })
 
-        // Find host
+        // Find host and owner roles
         const hostRole = roleAssignments.find(
             (role) => role.role === RoomRole.HOST
         )
+        const ownerRole = roleAssignments.find(
+            (role) => role.role === RoomRole.OWNER
+        )
+
+        // Get owner information - prefer role assignment, fallback to room entity
+        const ownerInfo = ownerRole?.user || room.owner
+        const hostInfo = hostRole?.user || null
 
         // Get all participants with their roles
         const participants = await this.participantRepository.find({
@@ -733,7 +740,7 @@ export class RoomService {
         })
 
         // Build participants list with the new format
-        const hostUserId = hostRole?.user.uuid
+        const hostUserId = hostInfo?.uuid
         const ownerId = room.ownerId
 
         // Determine if we should exclude a user from participants:
@@ -781,13 +788,18 @@ export class RoomService {
         // Build seats array with lock information - exclude host from seat occupancy
         const seats = await this.getRoomSeats(room.uuid, hostUserId)
 
-        // Format response to match the new structure
+        // Format response to match the new structure with both owner and host information
         return {
             roomId: room.uuid,
             roomName: room.name,
-            hostId: hostRole?.user.uuid || room.ownerId,
-            hostName: hostRole?.user.name || room.owner.name,
-            hostImage: hostRole?.user.avatarUrl || room.owner.avatarUrl || null,
+            // Owner information
+            ownerId: ownerInfo.uuid,
+            ownerName: ownerInfo.name,
+            ownerImage: ownerInfo.avatarUrl || null,
+            // Host information (may be same as owner or different)
+            hostId: hostInfo?.uuid || room.ownerId,
+            hostName: hostInfo?.name || ownerInfo.name,
+            hostImage: hostInfo?.avatarUrl || ownerInfo.avatarUrl || null,
             participants: participantsList,
             seats: seats,
             maxSeats: room.maxSeats,
