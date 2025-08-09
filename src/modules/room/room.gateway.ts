@@ -881,10 +881,13 @@ export class RoomGateway
         this.logger.debug(`🔍 Validated user: ${JSON.stringify(validatedUser)}`)
 
         if (!validatedUser) {
-            const errorResponse = {
-                roomId: roomId,
-                participants: []
-            }
+            this.logger.warn(
+                `⚠️ JOIN_ROOM: User validation failed for socket ${client.id} with data ${JSON.stringify(data)}`
+            )
+            const errorResponse = null // No participant data for failed validation
+            this.logger.log(
+                `📤 JOIN_ROOM: Emitting error joinRoomResponse to socket ${client.id}`
+            )
             client.emit('joinRoomResponse', errorResponse)
             return errorResponse
         }
@@ -933,12 +936,12 @@ export class RoomGateway
             )
 
             // Send immediate response to client - they've joined as observer
-            const immediateResponse = {
-                roomId: roomId,
-                participants: [] // Will be populated with actual participants after async database operations
-            }
+            const immediateResponse = null // No participant data initially (observer)
 
             // Emit immediate response to the joining client
+            this.logger.log(
+                `📤 JOIN_ROOM: Emitting immediate joinRoomResponse to socket ${client.id}`
+            )
             client.emit('joinRoomResponse', immediateResponse)
 
             this.logger.log(
@@ -1026,17 +1029,26 @@ export class RoomGateway
                     // Emit room data to the client
                     client.emit('roomDataUpdate', roomDataUpdate)
 
-                    // Send updated joinRoomResponse with actual participants
-                    const completeJoinResponse = {
-                        roomId: roomId,
-                        participants: formattedParticipants
-                    }
+                    // Send updated joinRoomResponse with only the current user's participant data (if seated)
+                    const completeJoinResponse = currentUserParticipant || null
+                    this.logger.log(
+                        `📤 JOIN_ROOM: Emitting complete joinRoomResponse to socket ${client.id} with participant: ${currentUserParticipant ? currentUserParticipant.name : 'none (observer)'}`
+                    )
                     client.emit('joinRoomResponse', completeJoinResponse)
 
                     // Emit to all room participants about new observer
-                    this.server
-                        .to(`room:${roomId}`)
-                        .emit('roomJoinUpdate', formattedParticipants)
+                    this.server.to(`room:${roomId}`).emit(
+                        'roomJoinUpdate',
+                        currentUserParticipant || {
+                            userId: userId,
+                            name: userName,
+                            avatar: null,
+                            seatIndex: null,
+                            isSpeaking: false,
+                            micOn: false,
+                            role: 'observer'
+                        }
+                    )
 
                     this.logger.log(
                         `📊 JOIN_ROOM data loaded: User ${userName} (${userId}) received room data for ${roomId}`
@@ -1065,10 +1077,7 @@ export class RoomGateway
                 error.stack
             )
 
-            const errorResponse = {
-                roomId: roomId,
-                participants: []
-            }
+            const errorResponse = null // No participant data for error case
 
             // Emit error response directly to the client
             client.emit('joinRoomResponse', errorResponse)
