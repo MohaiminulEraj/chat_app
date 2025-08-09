@@ -64,6 +64,9 @@ export class RoomGateway
         }
     >()
 
+    // Comment emission tracking to prevent duplicates
+    private sentCommentResponses = new Map<string, Set<string>>() // commentId -> Set of clientIds
+
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService,
@@ -2003,13 +2006,14 @@ export class RoomGateway
             metadata?: any // Optional metadata
         }
     ) {
+        const requestId = Math.random().toString(36).substr(2, 9) // Generate unique request ID
         const userInfo = this.connectedUsers.get(client.id)
         const userId = data.sender || userInfo?.userId // Use sender from data as fallback
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `💬 SEND_COMMENT request: User ${userName} (${userId}) sending comment to room ${data.room} | ` +
-                `Type: ${data.messageType || 'text'} | Length: ${data.content?.length || 0} chars` +
+            `💬 SEND_COMMENT request [${requestId}]: User ${userName} (${userId}) sending comment to room ${data.room} | ` +
+                `Client: ${client.id} | Type: ${data.messageType || 'text'} | Length: ${data.content?.length || 0} chars` +
                 (data.replyToId ? ` | Reply to: ${data.replyToId}` : '')
         )
 
@@ -2042,14 +2046,14 @@ export class RoomGateway
             const isParticipant = participants.some((p) => p.userId === userId)
 
             this.logger.log(
-                `🔍 SEND_COMMENT: Participant check - User ${userId} | IsParticipant: ${isParticipant} | Total participants: ${participants.length}`
+                `🔍 SEND_COMMENT [${requestId}]: Participant check - User ${userId} | IsParticipant: ${isParticipant} | Total participants: ${participants.length}`
             )
 
             // Allow both participants and observers to send comments
             // Only require being in the socket room
             if (!isParticipant) {
                 this.logger.warn(
-                    `⚠️ SEND_COMMENT: User ${userName} (${userId}) is not a participant but allowing as observer in room ${data.room}`
+                    `⚠️ SEND_COMMENT [${requestId}]: User ${userName} (${userId}) is not a participant but allowing as observer in room ${data.room}`
                 )
                 // Don't throw error - allow observers to comment
                 // throw new Error('You are not a participant in this room')
@@ -2066,8 +2070,8 @@ export class RoomGateway
                 true // allowObservers = true
             )
 
-            // Emit direct response to the sender first
-            client.emit('sendCommentResponse', {
+            // Create the response object
+            const commentResponse = {
                 _id: comment.uuid,
                 content: comment.message,
                 senderId: comment.userId,
@@ -2075,7 +2079,46 @@ export class RoomGateway
                 senderImage: comment.user?.avatarUrl || '',
                 senderName:
                     comment.user?.name || comment.user?.email || userName
-            })
+            }
+
+            this.logger.log(
+                `📤 SEND_COMMENT [${requestId}]: About to emit sendCommentResponse for comment ${comment.uuid} to client ${client.id}`
+            )
+
+            // Check if we've already sent this comment response to this client
+            const commentKey = comment.uuid
+            if (!this.sentCommentResponses.has(commentKey)) {
+                this.sentCommentResponses.set(commentKey, new Set())
+            }
+
+            const clientsForComment = this.sentCommentResponses.get(commentKey)
+            if (clientsForComment.has(client.id)) {
+                this.logger.warn(
+                    `⚠️ SEND_COMMENT [${requestId}]: Duplicate emission prevented for comment ${comment.uuid} to client ${client.id}`
+                )
+                return {
+                    status: 'success',
+                    comment,
+                    message: 'Duplicate emission prevented'
+                }
+            }
+
+            // Mark this client as having received this comment response
+            clientsForComment.add(client.id)
+
+            // Emit direct response to the sender ONLY ONCE
+            client.emit('sendCommentResponse', commentResponse)
+
+            this.logger.log(
+                `✅ SEND_COMMENT [${requestId}]: Successfully emitted sendCommentResponse for comment ${comment.uuid} to client ${client.id}`
+            )
+
+            // Clean up old comment tracking (optional: prevent memory leaks)
+            // Keep only the last 1000 comments in memory
+            if (this.sentCommentResponses.size > 1000) {
+                const firstKey = this.sentCommentResponses.keys().next().value
+                this.sentCommentResponses.delete(firstKey)
+            }
 
             // Emit to all room participants
             this.server.to(roomName).emit('commentAdded', {
@@ -2100,7 +2143,7 @@ export class RoomGateway
             this.trackUserActivity(userId, 'sendComment')
 
             this.logger.log(
-                `✅ SEND_COMMENT success: User ${userName} (${userId}) sent comment to room ${data.room} | Response emitted`
+                `✅ SEND_COMMENT [${requestId}] success: User ${userName} (${userId}) sent comment to room ${data.room} | Response emitted`
             )
 
             return {
@@ -2109,7 +2152,7 @@ export class RoomGateway
             }
         } catch (error) {
             this.logger.error(
-                `❌ SEND_COMMENT failed: User ${userName} (${userId}) failed to send comment to room ${data.room} | ` +
+                `❌ SEND_COMMENT [${requestId}] failed: User ${userName} (${userId}) failed to send comment to room ${data.room} | ` +
                     `Error: ${error.message}`,
                 error.stack
             )
