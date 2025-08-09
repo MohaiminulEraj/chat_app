@@ -64,8 +64,13 @@ socket.on('connect', () => {
 // Listen for comment responses
 socket.on('sendCommentResponse', (data) => {
     console.log('\n📥 SEND COMMENT RESPONSE:')
-    console.log('   Status:', data.status)
-    console.log('   Data:', JSON.stringify(data, null, 2))
+    console.log('   _id:', data._id)
+    console.log('   content:', data.content)
+    console.log('   senderId:', data.senderId)
+    console.log('   senderName:', data.senderName)
+    console.log('   senderImage:', data.senderImage)
+    console.log('   createdAt:', data.createdAt)
+    console.log('   Full Data:', JSON.stringify(data, null, 2))
 })
 
 socket.on('commentAdded', (data) => {

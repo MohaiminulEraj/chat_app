@@ -1549,10 +1549,13 @@ export class RoomGateway
 
             // Emit direct response to the sender first
             client.emit('sendCommentResponse', {
-                status: 'success',
-                comment,
-                roomId: data.room,
-                timestamp: new Date().toISOString()
+                _id: comment.uuid,
+                content: comment.message,
+                senderId: comment.userId,
+                createdAt: comment.createdAt.toISOString(),
+                senderImage: comment.user?.avatarUrl || '',
+                senderName:
+                    comment.user?.name || comment.user?.email || userName
             })
 
             // Emit to all room participants
@@ -1594,10 +1597,12 @@ export class RoomGateway
 
             // Emit direct error response to the sender
             client.emit('sendCommentResponse', {
-                status: 'error',
-                message: error.message,
-                roomId: data.room,
-                timestamp: new Date().toISOString()
+                _id: null,
+                content: error.message,
+                senderId: userId,
+                createdAt: new Date().toISOString(),
+                senderImage: '',
+                senderName: userName
             })
 
             return {
