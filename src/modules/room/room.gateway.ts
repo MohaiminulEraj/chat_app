@@ -865,7 +865,6 @@ export class RoomGateway
         @MessageBody()
         data: {
             userId: string
-            roomId?: string
             roomID?: string
             password?: string
         }
@@ -873,7 +872,7 @@ export class RoomGateway
         this.logger.debug(`📥 JOIN_ROOM raw data: ${JSON.stringify(data)}`)
 
         // Handle both roomId and roomID formats
-        const roomId = data.roomId || data.roomID
+        const roomId = data.roomID
 
         // Get validated user information
         const validatedUser = await this.getUserInfo(client, data.userId)
@@ -884,12 +883,12 @@ export class RoomGateway
             this.logger.warn(
                 `⚠️ JOIN_ROOM: User validation failed for socket ${client.id} with data ${JSON.stringify(data)}`
             )
-            const errorResponse = null // No participant data for failed validation
+            // Don't emit joinRoomResponse for validation errors
+            // Flutter code expects only valid participant data
             this.logger.log(
-                `📤 JOIN_ROOM: Emitting error joinRoomResponse to socket ${client.id}`
+                `📤 JOIN_ROOM: No joinRoomResponse emitted - user validation failed`
             )
-            client.emit('joinRoomResponse', errorResponse)
-            return errorResponse
+            return null
         }
 
         const { userId, userName } = validatedUser
@@ -989,14 +988,20 @@ export class RoomGateway
                   }
                 : null // User is observer
 
-            // Send immediate response with participant data (or null if observer)
-            this.logger.log(
-                `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData ? participantData.name : 'none (observer)'}`
-            )
-            this.logger.debug(
-                `📤 JOIN_ROOM: Response data: ${JSON.stringify(participantData)}`
-            )
-            client.emit('joinRoomResponse', participantData)
+            // Only emit joinRoomResponse when user is actually seated (has participant data)
+            if (participantData) {
+                this.logger.log(
+                    `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData.name}`
+                )
+                this.logger.debug(
+                    `📤 JOIN_ROOM: Response data: ${JSON.stringify(participantData)}`
+                )
+                client.emit('joinRoomResponse', participantData)
+            } else {
+                this.logger.log(
+                    `ℹ️ JOIN_ROOM: User ${userName} (${userId}) joined as observer - no joinRoomResponse emitted`
+                )
+            }
 
             this.logger.log(
                 `✅ JOIN_ROOM complete: User ${userName} (${userId}) joined room ${roomId} as ${participantData ? 'participant' : 'observer'}`
@@ -1095,12 +1100,12 @@ export class RoomGateway
                 error.stack
             )
 
-            const errorResponse = null // No participant data for error case
+            // Don't emit joinRoomResponse for errors - Flutter expects only valid participant data
+            this.logger.log(
+                `📤 JOIN_ROOM: No joinRoomResponse emitted - operation failed`
+            )
 
-            // Emit error response directly to the client
-            client.emit('joinRoomResponse', errorResponse)
-
-            return errorResponse
+            return null
         }
     }
 

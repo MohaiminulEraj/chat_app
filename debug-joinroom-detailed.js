@@ -65,6 +65,9 @@ socket.on('roomDataUpdate', (data) => {
     console.log('   Action:', data.action)
     console.log('   Participants count:', data.participants?.length || 0)
     console.log('   Is participant:', data.isParticipant)
+    console.log(
+        '   ℹ️ NOTE: joinRoomResponse will only be emitted if user is already seated'
+    )
 })
 
 // Listen for sit in seat response
@@ -84,9 +87,12 @@ socket.on('disconnect', (reason) => {
 // Test sequence: Join room, then try to sit in seat
 setTimeout(() => {
     console.log('\n🪑 Attempting to sit in seat 0...')
+    console.log(
+        '   ℹ️ This should trigger joinRoomResponse with participant data'
+    )
     socket.emit('sitInSeat', {
         userId: TEST_USER_ID,
-        roomId: TEST_ROOM_ID,
+        roomID: TEST_ROOM_ID, // Use roomID for consistency
         seatIndex: 0
     })
 }, 3000)
