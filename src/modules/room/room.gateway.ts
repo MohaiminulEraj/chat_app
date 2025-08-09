@@ -882,9 +882,8 @@ export class RoomGateway
 
         if (!validatedUser) {
             const errorResponse = {
-                status: 'error',
-                message: 'User information not available',
-                roomId: roomId
+                roomId: roomId,
+                participants: []
             }
             client.emit('joinRoomResponse', errorResponse)
             return errorResponse
@@ -935,14 +934,8 @@ export class RoomGateway
 
             // Send immediate response to client - they've joined as observer
             const immediateResponse = {
-                status: 'success',
-                action: 'joined_as_observer',
                 roomId: roomId,
-                userId: userId,
-                userName: userName,
-                userRole: 'observer',
-                message: 'Successfully joined room as observer',
-                timestamp: new Date().toISOString()
+                participants: [] // Will be populated with actual participants after async database operations
             }
 
             // Emit immediate response to the joining client
@@ -1033,6 +1026,13 @@ export class RoomGateway
                     // Emit room data to the client
                     client.emit('roomDataUpdate', roomDataUpdate)
 
+                    // Send updated joinRoomResponse with actual participants
+                    const completeJoinResponse = {
+                        roomId: roomId,
+                        participants: formattedParticipants
+                    }
+                    client.emit('joinRoomResponse', completeJoinResponse)
+
                     // Emit to all room participants about new observer
                     this.server
                         .to(`room:${roomId}`)
@@ -1066,9 +1066,8 @@ export class RoomGateway
             )
 
             const errorResponse = {
-                status: 'error',
-                message: error.message,
-                roomId: roomId
+                roomId: roomId,
+                participants: []
             }
 
             // Emit error response directly to the client
