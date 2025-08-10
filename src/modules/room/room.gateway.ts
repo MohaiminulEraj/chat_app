@@ -73,6 +73,9 @@ export class RoomGateway
     // GetRoomComments response tracking to prevent duplicates
     private sentGetCommentsResponses = new Map<string, Set<string>>() // requestKey -> Set of clientIds
 
+    // BlockUser response tracking to prevent duplicates
+    private sentBlockUserResponses = new Map<string, Set<string>>() // requestKey -> Set of clientIds
+
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService,
@@ -2991,6 +2994,240 @@ export class RoomGateway
 
         // Redirect to the correct handler
         return this.handleKickUser(client, data)
+    }
+
+    @SubscribeMessage('blockUser')
+    async handleBlockUser(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            blockUserID: string
+            reason?: string
+        }
+    ) {
+        const requestId = Math.random().toString(36).substr(2, 9) // Generate unique request ID
+
+        this.logger.log(
+            `🚫 BLOCK_USER request [${requestId}]: Client ${client.id} wants to block user ${data.blockUserID} from room ${data.roomId}`
+        )
+
+        // Helper function to emit blockUserResponse with duplicate prevention
+        const emitBlockUserResponse = (response: any, responseType: string) => {
+            const requestKey = `${requestId}-${client.id}-${data.roomId}-${data.blockUserID}`
+
+            // Check for duplicate emissions
+            if (!this.sentBlockUserResponses.has(requestKey)) {
+                this.sentBlockUserResponses.set(requestKey, new Set())
+            }
+
+            const clientsForRequest =
+                this.sentBlockUserResponses.get(requestKey)
+            if (clientsForRequest.has(client.id)) {
+                this.logger.warn(
+                    `⚠️ BLOCK_USER [${requestId}]: Duplicate emission prevented for ${responseType} to client ${client.id}`
+                )
+                return false
+            }
+
+            // Mark this client as having received this response
+            clientsForRequest.add(client.id)
+
+            this.logger.log(
+                `📤 BLOCK_USER [${requestId}]: About to emit blockUserResponse (${responseType}) to client ${client.id} | Status: ${response.status}`
+            )
+
+            // client.emit('blockUserResponse', response)
+
+            this.logger.log(
+                `✅ BLOCK_USER [${requestId}]: Successfully emitted blockUserResponse (${responseType}) to client ${client.id} | Response: ${JSON.stringify(response)}`
+            )
+
+            // Clean up old request tracking (prevent memory leaks)
+            if (this.sentBlockUserResponses.size > 500) {
+                const firstKey = this.sentBlockUserResponses.keys().next().value
+                this.sentBlockUserResponses.delete(firstKey)
+            }
+
+            return true
+        }
+
+        if (!data.roomId) {
+            const errorResponse = {
+                status: 'error',
+                message: 'Room ID is required',
+                roomId: '',
+                blockUserID: data.blockUserID || ''
+            }
+
+            emitBlockUserResponse(errorResponse, 'ROOM_ID_ERROR')
+            return errorResponse
+        }
+
+        if (!data.blockUserID) {
+            const errorResponse = {
+                status: 'error',
+                message: 'Block user ID is required',
+                roomId: data.roomId,
+                blockUserID: ''
+            }
+
+            emitBlockUserResponse(errorResponse, 'BLOCK_USER_ID_ERROR')
+            return errorResponse
+        }
+
+        // Get validated user information (the one doing the blocking)
+        const validatedUser = await this.getUserInfo(client)
+
+        if (!validatedUser) {
+            const errorResponse = {
+                status: 'error',
+                message: 'User information not available for block operation',
+                roomId: data.roomId,
+                blockUserID: data.blockUserID
+            }
+
+            emitBlockUserResponse(errorResponse, 'USER_VALIDATION_ERROR')
+            return errorResponse
+        }
+
+        const { userId: blockerUserId, userName: blockerUserName } =
+            validatedUser
+
+        this.logger.log(
+            `🚫 BLOCK_USER [${requestId}]: User ${blockerUserName} (${blockerUserId}) attempting to block user ${data.blockUserID} from room ${data.roomId}`
+        )
+
+        try {
+            // Call the room service to block the user
+            const result = await this.roomService.blockUserFromRoom(
+                data.roomId,
+                data.blockUserID,
+                blockerUserId,
+                data.reason
+            )
+
+            if (!result.success) {
+                const errorResponse = {
+                    status: 'error',
+                    message: result.message,
+                    roomId: data.roomId,
+                    blockUserID: data.blockUserID
+                }
+
+                emitBlockUserResponse(errorResponse, 'SERVICE_ERROR')
+                return errorResponse
+            }
+
+            // Find the blocked user's socket to disconnect them from this specific room
+            const blockedUserSocket = Array.from(
+                this.connectedUsers.entries()
+            ).find(([socketId, user]) => user.userId === data.blockUserID)
+
+            if (blockedUserSocket) {
+                const [blockedSocketId] = blockedUserSocket
+                const blockedSocket =
+                    this.server.sockets.sockets.get(blockedSocketId)
+
+                if (blockedSocket) {
+                    // Remove from this specific socket room
+                    blockedSocket.leave(`room:${data.roomId}`)
+                    this.logger.log(
+                        `🚪 BLOCK_USER [${requestId}]: Removed blocked user ${data.blockUserID} from socket room: room:${data.roomId}`
+                    )
+
+                    // Update user's room tracking - remove only this specific room
+                    const blockedUserInfo =
+                        this.connectedUsers.get(blockedSocketId)
+                    if (blockedUserInfo) {
+                        blockedUserInfo.rooms.delete(data.roomId)
+                        this.logger.log(
+                            `📝 BLOCK_USER [${requestId}]: Updated blocked user tracking - now in rooms: [${Array.from(blockedUserInfo.rooms).join(', ')}]`
+                        )
+                    }
+
+                    // Notify the blocked user specifically
+                    blockedSocket.emit('userBlocked', {
+                        roomId: data.roomId,
+                        reason: data.reason || 'No reason provided',
+                        blockedBy: {
+                            userId: blockerUserId,
+                            userName: blockerUserName
+                        },
+                        timestamp: new Date().toISOString()
+                    })
+                }
+            }
+
+            // Update room user count
+            const currentCount = this.roomUserCounts.get(data.roomId) || 0
+            const newCount = Math.max(0, currentCount - 1)
+            this.roomUserCounts.set(data.roomId, newCount)
+
+            // Notify all room participants about the block
+            this.server.to(`room:${data.roomId}`).emit('blockUserResponse', {
+                roomId: data.roomId,
+                blockedUserId: data.blockUserID,
+                reason: data.reason || 'No reason provided',
+                blockedBy: {
+                    userId: blockerUserId,
+                    userName: blockerUserName
+                },
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
+            })
+
+            // Update room seats state
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Emit updated room state
+            const updatedSeats = await this.roomService.getRoomSeats(
+                data.roomId
+            )
+            this.server.to(`room:${data.roomId}`).emit('roomSeatsUpdate', {
+                roomId: data.roomId,
+                seats: updatedSeats
+            })
+
+            this.logger.log(
+                `✅ BLOCK_USER [${requestId}] success: User ${blockerUserName} (${blockerUserId}) blocked user ${data.blockUserID} from room ${data.roomId}`
+            )
+
+            // Track user activity
+            this.trackUserActivity(blockerUserId, 'seatActions')
+
+            const successResponse = {
+                status: 'success',
+                message: result.message,
+                roomId: data.roomId,
+                blockUserID: data.blockUserID,
+                blockedBy: {
+                    userId: blockerUserId,
+                    userName: blockerUserName
+                },
+                roomUserCount: newCount,
+                timestamp: new Date().toISOString()
+            }
+
+            emitBlockUserResponse(successResponse, 'SUCCESS')
+            return successResponse
+        } catch (error) {
+            this.logger.error(
+                `❌ BLOCK_USER [${requestId}] failed: User ${blockerUserName} (${blockerUserId}) failed to block user ${data.blockUserID} from room ${data.roomId} | ` +
+                    `Error: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId,
+                blockUserID: data.blockUserID
+            }
+
+            emitBlockUserResponse(errorResponse, 'CATCH_ERROR')
+            return errorResponse
+        }
     }
 
     @SubscribeMessage('toggleDeafen')
