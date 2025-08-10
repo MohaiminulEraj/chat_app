@@ -2168,7 +2168,7 @@ export class RoomGateway
             clientsForComment.add(client.id)
 
             // Emit direct response to the sender ONLY ONCE
-            client.emit('sendCommentResponse', commentResponse)
+            // client.emit('sendCommentResponse', commentResponse)
 
             this.logger.log(
                 `✅ SEND_COMMENT [${requestId}]: Successfully emitted sendCommentResponse for comment ${comment.uuid} to client ${client.id}`
@@ -2182,23 +2182,19 @@ export class RoomGateway
             }
 
             // Emit to all room participants
-            this.server.to(roomName).emit('commentAdded', {
-                roomId: data.room,
-                comment,
-                addedBy: userId,
-                addedByName: userName,
-                timestamp: new Date().toISOString()
-            })
+            this.server
+                .to(roomName)
+                .emit('sendCommentResponse', commentResponse)
 
             // Emit activity update
-            this.server.to(roomName).emit('commentActivityUpdate', {
-                action: 'comment_added',
-                roomId: data.room,
-                commentId: comment.uuid,
-                addedBy: userId,
-                addedByName: userName,
-                timestamp: new Date().toISOString()
-            })
+            // this.server.to(roomName).emit('commentActivityUpdate', {
+            //     action: 'comment_added',
+            //     roomId: data.room,
+            //     commentId: comment.uuid,
+            //     addedBy: userId,
+            //     addedByName: userName,
+            //     timestamp: new Date().toISOString()
+            // })
 
             // Track user activity
             this.trackUserActivity(userId, 'sendComment')
