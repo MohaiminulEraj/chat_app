@@ -6,6 +6,7 @@ import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift f
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
 import { User } from '../user/entities/user.entity'
+import { RoomBlockedUser } from './entities/room-blocked-user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRoleAssignment } from './entities/room-role.entity'
@@ -25,6 +26,7 @@ import { RoomService } from './room.service'
             RoomRoleAssignment,
             RoomSeat,
             RoomComment,
+            RoomBlockedUser,
             GroupMember,
             Group,
             User

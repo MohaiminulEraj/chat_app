@@ -12,6 +12,7 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
 import { User } from '../user/entities/user.entity'
+import { RoomBlockedUser } from './entities/room-blocked-user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
@@ -42,6 +43,8 @@ export class RoomService {
         private roomSeatRepository: Repository<RoomSeat>,
         @InjectRepository(RoomComment)
         private roomCommentRepository: Repository<RoomComment>,
+        @InjectRepository(RoomBlockedUser)
+        private roomBlockedUserRepository: Repository<RoomBlockedUser>,
         private cloudinaryService: CloudinaryService
     ) {}
 
@@ -1245,7 +1248,7 @@ export class RoomService {
     /**
      * Get recommended rooms (all active rooms with their details)
      */
-    async getRecommendedRooms(): Promise<any[]> {
+    async getRecommendedRooms(userId?: string): Promise<any[]> {
         const rooms = await this.roomRepository.find({
             where: { isActive: true },
             relations: ['owner', 'group', 'participants', 'participants.user'],
@@ -1264,6 +1267,11 @@ export class RoomService {
                 roomDetails.roomAvatarUrl = room.roomAvatarUrl || null
                 recommendedRooms.push(roomDetails)
             }
+        }
+
+        // Filter out blocked rooms for the specific user
+        if (userId) {
+            return await this.filterRoomsForUser(recommendedRooms, userId)
         }
 
         return recommendedRooms
@@ -1497,5 +1505,278 @@ export class RoomService {
         }
 
         return seats
+    }
+
+    // ==================== BLOCKED USERS MANAGEMENT ====================
+
+    /**
+     * Block a user from a specific room
+     */
+    async blockUserFromRoom(
+        roomId: string,
+        userIdToBlock: string,
+        blockedBy: string,
+        reason?: string
+    ): Promise<{ success: boolean; message: string }> {
+        try {
+            this.logger.log(
+                `🚫 BLOCK_USER: User ${blockedBy} attempting to block user ${userIdToBlock} from room ${roomId}`
+            )
+
+            // Verify the room exists
+            const room = await this.roomRepository.findOne({
+                where: { uuid: roomId, isActive: true }
+            })
+
+            if (!room) {
+                throw new Error('Room not found')
+            }
+
+            // Verify the user doing the blocking has permission (host/owner)
+            const roomDetails = await this.getRoomDetails(roomId)
+            const blockerRoles = await this.getUserRolesInRoom(
+                roomId,
+                blockedBy
+            )
+            const isHost =
+                roomDetails?.hostId === blockedBy ||
+                blockerRoles.includes(RoomRole.OWNER) ||
+                blockerRoles.includes(RoomRole.HOST)
+
+            if (!isHost) {
+                throw new Error('Only room host or owner can block users')
+            }
+
+            // Verify the user to block exists
+            const userToBlock = await this.userRepository.findOne({
+                where: { uuid: userIdToBlock, isActive: true }
+            })
+
+            if (!userToBlock) {
+                throw new Error('User to block not found')
+            }
+
+            // Check if user is already blocked
+            const existingBlock = await this.roomBlockedUserRepository.findOne({
+                where: {
+                    roomId: roomId,
+                    userId: userIdToBlock,
+                    isActive: true
+                }
+            })
+
+            if (existingBlock) {
+                return {
+                    success: false,
+                    message: 'User is already blocked from this room'
+                }
+            }
+
+            // Remove user from room if they are currently a participant
+            const participant = await this.participantRepository.findOne({
+                where: {
+                    roomId: roomId,
+                    userId: userIdToBlock
+                }
+            })
+
+            if (participant) {
+                await this.participantRepository.remove(participant)
+                this.logger.log(
+                    `🚪 BLOCK_USER: Removed user ${userIdToBlock} from room ${roomId} participants`
+                )
+            }
+
+            // Remove user from waiting list if they are there
+            const waitingListEntry = await this.waitingListRepository.findOne({
+                where: {
+                    roomId: roomId,
+                    userId: userIdToBlock
+                }
+            })
+
+            if (waitingListEntry) {
+                await this.waitingListRepository.remove(waitingListEntry)
+                this.logger.log(
+                    `📝 BLOCK_USER: Removed user ${userIdToBlock} from room ${roomId} waiting list`
+                )
+            }
+
+            // Create the block record
+            const blockRecord = this.roomBlockedUserRepository.create({
+                roomId: roomId,
+                userId: userIdToBlock,
+                blockedBy: blockedBy,
+                reason: reason || 'No reason provided',
+                isActive: true,
+                blockedAt: new Date()
+            })
+
+            await this.roomBlockedUserRepository.save(blockRecord)
+
+            this.logger.log(
+                `✅ BLOCK_USER success: User ${userIdToBlock} has been blocked from room ${roomId} by ${blockedBy}`
+            )
+
+            return {
+                success: true,
+                message: 'User has been successfully blocked from the room'
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ BLOCK_USER failed: Error blocking user ${userIdToBlock} from room ${roomId} | Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                success: false,
+                message: error.message
+            }
+        }
+    }
+
+    /**
+     * Unblock a user from a specific room
+     */
+    async unblockUserFromRoom(
+        roomId: string,
+        userIdToUnblock: string,
+        unblockedBy: string
+    ): Promise<{ success: boolean; message: string }> {
+        try {
+            this.logger.log(
+                `✅ UNBLOCK_USER: User ${unblockedBy} attempting to unblock user ${userIdToUnblock} from room ${roomId}`
+            )
+
+            // Verify the room exists
+            const room = await this.roomRepository.findOne({
+                where: { uuid: roomId, isActive: true }
+            })
+
+            if (!room) {
+                throw new Error('Room not found')
+            }
+
+            // Verify the user doing the unblocking has permission (host/owner)
+            const roomDetails = await this.getRoomDetails(roomId)
+            const unblockerRoles = await this.getUserRolesInRoom(
+                roomId,
+                unblockedBy
+            )
+            const isHost =
+                roomDetails?.hostId === unblockedBy ||
+                unblockerRoles.includes(RoomRole.OWNER) ||
+                unblockerRoles.includes(RoomRole.HOST)
+
+            if (!isHost) {
+                throw new Error('Only room host or owner can unblock users')
+            }
+
+            // Find and deactivate the block record
+            const blockRecord = await this.roomBlockedUserRepository.findOne({
+                where: {
+                    roomId: roomId,
+                    userId: userIdToUnblock,
+                    isActive: true
+                }
+            })
+
+            if (!blockRecord) {
+                return {
+                    success: false,
+                    message: 'User is not currently blocked from this room'
+                }
+            }
+
+            blockRecord.isActive = false
+            await this.roomBlockedUserRepository.save(blockRecord)
+
+            this.logger.log(
+                `✅ UNBLOCK_USER success: User ${userIdToUnblock} has been unblocked from room ${roomId} by ${unblockedBy}`
+            )
+
+            return {
+                success: true,
+                message: 'User has been successfully unblocked from the room'
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ UNBLOCK_USER failed: Error unblocking user ${userIdToUnblock} from room ${roomId} | Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                success: false,
+                message: error.message
+            }
+        }
+    }
+
+    /**
+     * Check if a user is blocked from a specific room
+     */
+    async isUserBlockedFromRoom(
+        roomId: string,
+        userId: string
+    ): Promise<boolean> {
+        const blockRecord = await this.roomBlockedUserRepository.findOne({
+            where: {
+                roomId: roomId,
+                userId: userId,
+                isActive: true
+            }
+        })
+
+        return !!blockRecord
+    }
+
+    /**
+     * Get blocked users for a room
+     */
+    async getRoomBlockedUsers(roomId: string): Promise<any[]> {
+        const blockedUsers = await this.roomBlockedUserRepository.find({
+            where: {
+                roomId: roomId,
+                isActive: true
+            },
+            relations: ['user', 'blockedByUser'],
+            order: { blockedAt: 'DESC' }
+        })
+
+        return blockedUsers.map((block) => ({
+            userId: block.userId,
+            userName: block.user?.name || block.user?.email || 'Unknown User',
+            userAvatar: block.user?.avatarUrl || null,
+            blockedBy: block.blockedBy,
+            blockedByName:
+                block.blockedByUser?.name ||
+                block.blockedByUser?.email ||
+                'Unknown User',
+            reason: block.reason,
+            blockedAt: block.blockedAt
+        }))
+    }
+
+    /**
+     * Filter rooms for a user (exclude blocked rooms)
+     */
+    async filterRoomsForUser(rooms: any[], userId?: string): Promise<any[]> {
+        if (!userId) {
+            return rooms
+        }
+
+        const blockedRoomIds = await this.roomBlockedUserRepository.find({
+            where: {
+                userId: userId,
+                isActive: true
+            },
+            select: ['roomId']
+        })
+
+        const blockedRoomIdSet = new Set(
+            blockedRoomIds.map((block) => block.roomId)
+        )
+
+        return rooms.filter(
+            (room) => !blockedRoomIdSet.has(room.roomId || room.uuid)
+        )
     }
 }

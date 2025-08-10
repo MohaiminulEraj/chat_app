@@ -9,6 +9,7 @@ import {
     Param,
     Post,
     Put,
+    Query,
     Request,
     UploadedFile,
     UseGuards,
@@ -1152,9 +1153,9 @@ export class RoomController {
             }
         }
     })
-    async getRecommendedRooms() {
+    async getRecommendedRooms(@Query('userId') userId?: string) {
         try {
-            const rooms = await this.roomService.getRecommendedRooms()
+            const rooms = await this.roomService.getRecommendedRooms(userId)
 
             return {
                 statusCode: HttpStatus.OK,
