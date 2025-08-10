@@ -30,7 +30,7 @@ export class AgoraService {
         channelName: string,
         userId: string,
         role: number,
-        expireSeconds = 3600
+        expireSeconds = 7200 // default to 2 hour
     ): string {
         const currentTimestamp = Math.floor(Date.now() / 1000)
         const privilegeExpire = currentTimestamp + expireSeconds

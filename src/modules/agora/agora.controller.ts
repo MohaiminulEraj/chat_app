@@ -105,7 +105,7 @@ export class AgoraController {
                 agoraRole
             )
 
-            const expireAt = new Date(Date.now() + 3600 * 1000) // Default 1 hour
+            const expireAt = new Date(Date.now() + 7200 * 1000) // Default 2 hour
 
             return {
                 statusCode: HttpStatus.OK,
