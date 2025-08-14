@@ -14,6 +14,7 @@ import {
 import { Server, Socket } from 'socket.io'
 import { ConversationService } from '../conversation/conversation.service'
 import { FriendshipService } from '../friendship/friendship.service'
+import { GroupChatService } from '../group/group-chat.service'
 import { GroupService } from '../group/group.service'
 import { UserService } from '../user/user.service'
 
@@ -54,6 +55,7 @@ export class SocketIOGateway
         private readonly conversationService: ConversationService,
         private readonly friendshipService: FriendshipService,
         private readonly groupService: GroupService,
+        private readonly groupChatService: GroupChatService,
         private readonly userService: UserService,
         private readonly configService: ConfigService
     ) {
@@ -958,13 +960,16 @@ export class SocketIOGateway
 
             this.logger.log(`💾 [GROUP_MESSAGE] Creating message in database`)
 
-            // Create group message - for now using conversation service with group type
-            const message = await this.conversationService.createMessage({
-                conversationId: `group:${data.groupId}`,
+            // Create group message using the dedicated group chat service
+            const message = await this.groupChatService.saveGroupMessage({
                 senderId: client.userUuid,
-                type: data.type as any,
+                senderName: client.userName,
+                senderAvatarUrl: client.userAvatarUrl || '',
+                groupId: data.groupId,
                 content: data.content,
-                fileUrl: data.fileUrl
+                messageType: data.type,
+                metadata: data.metadata,
+                replyToMessageId: data.replyToMessageId
             })
 
             // Count group members in room
@@ -1644,8 +1649,10 @@ export class SocketIOGateway
         groupId: string
     ): Promise<boolean> {
         try {
-            const members = await this.groupService.getGroupMembers(groupId)
-            return members.some((member) => member.userId === userId)
+            return await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
         } catch (error) {
             this.logger.error(
                 `Error checking group membership: ${error.message}`

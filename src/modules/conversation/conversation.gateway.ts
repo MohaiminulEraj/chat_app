@@ -34,7 +34,10 @@ export class ConversationGateway
     private userSocketMap = new Map<string, string>() // userId -> socketId
     private socketUserMap = new Map<string, string>() // socketId -> userId
 
-    constructor(private conversationService: ConversationService) {}
+    constructor(
+        private conversationService: ConversationService,
+        private jwtService: JwtService
+    ) {}
 
     async handleConnection(client: Socket) {
         this.logger.log(`Client connected: ${client.id}`)
@@ -75,11 +78,8 @@ export class ConversationGateway
         try {
             this.logger.log(`Authenticating client: ${client.id}`)
 
-            // Manually verify JWT if guard is not working
-            const jwtService = new JwtService({
-                secret: process.env.JWT_SECRET || 'your-secret-key'
-            })
-            const payload = await jwtService.verifyAsync(data.token)
+            // Use the injected JWT service
+            const payload = await this.jwtService.verifyAsync(data.token)
 
             const userId = payload.uuid
             client['user'] = payload
@@ -121,7 +121,7 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
+    // @UseGuards(WsJwtGuard)
     @SubscribeMessage('sendMessage')
     async handleMessage(
         @ConnectedSocket() client: Socket,
