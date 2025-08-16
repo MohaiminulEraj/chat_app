@@ -168,6 +168,10 @@ export class ConversationGateway
                 )
             }
 
+            // Get sender's full profile information
+            const senderProfile =
+                await this.conversationService.getUserProfile(senderId)
+
             // Save message to MongoDB
             const message = await this.conversationService.createMessage({
                 conversationId: conversation.uuid,
@@ -177,6 +181,28 @@ export class ConversationGateway
                 fileUrl: data.fileUrl,
                 replyTo: data.replyTo
             })
+
+            // Create enhanced message with sender profile
+            const enhancedMessage = {
+                ...message.toObject(),
+                sender: {
+                    id: senderId,
+                    uuid: senderId,
+                    name:
+                        senderProfile.displayName ||
+                        senderProfile.name ||
+                        'Unknown User',
+                    displayName:
+                        senderProfile.displayName || senderProfile.name,
+                    email: senderProfile.email,
+                    avatarUrl: senderProfile.avatarUrl,
+                    country: senderProfile.country,
+                    level: senderProfile.level || 0,
+                    badge: senderProfile.badge || [],
+                    frameId: senderProfile.frameId,
+                    frameImage: senderProfile.frameImage
+                }
+            }
 
             // Ensure all participants are in the conversation room
             conversation.participantIds.forEach((participantId) => {
@@ -196,7 +222,7 @@ export class ConversationGateway
                 }
             })
 
-            // Emit message to all participants
+            // Emit message to all participants with sender profile
             this.logger.log(
                 `Emitting newMessage to conversation room: conversation:${conversation.uuid}`
             )
@@ -204,10 +230,7 @@ export class ConversationGateway
                 .to(`conversation:${conversation.uuid}`)
                 .emit('newMessage', {
                     conversation: conversation.uuid,
-                    message: {
-                        ...message,
-                        senderName: client['user'].email || 'Unknown User' // Add sender name for better identification
-                    }
+                    message: enhancedMessage
                 })
 
             // Also emit to individual user rooms as fallback
@@ -222,10 +245,7 @@ export class ConversationGateway
                     )
                     this.server.to(`user:${participantId}`).emit('newMessage', {
                         conversation: conversation.uuid,
-                        message: {
-                            ...message,
-                            senderName: client['user'].email || 'Unknown User'
-                        }
+                        message: enhancedMessage
                     })
                 }
             })
@@ -239,7 +259,13 @@ export class ConversationGateway
 
             // TODO: Send push notifications to offline users
 
-            return { success: true, message }
+            // Return success response with enhanced message including sender profile
+            return {
+                success: true,
+                message: enhancedMessage,
+                conversation: conversation.uuid,
+                timestamp: new Date().toISOString()
+            }
         } catch (error) {
             return { success: false, error: error.message }
         }

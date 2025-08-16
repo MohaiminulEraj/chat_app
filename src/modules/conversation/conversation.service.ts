@@ -281,4 +281,31 @@ export class ConversationService {
             .andWhere('user.status != :status', { status: 'online' })
             .getMany()
     }
+
+    async getUserProfile(userId: string): Promise<User> {
+        const user = await this.userRepository.findOne({
+            where: { uuid: userId, isActive: true },
+            select: [
+                'uuid',
+                'name',
+                'email',
+                'displayName',
+                'avatarUrl',
+                'coverImage',
+                'country',
+                'level',
+                'balance',
+                'frameId',
+                'frameImage',
+                'badge',
+                'bio'
+            ]
+        })
+
+        if (!user) {
+            throw new NotFoundException('User not found')
+        }
+
+        return user
+    }
 }
