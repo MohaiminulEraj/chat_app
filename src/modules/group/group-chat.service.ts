@@ -243,6 +243,15 @@ export class GroupChatService {
         })
     }
 
+    async getUserRole(groupId: string, userId: string): Promise<string | null> {
+        const member = await this.groupMemberRepository.findOne({
+            where: { groupId, userId },
+            relations: ['role']
+        })
+
+        return member?.role?.name || null
+    }
+
     async getUnreadMessageCount(
         groupId: string,
         userId: string

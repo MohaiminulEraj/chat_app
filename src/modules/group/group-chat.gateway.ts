@@ -202,7 +202,13 @@ export class GroupChatGateway
             // Get sender's information from payload
             const senderId = sender._id
             const senderName = sender.name
-            const senderRole = sender.role || 'member'
+
+            // Get user's actual role from database instead of relying on payload
+            const userRole = await this.groupChatService.getUserRole(
+                groupId,
+                senderId
+            )
+            const senderRole = userRole || 'member'
 
             // Save message to MongoDB
             const message = await this.groupChatService.saveGroupMessage({
@@ -230,14 +236,15 @@ export class GroupChatGateway
                 avatar: avatar || '',
                 createdAt: messageObj.timestamp || messageObj.createdAt,
                 updatedAt: messageObj.updatedAt || messageObj.timestamp,
-                __v: messageObj.__v || 0
+                __v: messageObj.__v || 0,
+                userRole: senderRole // Add user's actual group role
             }
 
             // Send only one response event
             client.emit('sendGroupMessageResponse', response)
 
             this.logger.log(
-                `Group message sent by ${senderId} to group ${groupId}`
+                `Group message sent by ${senderId} (${senderRole}) to group ${groupId}`
             )
         } catch (error) {
             this.logger.error('Error sending group message:', error.message)
