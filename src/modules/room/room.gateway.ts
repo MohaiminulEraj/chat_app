@@ -3971,11 +3971,26 @@ export class RoomGateway
             isLocked: boolean
         }
     ) {
-        const userInfo = this.connectedUsers.get(client.id)
-        const userName = userInfo?.userName || 'Unknown User'
+        // Get validated user information
+        const validatedUser = await this.getUserInfo(client)
+
+        if (!validatedUser) {
+            const errorResponse = {
+                status: 'error',
+                message:
+                    'User information not available for seat lock operation',
+                seatIndex: data.seatIndex,
+                isLocked: false
+            }
+
+            client.emit('toggleSeatLockResponse', errorResponse)
+            return errorResponse
+        }
+
+        const { userId, userName } = validatedUser
 
         this.logger.log(
-            `🔒 TOGGLE_SEAT_LOCK: User ${userName} ${
+            `🔒 TOGGLE_SEAT_LOCK: User ${userName} (${userId}) ${
                 data.isLocked ? 'locking' : 'unlocking'
             } seat ${data.seatIndex} in room ${data.roomId}`
         )
@@ -3985,83 +4000,80 @@ export class RoomGateway
                 throw new Error('Room ID and seat index are required')
             }
 
-            // Check if seat is occupied before locking; do not kick, just block
-            if (data.isLocked) {
-                const currentSeats = await this.roomService.getRoomSeats(
-                    data.roomId
-                )
-                const targetSeat = currentSeats.find(
-                    (seat) => seat.index === data.seatIndex
-                )
-                if (!targetSeat) {
-                    throw new Error('Invalid seat index')
-                }
-                if (targetSeat.occupied) {
-                    this.logger.warn(
-                        `❌ TOGGLE_SEAT_LOCK blocked: Seat ${data.seatIndex} in room ${data.roomId} is occupied.`
-                    )
-                    client.emit('toggleSeatLockResponse', {
-                        seatIndex: data.seatIndex,
-                        isLocked: data.isLocked
-                    })
-                    return {
-                        seatIndex: data.seatIndex,
-                        isLocked: data.isLocked,
-                        error: 'Seat is occupied'
-                    }
-                }
+            // Verify user is in the room
+            const roomName = `room:${data.roomId}`
+            const isInSocketRoom = client.rooms.has(roomName)
+
+            if (!isInSocketRoom) {
+                throw new Error('You must be in the room to toggle seat locks')
             }
 
-            // Record lock with host identity
-            const roomDetails = await this.roomService.getRoomDetails(
-                data.roomId
-            )
-            const hostId = roomDetails.hostId
-
-            await this.roomService.toggleSeatLock(
+            // Call the room service to toggle seat lock
+            const result = await this.roomService.toggleSeatLock(
                 data.roomId,
                 data.seatIndex,
                 data.isLocked,
-                hostId
+                userId
             )
 
-            // Update seat state in memory (no broadcast per request)
+            if (!result.success) {
+                throw new Error('Failed to toggle seat lock')
+            }
+
+            // Update seat state in memory
             await this.updateRoomSeatsState(data.roomId)
+
+            // Get updated seats for response
+            const updatedSeats = await this.roomService.getRoomSeats(
+                data.roomId
+            )
 
             this.logger.log(
                 `✅ TOGGLE_SEAT_LOCK success: Seat ${data.seatIndex} ${
                     data.isLocked ? 'locked' : 'unlocked'
-                } in room ${data.roomId}`
+                } in room ${data.roomId} by ${userName} (${userId})`
             )
 
-            // No userId usage requested for this event
-
-            // Emit direct response to the requester in the requested format
-            client.emit('toggleSeatLockResponse', {
+            // Emit single response with all necessary data
+            const successResponse = {
+                status: 'success',
+                roomId: data.roomId,
                 seatIndex: data.seatIndex,
-                isLocked: data.isLocked
-            })
-
-            return {
-                seatIndex: data.seatIndex,
-                isLocked: data.isLocked
+                isLocked: data.isLocked,
+                message: `Seat ${data.seatIndex} ${data.isLocked ? 'locked' : 'unlocked'} successfully`,
+                seats: updatedSeats,
+                lockedBy: {
+                    userId: userId,
+                    userName: userName
+                },
+                timestamp: new Date().toISOString()
             }
+
+            client.emit('toggleSeatLockResponse', successResponse)
+
+            // Track user activity
+            this.trackUserActivity(userId, 'seatActions')
+
+            return successResponse
         } catch (error) {
             this.logger.error(
-                `❌ TOGGLE_SEAT_LOCK failed: ${error.message}`,
+                `❌ TOGGLE_SEAT_LOCK failed: User ${userName} (${userId}) failed to toggle seat lock | ` +
+                    `RoomId: ${data.roomId}, SeatIndex: ${data.seatIndex}, isLocked: ${data.isLocked} | ` +
+                    `Error: ${error.message}`,
                 error.stack
             )
 
-            // Emit error response to the requester with isLocked=false
-            client.emit('toggleSeatLockResponse', {
+            // Emit error response to the requester
+            const errorResponse = {
+                status: 'error',
+                message: error.message,
                 seatIndex: data.seatIndex,
-                isLocked: data.isLocked
-            })
-            return {
-                seatIndex: data.seatIndex,
-                isLocked: data.isLocked, // Return false on error as seat lock operation failed
+                isLocked: false, // Reset to false on error
                 error: error.message
             }
+
+            client.emit('toggleSeatLockResponse', errorResponse)
+            return errorResponse
         }
     }
 
