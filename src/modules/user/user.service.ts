@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
-import { Repository } from 'typeorm'
+import { Repository, Not } from 'typeorm'
 import {
     paginate,
     Pagination,
@@ -15,16 +15,25 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { CreateUserDto } from './dto/create-user.dto'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { User } from './entities/user.entity'
+import { ProfileVisit } from './entities/profile-visit.entity'
 import {
     UserAchievementData,
     AchievementItem
 } from './interfaces/achievement.interface'
+import {
+    Friendship,
+    FriendshipStatus
+} from '../friendship/entities/friendship.entity'
 
 @Injectable()
 export class UserService {
     constructor(
         @InjectRepository(User)
         private userRepository: Repository<User>,
+        @InjectRepository(Friendship)
+        private friendshipRepository: Repository<Friendship>,
+        @InjectRepository(ProfileVisit)
+        private profileVisitRepository: Repository<ProfileVisit>,
         private cloudinaryService: CloudinaryService
     ) {}
 
@@ -72,6 +81,20 @@ export class UserService {
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`)
         }
+        return user
+    }
+
+    async findOneWithVisitTracking(
+        id: string,
+        visitorId?: string
+    ): Promise<User> {
+        const user = await this.findOne(id)
+
+        // Record the visit if visitorId is provided and different from the profile owner
+        if (visitorId && visitorId !== id) {
+            await this.recordProfileVisit(visitorId, id)
+        }
+
         return user
     }
 
@@ -260,6 +283,32 @@ export class UserService {
             throw new NotFoundException('User not found')
         }
 
+        // Get friends (accepted friendships)
+        const friendships = await this.friendshipRepository.find({
+            where: [
+                { userId: userId, status: FriendshipStatus.ACCEPTED },
+                { friendId: userId, status: FriendshipStatus.ACCEPTED }
+            ]
+        })
+
+        // Get followers (people who sent friend requests to this user)
+        const followerFriendships = await this.friendshipRepository.find({
+            where: { friendId: userId, status: FriendshipStatus.ACCEPTED }
+        })
+
+        // Get following (people this user sent friend requests to)
+        const followingFriendships = await this.friendshipRepository.find({
+            where: { userId: userId, status: FriendshipStatus.ACCEPTED }
+        })
+
+        // Get visitor count (exclude the user himself)
+        const visitorCount = await this.profileVisitRepository.count({
+            where: {
+                visitedUserId: userId,
+                visitorId: Not(userId) // Exclude visits from the user himself
+            }
+        })
+
         // Transform the data to match the required JSON structure
         return {
             _id: user.uuid,
@@ -276,7 +325,11 @@ export class UserService {
             badge: user.badge || [],
             gift: user.purchasedGifts || [],
             entryEffect: user.entryEffects || [],
-            frame: user.frames || []
+            frame: user.frames || [],
+            friend: friendships.length,
+            follower: followerFriendships.length,
+            following: followingFriendships.length,
+            visitorCount: visitorCount
         }
     }
 
@@ -323,5 +376,39 @@ export class UserService {
 
         const savedUser = await this.userRepository.save(user)
         return Array.isArray(savedUser) ? savedUser[0] : savedUser
+    }
+
+    async recordProfileVisit(
+        visitorId: string,
+        visitedUserId: string
+    ): Promise<void> {
+        // Don't record if user is visiting their own profile
+        if (visitorId === visitedUserId) {
+            return
+        }
+
+        try {
+            // Check if visit already exists
+            const existingVisit = await this.profileVisitRepository.findOne({
+                where: { visitorId, visitedUserId }
+            })
+
+            if (existingVisit) {
+                // Update last visit time
+                existingVisit.lastVisitAt = new Date()
+                await this.profileVisitRepository.save(existingVisit)
+            } else {
+                // Create new visit record
+                const visit = this.profileVisitRepository.create({
+                    visitorId,
+                    visitedUserId,
+                    lastVisitAt: new Date()
+                })
+                await this.profileVisitRepository.save(visit)
+            }
+        } catch (error) {
+            // Log error but don't throw - profile visits shouldn't break the main functionality
+            console.error('Failed to record profile visit:', error)
+        }
     }
 }

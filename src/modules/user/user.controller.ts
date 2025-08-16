@@ -8,6 +8,7 @@ import {
     Param,
     ParseIntPipe,
     Patch,
+    Post,
     Query,
     Request,
     UploadedFile,
@@ -297,6 +298,23 @@ export class UserController {
                                     count: { type: 'number' }
                                 }
                             }
+                        },
+                        friend: {
+                            type: 'number',
+                            description: 'Number of friends'
+                        },
+                        follower: {
+                            type: 'number',
+                            description: 'Number of followers'
+                        },
+                        following: {
+                            type: 'number',
+                            description: 'Number of people being followed'
+                        },
+                        visitorCount: {
+                            type: 'number',
+                            description:
+                                'Number of unique visitors to the profile'
                         }
                     }
                 }
@@ -345,6 +363,33 @@ export class UserController {
         }
     }
 
+    @Post('visit/:id')
+    @ApiOperation({
+        summary: 'Record profile visit',
+        description:
+            "Record that the current user visited another user's profile"
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'UUID of the user whose profile was visited',
+        example: '123e4567-e89b-12d3-a456-426614174000'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Profile visit recorded successfully'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async recordVisit(@Request() req, @Param('id') visitedUserId: string) {
+        await this.userService.recordProfileVisit(req.user.uuid, visitedUserId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Profile visit recorded successfully'
+        }
+    }
+
     @Get(':id')
     @ApiOperation({
         summary: 'Get user by ID',
@@ -364,11 +409,14 @@ export class UserController {
         status: HttpStatus.NOT_FOUND,
         description: 'User not found'
     })
-    async findOne(@Param('id') id: string) {
+    async findOne(@Request() req, @Param('id') id: string) {
         return {
             statusCode: HttpStatus.OK,
             message: 'User fetched successfully',
-            data: await this.userService.findOne(id)
+            data: await this.userService.findOneWithVisitTracking(
+                id,
+                req.user?.uuid
+            )
         }
     }
 

@@ -22,4 +22,8 @@ export interface UserAchievementData {
     gift: AchievementItem[]
     entryEffect: AchievementItem[]
     frame: AchievementItem[]
+    friend: number
+    follower: number
+    following: number
+    visitorCount: number
 }
