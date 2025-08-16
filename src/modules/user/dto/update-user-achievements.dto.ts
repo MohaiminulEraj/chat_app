@@ -127,4 +127,28 @@ export class UpdateUserAchievementsDto {
     @IsArray()
     @IsString({ each: true })
     badge?: string[]
+
+    @ApiProperty({
+        description: 'User display name',
+        required: false
+    })
+    @IsOptional()
+    @IsString()
+    displayName?: string
+
+    @ApiProperty({
+        description: 'User bio',
+        required: false
+    })
+    @IsOptional()
+    @IsString()
+    bio?: string
+
+    @ApiProperty({
+        description: 'User country',
+        required: false
+    })
+    @IsOptional()
+    @IsString()
+    country?: string
 }

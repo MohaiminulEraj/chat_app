@@ -12,10 +12,14 @@ import {
     Query,
     Request,
     UploadedFile,
+    UploadedFiles,
     UseGuards,
     UseInterceptors
 } from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
+import {
+    FileFieldsInterceptor,
+    FileInterceptor
+} from '@nestjs/platform-express'
 import {
     ApiBearerAuth,
     ApiBody,
@@ -337,9 +341,54 @@ export class UserController {
     @ApiOperation({
         summary: 'Update user achievement data',
         description:
-            'Update user achievement data including purchased gifts, entry effects, and frames'
+            'Update user achievement data including purchased gifts, entry effects, frames, and upload image/cover image'
     })
-    @ApiBody({ type: UpdateUserAchievementsDto })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                // Achievement fields
+                purchasedGifts: {
+                    type: 'string',
+                    description: 'JSON string of purchased gifts array'
+                },
+                entryEffects: {
+                    type: 'string',
+                    description: 'JSON string of entry effects array'
+                },
+                frames: {
+                    type: 'string',
+                    description: 'JSON string of frames array'
+                },
+                level: { type: 'number', description: 'User level' },
+                balance: { type: 'number', description: 'User balance' },
+                frameId: { type: 'string', description: 'Frame ID' },
+                frameImage: { type: 'string', description: 'Frame image URL' },
+                badge: {
+                    type: 'string',
+                    description: 'JSON string of badges array'
+                },
+                // Profile fields
+                displayName: { type: 'string', description: 'Display name' },
+                bio: { type: 'string', description: 'User bio' },
+                country: { type: 'string', description: 'User country' },
+                // File uploads
+                image: {
+                    type: 'string',
+                    format: 'binary',
+                    description:
+                        'User profile image (supports JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO formats, max 10MB)'
+                },
+                coverImage: {
+                    type: 'string',
+                    format: 'binary',
+                    description:
+                        'User cover image (supports JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO formats, max 10MB)'
+                }
+            }
+        }
+    })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'User achievement data updated successfully',
@@ -349,16 +398,113 @@ export class UserController {
         status: HttpStatus.NOT_FOUND,
         description: 'User not found'
     })
+    @UseInterceptors(
+        FileFieldsInterceptor(
+            [
+                { name: 'image', maxCount: 1 },
+                { name: 'coverImage', maxCount: 1 }
+            ],
+            {
+                fileFilter: (req, file, cb) => {
+                    // Accept all common image formats including modern formats
+                    const allowedMimeTypes = [
+                        'image/jpeg',
+                        'image/jpg',
+                        'image/png',
+                        'image/gif',
+                        'image/webp',
+                        'image/bmp',
+                        'image/tiff',
+                        'image/tif',
+                        'image/svg+xml',
+                        'image/avif',
+                        'image/heic',
+                        'image/heif',
+                        'image/ico',
+                        'image/x-icon'
+                    ]
+
+                    if (!allowedMimeTypes.includes(file.mimetype)) {
+                        return cb(
+                            new BadRequestException(
+                                `Unsupported file type: ${file.mimetype}. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO`
+                            ),
+                            false
+                        )
+                    }
+                    cb(null, true)
+                },
+                limits: {
+                    fileSize: 10 * 1024 * 1024 // 10MB limit
+                }
+            }
+        )
+    )
     async updateAchievement(
         @Request() req,
-        @Body() updateDto: UpdateUserAchievementsDto
+        @Body() updateDto: UpdateUserAchievementsDto,
+        @UploadedFiles()
+        files?: {
+            image?: Express.Multer.File[]
+            coverImage?: Express.Multer.File[]
+        }
     ) {
+        // Parse JSON fields if they are strings
+        const parsedData = { ...updateDto }
+
+        if (typeof updateDto.purchasedGifts === 'string') {
+            try {
+                parsedData.purchasedGifts = JSON.parse(
+                    updateDto.purchasedGifts as any
+                )
+            } catch (error) {
+                throw new BadRequestException(
+                    'Invalid purchasedGifts JSON format'
+                )
+            }
+        }
+
+        if (typeof updateDto.entryEffects === 'string') {
+            try {
+                parsedData.entryEffects = JSON.parse(
+                    updateDto.entryEffects as any
+                )
+            } catch (error) {
+                throw new BadRequestException(
+                    'Invalid entryEffects JSON format'
+                )
+            }
+        }
+
+        if (typeof updateDto.frames === 'string') {
+            try {
+                parsedData.frames = JSON.parse(updateDto.frames as any)
+            } catch (error) {
+                throw new BadRequestException('Invalid frames JSON format')
+            }
+        }
+
+        if (typeof updateDto.badge === 'string') {
+            try {
+                parsedData.badge = JSON.parse(updateDto.badge as any)
+            } catch (error) {
+                throw new BadRequestException('Invalid badge JSON format')
+            }
+        }
+
+        // Prepare file objects for service
+        const fileUploads = {
+            image: files?.image?.[0],
+            coverImage: files?.coverImage?.[0]
+        }
+
         return {
             statusCode: HttpStatus.OK,
             message: 'User achievement data updated successfully',
             data: await this.userService.updateUserAchievements(
                 req.user.uuid,
-                updateDto
+                parsedData,
+                fileUploads
             )
         }
     }
