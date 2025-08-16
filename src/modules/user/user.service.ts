@@ -15,6 +15,10 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { CreateUserDto } from './dto/create-user.dto'
 import { UpdateUserDto } from './dto/update-user.dto'
 import { User } from './entities/user.entity'
+import {
+    UserAchievementData,
+    AchievementItem
+} from './interfaces/achievement.interface'
 
 @Injectable()
 export class UserService {
@@ -228,5 +232,96 @@ export class UserService {
                 'user.status'
             ])
             .getMany()
+    }
+
+    async getUserAchievementData(userId: string): Promise<UserAchievementData> {
+        const user = await this.userRepository.findOne({
+            where: { uuid: userId, isActive: true },
+            select: [
+                'uuid',
+                'name',
+                'email',
+                'displayName',
+                'avatarUrl',
+                'coverImage',
+                'country',
+                'level',
+                'balance',
+                'frameId',
+                'frameImage',
+                'badge',
+                'purchasedGifts',
+                'entryEffects',
+                'frames'
+            ]
+        })
+
+        if (!user) {
+            throw new NotFoundException('User not found')
+        }
+
+        // Transform the data to match the required JSON structure
+        return {
+            _id: user.uuid,
+            userId: user.uuid,
+            name: user.displayName || user.name || '',
+            country: user.country || '',
+            email: user.email,
+            image: user.avatarUrl || '',
+            coverImage: user.coverImage || '',
+            level: user.level || 0,
+            balance: user.balance || 0,
+            frameId: user.frameId || null,
+            frameImage: user.frameImage || null,
+            badge: user.badge || [],
+            gift: user.purchasedGifts || [],
+            entryEffect: user.entryEffects || [],
+            frame: user.frames || []
+        }
+    }
+
+    async updateUserAchievements(
+        userId: string,
+        achievementUpdates: {
+            purchasedGifts?: AchievementItem[]
+            entryEffects?: AchievementItem[]
+            frames?: AchievementItem[]
+            level?: number
+            balance?: number
+            frameId?: string
+            frameImage?: string
+            badge?: string[]
+        }
+    ): Promise<User> {
+        const user = await this.findOne(userId)
+
+        // Update achievement fields
+        if (achievementUpdates.purchasedGifts !== undefined) {
+            user.purchasedGifts = achievementUpdates.purchasedGifts
+        }
+        if (achievementUpdates.entryEffects !== undefined) {
+            user.entryEffects = achievementUpdates.entryEffects
+        }
+        if (achievementUpdates.frames !== undefined) {
+            user.frames = achievementUpdates.frames
+        }
+        if (achievementUpdates.level !== undefined) {
+            user.level = achievementUpdates.level
+        }
+        if (achievementUpdates.balance !== undefined) {
+            user.balance = achievementUpdates.balance
+        }
+        if (achievementUpdates.frameId !== undefined) {
+            user.frameId = achievementUpdates.frameId
+        }
+        if (achievementUpdates.frameImage !== undefined) {
+            user.frameImage = achievementUpdates.frameImage
+        }
+        if (achievementUpdates.badge !== undefined) {
+            user.badge = achievementUpdates.badge
+        }
+
+        const savedUser = await this.userRepository.save(user)
+        return Array.isArray(savedUser) ? savedUser[0] : savedUser
     }
 }

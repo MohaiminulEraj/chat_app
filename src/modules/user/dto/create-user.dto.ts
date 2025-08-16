@@ -58,4 +58,22 @@ export class CreateUserDto {
     @IsString()
     @IsOptional()
     bio?: string
+
+    @ApiProperty({
+        example: 'https://example.com/cover.jpg',
+        description: 'Cover image URL',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    coverImage?: string
+
+    @ApiProperty({
+        example: 'United States',
+        description: 'User country',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    country?: string
 }

@@ -27,6 +27,7 @@ import {
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { UpdateUserDto } from './dto/update-user.dto'
+import { UpdateUserAchievementsDto } from './dto/update-user-achievements.dto'
 import { User } from './entities/user.entity'
 import { UserService } from './user.service'
 import { IPaginationOptions } from 'nestjs-typeorm-paginate'
@@ -223,6 +224,124 @@ export class UserController {
             statusCode: HttpStatus.OK,
             message: 'User profile fetched successfully',
             data: await this.userService.findOne(req.user.uuid)
+        }
+    }
+
+    @Get('achievement')
+    @ApiOperation({
+        summary: 'Get user achievement data',
+        description:
+            'Get user achievement data including purchased gifts, entry effects, and frames'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'User achievement data retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'User achievement data fetched successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        _id: { type: 'string' },
+                        userId: { type: 'string' },
+                        name: { type: 'string' },
+                        country: { type: 'string' },
+                        email: { type: 'string' },
+                        image: { type: 'string' },
+                        coverImage: { type: 'string' },
+                        level: { type: 'number' },
+                        balance: { type: 'number' },
+                        frameId: { type: 'string', nullable: true },
+                        frameImage: { type: 'string', nullable: true },
+                        badge: { type: 'array', items: { type: 'string' } },
+                        gift: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        },
+                        entryEffect: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        },
+                        frame: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async getAchievement(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'User achievement data fetched successfully',
+            data: await this.userService.getUserAchievementData(req.user.uuid)
+        }
+    }
+
+    @Patch('achievement')
+    @ApiOperation({
+        summary: 'Update user achievement data',
+        description:
+            'Update user achievement data including purchased gifts, entry effects, and frames'
+    })
+    @ApiBody({ type: UpdateUserAchievementsDto })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'User achievement data updated successfully',
+        type: User
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async updateAchievement(
+        @Request() req,
+        @Body() updateDto: UpdateUserAchievementsDto
+    ) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'User achievement data updated successfully',
+            data: await this.userService.updateUserAchievements(
+                req.user.uuid,
+                updateDto
+            )
         }
     }
 
