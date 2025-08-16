@@ -231,6 +231,7 @@ export class GroupChatService {
             email: member.user.email,
             avatarUrl: member.user.avatarUrl,
             role: member.role.name,
+            userRole: member.role.name, // Add userRole for consistency
             joinedAt: member.joinedAt,
             isMuted: member.isMuted
         }))
