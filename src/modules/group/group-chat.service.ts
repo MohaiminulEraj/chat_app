@@ -96,27 +96,29 @@ export class GroupChatService {
     }
 
     async getGroupMessageHistory(
-        groupId: string,
-        page: number = 1,
-        limit: number = 50,
-        before?: string
+        groupId: string
+        // page: number = 1,
+        // limit: number = 50,
+        // before?: string
     ): Promise<GroupMessageDocument[]> {
         const MessageModel = this.getGroupMessageCollection(groupId)
 
         let query: any = { isDeleted: false }
 
-        if (before) {
-            const beforeMessage = await MessageModel.findById(before)
-            if (beforeMessage) {
-                query.timestamp = { $lt: beforeMessage.timestamp }
-            }
-        }
+        // if (before) {
+        //     const beforeMessage = await MessageModel.findById(before)
+        //     if (beforeMessage) {
+        //         query.timestamp = { $lt: beforeMessage.timestamp }
+        //     }
+        // }
+
+        // return await MessageModel.find(query)
+        //     .sort({ timestamp: -1 })
+        //     .limit(limit)
+        //     .skip((page - 1) * limit)
+        //     .exec()
 
         return await MessageModel.find(query)
-            .sort({ timestamp: -1 })
-            .limit(limit)
-            .skip((page - 1) * limit)
-            .exec()
     }
 
     async markMessagesAsRead(

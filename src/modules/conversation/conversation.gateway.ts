@@ -128,6 +128,7 @@ export class ConversationGateway
         @MessageBody()
         data: {
             conversationId?: string
+            senderId?: string
             recipientId?: string
             type: MessageType
             content?: string
@@ -135,7 +136,7 @@ export class ConversationGateway
             replyTo?: string
         }
     ) {
-        const senderId = client['user'].uuid
+        const senderId = data.senderId ?? client['user'].uuid
 
         try {
             this.logger.log(`User ${senderId} attempting to send message`)

@@ -35,10 +35,10 @@ export class GroupChatController {
     })
     async getGroupMessages(
         @Param('groupId') groupId: string,
-        @Request() req: any,
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 50,
-        @Query('before') before?: string
+        @Request() req: any
+        // @Query('page') page: number = 1,
+        // @Query('limit') limit: number = 50,
+        // @Query('before') before?: string
     ) {
         // Verify user is member of the group
         const isMember = await this.groupChatService.verifyGroupMembership(
@@ -54,20 +54,20 @@ export class GroupChatController {
         }
 
         const messages = await this.groupChatService.getGroupMessageHistory(
-            groupId,
-            page,
-            limit,
-            before
+            groupId
+            // page,
+            // limit,
+            // before
         )
 
         return {
             statusCode: HttpStatus.OK,
             message: 'Messages retrieved successfully',
             data: {
-                messages,
-                page,
-                limit,
-                hasMore: messages.length === limit
+                messages
+                // page,
+                // limit,
+                // hasMore: messages.length === limit
             }
         }
     }
