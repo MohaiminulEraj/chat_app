@@ -344,9 +344,99 @@ export class UserService {
             frameId?: string
             frameImage?: string
             badge?: string[]
+            displayName?: string
+            bio?: string
+            country?: string
+        },
+        files?: {
+            image?: Express.Multer.File
+            coverImage?: Express.Multer.File
         }
     ): Promise<User> {
         const user = await this.findOne(userId)
+
+        // Handle image upload if file is provided
+        if (files?.image) {
+            // Delete old avatar if exists
+            if (user.avatarUrl) {
+                try {
+                    // Extract public_id from the URL
+                    const urlParts = user.avatarUrl.split('/')
+                    const publicIdWithExtension = urlParts[urlParts.length - 1]
+                    const publicId = publicIdWithExtension.split('.')[0]
+                    const folderPath = urlParts.slice(-2, -1)[0]
+                    await this.cloudinaryService.deleteFile(
+                        `${folderPath}/${publicId}`
+                    )
+                } catch (error) {
+                    console.error('Failed to delete old avatar:', error)
+                    // Don't throw here, continue with upload
+                }
+            }
+
+            try {
+                // Upload new avatar
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                    files.image,
+                    {
+                        folder:
+                            (process.env.CLOUDINARY_FOLDER ?? 'kitty') +
+                            '/avatars',
+                        transformation: {
+                            width: 500,
+                            height: 500,
+                            crop: 'fill',
+                            gravity: 'face'
+                        }
+                    }
+                )
+                user.avatarUrl = uploadResult.secure_url
+            } catch (error) {
+                console.error('Failed to upload avatar:', error)
+                throw new ConflictException('Failed to upload avatar image')
+            }
+        }
+
+        // Handle cover image upload if file is provided
+        if (files?.coverImage) {
+            // Delete old cover image if exists
+            if (user.coverImage) {
+                try {
+                    // Extract public_id from the URL
+                    const urlParts = user.coverImage.split('/')
+                    const publicIdWithExtension = urlParts[urlParts.length - 1]
+                    const publicId = publicIdWithExtension.split('.')[0]
+                    const folderPath = urlParts.slice(-2, -1)[0]
+                    await this.cloudinaryService.deleteFile(
+                        `${folderPath}/${publicId}`
+                    )
+                } catch (error) {
+                    console.error('Failed to delete old cover image:', error)
+                    // Don't throw here, continue with upload
+                }
+            }
+
+            try {
+                // Upload new cover image
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                    files.coverImage,
+                    {
+                        folder:
+                            (process.env.CLOUDINARY_FOLDER ?? 'kitty') +
+                            '/covers',
+                        transformation: {
+                            width: 1200,
+                            height: 400,
+                            crop: 'fill'
+                        }
+                    }
+                )
+                user.coverImage = uploadResult.secure_url
+            } catch (error) {
+                console.error('Failed to upload cover image:', error)
+                throw new ConflictException('Failed to upload cover image')
+            }
+        }
 
         // Update achievement fields
         if (achievementUpdates.purchasedGifts !== undefined) {
@@ -372,6 +462,15 @@ export class UserService {
         }
         if (achievementUpdates.badge !== undefined) {
             user.badge = achievementUpdates.badge
+        }
+        if (achievementUpdates.displayName !== undefined) {
+            user.displayName = achievementUpdates.displayName
+        }
+        if (achievementUpdates.bio !== undefined) {
+            user.bio = achievementUpdates.bio
+        }
+        if (achievementUpdates.country !== undefined) {
+            user.country = achievementUpdates.country
         }
 
         const savedUser = await this.userRepository.save(user)
