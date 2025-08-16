@@ -7,6 +7,7 @@ import {
     HttpException,
     HttpStatus,
     Param,
+    Patch,
     Post,
     Put,
     Query,
@@ -34,7 +35,7 @@ import {
     ToggleSeatLockDto
 } from './dto/seat-management.dto'
 import { JoinRoomDto } from './dto/join-room.dto'
-import { UpdateRoomDto } from './dto/update-room.dto'
+import { UpdateRoomDto, UpdateRoomWithFileDto } from './dto/update-room.dto'
 import { UploadRoomAvatarDto } from './dto/upload-room-avatar.dto'
 import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole } from './entities/room-role.entity'
@@ -653,27 +654,106 @@ export class RoomController {
         }
     }
 
-    @Put(':id')
+    @Patch(':id')
     @ApiOperation({
         summary: 'Update room',
-        description: 'Update room settings and configuration'
+        description:
+            'Update room settings and configuration with optional avatar upload'
     })
     @ApiParam({
         name: 'id',
         description: 'Room UUID'
     })
-    @ApiBody({ type: UpdateRoomDto })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({ type: UpdateRoomWithFileDto })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'Room updated successfully',
-        type: Room
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room updated successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        uuid: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        type: { type: 'string' },
+                        maxSeats: { type: 'number' },
+                        isLocked: { type: 'boolean' },
+                        isActive: { type: 'boolean' },
+                        roomAvatarUrl: { type: 'string', nullable: true },
+                        updatedAt: { type: 'string', format: 'date-time' }
+                    }
+                }
+            }
+        }
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: 'Room not found'
     })
-    update(@Param('id') roomId: string, @Body() updateRoomDto: UpdateRoomDto) {
-        return this.roomService.updateRoom(roomId, updateRoomDto)
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid room data or file upload error'
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Insufficient permissions to update room'
+    })
+    @UseInterceptors(FileInterceptor('file'))
+    async update(
+        @Param('id') roomId: string,
+        @Body() updateRoomDto: UpdateRoomWithFileDto,
+        @UploadedFile() file?: Express.Multer.File,
+        @Request() req?: any
+    ) {
+        try {
+            const currentUserId = req.user?.uuid || req.user?.id
+
+            if (!currentUserId) {
+                throw new BadRequestException('User ID is required')
+            }
+
+            // Prepare update data
+            const updateData: any = { ...updateRoomDto }
+
+            // Handle file upload if provided
+            if (file) {
+                const avatarResult = await this.roomService.uploadRoomAvatar(
+                    roomId,
+                    file,
+                    currentUserId
+                )
+                updateData.roomAvatarUrl = avatarResult.roomAvatarUrl
+            }
+
+            // Remove file from update data as it's handled separately
+            delete updateData.file
+
+            const updatedRoom = await this.roomService.updateRoom(
+                roomId,
+                updateData
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Room updated successfully',
+                data: updatedRoom
+            }
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error
+            }
+            throw new BadRequestException(
+                error.message || 'Failed to update room'
+            )
+        }
     }
 
     @Delete(':id')
@@ -693,8 +773,8 @@ export class RoomController {
         status: HttpStatus.NOT_FOUND,
         description: 'Room not found'
     })
-    delete(@Param('id') roomId: string) {
-        return this.roomService.deleteRoom(roomId)
+    async delete(@Param('id') roomId: string) {
+        return await this.roomService.deleteRoom(roomId)
     }
 
     @Post(':id/assign-role')
@@ -716,12 +796,12 @@ export class RoomController {
         status: HttpStatus.FORBIDDEN,
         description: 'Insufficient permissions to assign role'
     })
-    assignRole(
+    async assignRole(
         @Param('id') roomId: string,
         @Body() assignRoleDto: AssignRoomRoleDto,
         @Request() req: any
     ) {
-        return this.roomService.assignRoomRole(
+        return await this.roomService.assignRoomRole(
             roomId,
             assignRoleDto.userId,
             assignRoleDto.role,
@@ -748,12 +828,12 @@ export class RoomController {
         status: HttpStatus.FORBIDDEN,
         description: 'Only room owner can transfer ownership'
     })
-    transferOwnership(
+    async transferOwnership(
         @Param('id') roomId: string,
         @Body() transferDto: TransferOwnershipDto,
         @Request() req: any
     ) {
-        return this.roomService.transferRoomOwnership(
+        return await this.roomService.transferRoomOwnership(
             roomId,
             transferDto.newOwnerId,
             req.user.uuid
@@ -784,8 +864,11 @@ export class RoomController {
             }
         }
     })
-    getUserRoles(@Param('id') roomId: string, @Param('userId') userId: string) {
-        return this.roomService.getUserRolesInRoom(roomId, userId)
+    async getUserRoles(
+        @Param('id') roomId: string,
+        @Param('userId') userId: string
+    ) {
+        return await this.roomService.getUserRolesInRoom(roomId, userId)
     }
 
     @Get(':id/comments')

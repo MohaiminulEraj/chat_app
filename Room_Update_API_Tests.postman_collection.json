@@ -1,0 +1,173 @@
+{
+    "info": {
+        "name": "Room Update API Tests",
+        "description": "Test collection for the updated room PATCH endpoint with multi-part form data support",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Update Room - Text Only",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "name",
+                            "value": "Updated Room Name",
+                            "type": "text"
+                        },
+                        {
+                            "key": "description",
+                            "value": "This is an updated room description",
+                            "type": "text"
+                        },
+                        {
+                            "key": "maxSeats",
+                            "value": "8",
+                            "type": "text"
+                        },
+                        {
+                            "key": "isLocked",
+                            "value": "false",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{base_url}}/rooms/{{room_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["rooms", "{{room_id}}"]
+                }
+            }
+        },
+        {
+            "name": "Update Room - With Avatar",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "name",
+                            "value": "Room with New Avatar",
+                            "type": "text"
+                        },
+                        {
+                            "key": "description",
+                            "value": "Room updated with both text and avatar",
+                            "type": "text"
+                        },
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "path/to/your/avatar.jpg"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{base_url}}/rooms/{{room_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["rooms", "{{room_id}}"]
+                }
+            }
+        },
+        {
+            "name": "Update Room - Avatar Only",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "src": "path/to/your/avatar.jpg"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{base_url}}/rooms/{{room_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["rooms", "{{room_id}}"]
+                }
+            }
+        },
+        {
+            "name": "Update Room - Private Settings",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{jwt_token}}",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "isPrivate",
+                            "value": "true",
+                            "type": "text"
+                        },
+                        {
+                            "key": "password",
+                            "value": "secretPassword123",
+                            "type": "text"
+                        },
+                        {
+                            "key": "isLocked",
+                            "value": "true",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "{{base_url}}/rooms/{{room_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["rooms", "{{room_id}}"]
+                }
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3000",
+            "type": "string"
+        },
+        {
+            "key": "jwt_token",
+            "value": "your-jwt-token-here",
+            "type": "string"
+        },
+        {
+            "key": "room_id",
+            "value": "your-room-id-here",
+            "type": "string"
+        }
+    ]
+}
