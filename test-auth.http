@@ -1,0 +1,23 @@
+### Test API is working
+GET http://localhost:3000/api/v1/auth/test
+
+### Login
+POST http://localhost:3000/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "emailOrPhone": "faysal@mobile.com",
+  "password": "your-password"
+}
+
+### Test with token (replace YOUR_TOKEN with the actual token from login response)
+GET http://localhost:3000/api/v1/auth/test-auth
+Authorization: Bearer YOUR_TOKEN
+
+### Get current user
+GET http://localhost:3000/api/v1/auth/me
+Authorization: Bearer YOUR_TOKEN
+
+### Test groups endpoint
+GET http://localhost:3000/api/v1/groups
+Authorization: Bearer YOUR_TOKEN

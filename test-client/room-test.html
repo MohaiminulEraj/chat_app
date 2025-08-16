@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Room Gateway Test</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+            .panel {
+                border: 1px solid #ddd;
+                padding: 15px;
+                border-radius: 5px;
+            }
+            .status {
+                padding: 5px 10px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            .status.connected {
+                background-color: #d4edda;
+                color: #155724;
+            }
+            .status.disconnected {
+                background-color: #f8d7da;
+                color: #721c24;
+            }
+            .log {
+                height: 300px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                padding: 10px;
+                background-color: #f8f9fa;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            button {
+                padding: 8px 15px;
+                margin: 5px;
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+                background-color: #007bff;
+                color: white;
+            }
+            button:disabled {
+                background-color: #6c757d;
+                cursor: not-allowed;
+            }
+            input,
+            select {
+                padding: 5px;
+                margin: 5px;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+            }
+            .emoji-btn {
+                font-size: 18px;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                margin: 2px;
+            }
+            .controls {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: center;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🏠 Room Gateway Test Client</h1>
+
+        <div class="container">
+            <!-- Connection Panel -->
+            <div class="panel">
+                <h3>🔌 Connection</h3>
+                <div>
+                    <label>JWT Token:</label>
+                    <input
+                        type="text"
+                        id="jwtToken"
+                        placeholder="Enter your JWT token"
+                        style="width: 100%"
+                    />
+                </div>
+                <div>
+                    <label>Room ID:</label>
+                    <input
+                        type="text"
+                        id="roomId"
+                        placeholder="Enter room UUID"
+                        style="width: 100%"
+                    />
+                </div>
+                <div class="controls">
+                    <button onclick="connectToRoom()">Connect to Rooms</button>
+                    <button onclick="disconnect()" disabled id="disconnectBtn">
+                        Disconnect
+                    </button>
+                    <span id="connectionStatus" class="status disconnected"
+                        >Disconnected</span
+                    >
+                </div>
+            </div>
+
+            <!-- Room Actions -->
+            <div class="panel">
+                <h3>🏠 Room Actions</h3>
+                <div class="controls">
+                    <button onclick="joinRoom()" disabled id="joinRoomBtn">
+                        Join Room
+                    </button>
+                    <button onclick="leaveRoom()" disabled id="leaveRoomBtn">
+                        Leave Room
+                    </button>
+                    <button
+                        onclick="getRoomStats()"
+                        disabled
+                        id="getRoomStatsBtn"
+                    >
+                        Get Room Stats
+                    </button>
+                    <button
+                        onclick="getRoomComments()"
+                        disabled
+                        id="getCommentsBtn"
+                    >
+                        Get Comments
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="panel">
+                <h3>💬 Chat</h3>
+                <div>
+                    <input
+                        type="text"
+                        id="messageInput"
+                        placeholder="Type your message..."
+                        style="width: 70%"
+                    />
+                    <select id="messageType">
+                        <option value="text">Text</option>
+                        <option value="emoji">Emoji</option>
+                        <option value="system">System</option>
+                    </select>
+                    <button
+                        onclick="sendMessage()"
+                        disabled
+                        id="sendMessageBtn"
+                    >
+                        Send
+                    </button>
+                </div>
+                <div>
+                    <span>Quick Emojis:</span>
+                    <button class="emoji-btn" onclick="sendQuickEmoji('👋')">
+                        👋
+                    </button>
+                    <button class="emoji-btn" onclick="sendQuickEmoji('👍')">
+                        👍
+                    </button>
+                    <button class="emoji-btn" onclick="sendQuickEmoji('❤️')">
+                        ❤️
+                    </button>
+                    <button class="emoji-btn" onclick="sendQuickEmoji('😂')">
+                        😂
+                    </button>
+                    <button class="emoji-btn" onclick="sendQuickEmoji('🎉')">
+                        🎉
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio/Video Controls -->
+            <div class="panel">
+                <h3>🎵 Audio/Video Controls</h3>
+                <div class="controls">
+                    <button onclick="toggleMute()" disabled id="muteBtn">
+                        🔇 Toggle Mute
+                    </button>
+                    <button onclick="toggleDeafen()" disabled id="deafenBtn">
+                        🔇 Toggle Deafen
+                    </button>
+                    <button onclick="toggleVideo()" disabled id="videoBtn">
+                        📹 Toggle Video
+                    </button>
+                    <button
+                        onclick="toggleSpeaking()"
+                        disabled
+                        id="speakingBtn"
+                    >
+                        🗣️ Toggle Speaking
+                    </button>
+                </div>
+                <div>
+                    <span>Status:</span>
+                    <span id="audioVideoStatus"
+                        >Muted: ❌ | Deafened: ❌ | Video: ❌ | Speaking:
+                        ❌</span
+                    >
+                </div>
+            </div>
+
+            <!-- Event Log -->
+            <div class="panel" style="grid-column: 1 / -1">
+                <h3>📋 Event Log</h3>
+                <button onclick="clearLog()">Clear Log</button>
+                <div id="eventLog" class="log"></div>
+            </div>
+        </div>
+
+        <script>
+            let socket = null
+            let isConnected = false
+            let currentRoomId = null
+            let audioVideoState = {
+                isMuted: false,
+                isDeafened: false,
+                isVideoOn: false,
+                isSpeaking: false
+            }
+
+            function log(message, type = 'info') {
+                const eventLog = document.getElementById('eventLog')
+                const timestamp = new Date().toLocaleTimeString()
+                const typeEmoji = {
+                    info: 'ℹ️',
+                    success: '✅',
+                    error: '❌',
+                    warning: '⚠️',
+                    event: '📡'
+                }
+
+                const logEntry = `<div style="margin-bottom: 5px;">
+                <span style="color: #666;">[${timestamp}]</span>
+                ${typeEmoji[type] || 'ℹ️'} ${message}
+            </div>`
+
+                eventLog.innerHTML += logEntry
+                eventLog.scrollTop = eventLog.scrollHeight
+            }
+
+            function clearLog() {
+                document.getElementById('eventLog').innerHTML = ''
+            }
+
+            function updateConnectionStatus(connected) {
+                isConnected = connected
+                const statusEl = document.getElementById('connectionStatus')
+                const disconnectBtn = document.getElementById('disconnectBtn')
+                const actionButtons = [
+                    'joinRoomBtn',
+                    'leaveRoomBtn',
+                    'getRoomStatsBtn',
+                    'getCommentsBtn',
+                    'sendMessageBtn',
+                    'muteBtn',
+                    'deafenBtn',
+                    'videoBtn',
+                    'speakingBtn'
+                ]
+
+                if (connected) {
+                    statusEl.textContent = 'Connected'
+                    statusEl.className = 'status connected'
+                    disconnectBtn.disabled = false
+                    actionButtons.forEach((id) => {
+                        document.getElementById(id).disabled = false
+                    })
+                } else {
+                    statusEl.textContent = 'Disconnected'
+                    statusEl.className = 'status disconnected'
+                    disconnectBtn.disabled = true
+                    actionButtons.forEach((id) => {
+                        document.getElementById(id).disabled = true
+                    })
+                }
+            }
+
+            function updateAudioVideoStatus() {
+                const statusEl = document.getElementById('audioVideoStatus')
+                statusEl.textContent =
+                    `Muted: ${audioVideoState.isMuted ? '✅' : '❌'} | ` +
+                    `Deafened: ${audioVideoState.isDeafened ? '✅' : '❌'} | ` +
+                    `Video: ${audioVideoState.isVideoOn ? '✅' : '❌'} | ` +
+                    `Speaking: ${audioVideoState.isSpeaking ? '✅' : '❌'}`
+            }
+
+            function connectToRoom() {
+                const token = document.getElementById('jwtToken').value
+                if (!token) {
+                    alert('Please enter a JWT token')
+                    return
+                }
+
+                log('Attempting to connect to /rooms namespace...', 'info')
+
+                socket = io('http://localhost:3001/rooms', {
+                    auth: {
+                        token: token
+                    },
+                    transports: ['websocket', 'polling']
+                })
+
+                socket.on('connect', () => {
+                    log('Connected to /rooms namespace', 'success')
+                    updateConnectionStatus(true)
+                })
+
+                socket.on('connected', (data) => {
+                    log(`Server acknowledgment: ${data.message}`, 'event')
+                })
+
+                socket.on('connect_error', (error) => {
+                    log(`Connection error: ${error.message}`, 'error')
+                    updateConnectionStatus(false)
+                })
+
+                socket.on('disconnect', (reason) => {
+                    log(`Disconnected: ${reason}`, 'warning')
+                    updateConnectionStatus(false)
+                })
+
+                // Room events
+                socket.on('userJoined', (data) => {
+                    log(`User joined room: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('userLeft', (data) => {
+                    log(`User left room: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('newComment', (data) => {
+                    log(`New comment: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('commentDeleted', (data) => {
+                    log(`Comment deleted: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('participantStatusUpdate', (data) => {
+                    log(
+                        `Participant status update: ${JSON.stringify(data)}`,
+                        'event'
+                    )
+                })
+
+                socket.on('giftSent', (data) => {
+                    log(`Gift sent: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('giftReceived', (data) => {
+                    log(`Gift received: ${JSON.stringify(data)}`, 'event')
+                })
+
+                socket.on('roomGiftSent', (data) => {
+                    log(
+                        `Room gift notification: ${JSON.stringify(data)}`,
+                        'event'
+                    )
+                })
+            }
+
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                    updateConnectionStatus(false)
+                    log('Manually disconnected', 'info')
+                }
+            }
+
+            function joinRoom() {
+                const roomId = document.getElementById('roomId').value
+                if (!roomId) {
+                    alert('Please enter a room ID')
+                    return
+                }
+
+                currentRoomId = roomId
+                log(`Attempting to join room: ${roomId}`, 'info')
+
+                socket.emit('joinRoom', { roomId }, (response) => {
+                    if (response.status === 'success') {
+                        log(
+                            `Successfully joined room: ${JSON.stringify(response)}`,
+                            'success'
+                        )
+                    } else {
+                        log(`Failed to join room: ${response.message}`, 'error')
+                    }
+                })
+            }
+
+            function leaveRoom() {
+                if (!currentRoomId) {
+                    alert('No room to leave')
+                    return
+                }
+
+                log(`Attempting to leave room: ${currentRoomId}`, 'info')
+
+                socket.emit('leaveRoom', currentRoomId, (response) => {
+                    if (response.status === 'success') {
+                        log(
+                            `Successfully left room: ${JSON.stringify(response)}`,
+                            'success'
+                        )
+                        currentRoomId = null
+                    } else {
+                        log(
+                            `Failed to leave room: ${response.message}`,
+                            'error'
+                        )
+                    }
+                })
+            }
+
+            function sendMessage() {
+                const message = document.getElementById('messageInput').value
+                const messageType = document.getElementById('messageType').value
+
+                if (!message.trim()) {
+                    alert('Please enter a message')
+                    return
+                }
+
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                const data = {
+                    roomId: currentRoomId,
+                    message: message.trim(),
+                    messageType: messageType
+                }
+
+                log(`Sending message: ${JSON.stringify(data)}`, 'info')
+
+                socket.emit('sendComment', data, (response) => {
+                    if (response.status === 'success') {
+                        log(
+                            `Message sent successfully: ${JSON.stringify(response)}`,
+                            'success'
+                        )
+                        document.getElementById('messageInput').value = ''
+                    } else {
+                        log(
+                            `Failed to send message: ${response.message}`,
+                            'error'
+                        )
+                    }
+                })
+            }
+
+            function sendQuickEmoji(emoji) {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                const data = {
+                    roomId: currentRoomId,
+                    message: emoji,
+                    messageType: 'emoji'
+                }
+
+                socket.emit('sendComment', data, (response) => {
+                    if (response.status === 'success') {
+                        log(`Emoji sent: ${emoji}`, 'success')
+                    } else {
+                        log(
+                            `Failed to send emoji: ${response.message}`,
+                            'error'
+                        )
+                    }
+                })
+            }
+
+            function getRoomStats() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                socket.emit(
+                    'getRoomStats',
+                    { roomId: currentRoomId },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Room stats: ${JSON.stringify(response.stats, null, 2)}`,
+                                'success'
+                            )
+                        } else {
+                            log(
+                                `Failed to get room stats: ${response.message}`,
+                                'error'
+                            )
+                        }
+                    }
+                )
+            }
+
+            function getRoomComments() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                socket.emit(
+                    'getRoomComments',
+                    { roomId: currentRoomId },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Room comments (${response.count}): ${JSON.stringify(response.data, null, 2)}`,
+                                'success'
+                            )
+                        } else {
+                            log(
+                                `Failed to get comments: ${response.message}`,
+                                'error'
+                            )
+                        }
+                    }
+                )
+            }
+
+            function toggleMute() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                audioVideoState.isMuted = !audioVideoState.isMuted
+
+                socket.emit(
+                    'toggleMute',
+                    {
+                        roomId: currentRoomId,
+                        isMuted: audioVideoState.isMuted
+                    },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Mute toggled: ${audioVideoState.isMuted}`,
+                                'success'
+                            )
+                            updateAudioVideoStatus()
+                        } else {
+                            log(
+                                `Failed to toggle mute: ${response.message}`,
+                                'error'
+                            )
+                            audioVideoState.isMuted = !audioVideoState.isMuted // Revert on failure
+                        }
+                    }
+                )
+            }
+
+            function toggleDeafen() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                audioVideoState.isDeafened = !audioVideoState.isDeafened
+
+                socket.emit(
+                    'toggleDeafen',
+                    {
+                        roomId: currentRoomId,
+                        isDeafened: audioVideoState.isDeafened
+                    },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Deafen toggled: ${audioVideoState.isDeafened}`,
+                                'success'
+                            )
+                            updateAudioVideoStatus()
+                        } else {
+                            log(
+                                `Failed to toggle deafen: ${response.message}`,
+                                'error'
+                            )
+                            audioVideoState.isDeafened =
+                                !audioVideoState.isDeafened // Revert on failure
+                        }
+                    }
+                )
+            }
+
+            function toggleVideo() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                audioVideoState.isVideoOn = !audioVideoState.isVideoOn
+
+                socket.emit(
+                    'toggleVideo',
+                    {
+                        roomId: currentRoomId,
+                        isVideoOn: audioVideoState.isVideoOn
+                    },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Video toggled: ${audioVideoState.isVideoOn}`,
+                                'success'
+                            )
+                            updateAudioVideoStatus()
+                        } else {
+                            log(
+                                `Failed to toggle video: ${response.message}`,
+                                'error'
+                            )
+                            audioVideoState.isVideoOn =
+                                !audioVideoState.isVideoOn // Revert on failure
+                        }
+                    }
+                )
+            }
+
+            function toggleSpeaking() {
+                if (!currentRoomId) {
+                    alert('Please join a room first')
+                    return
+                }
+
+                audioVideoState.isSpeaking = !audioVideoState.isSpeaking
+
+                socket.emit(
+                    'updateSpeaking',
+                    {
+                        roomId: currentRoomId,
+                        isSpeaking: audioVideoState.isSpeaking
+                    },
+                    (response) => {
+                        if (response.status === 'success') {
+                            log(
+                                `Speaking status updated: ${audioVideoState.isSpeaking}`,
+                                'success'
+                            )
+                            updateAudioVideoStatus()
+                        } else {
+                            log(
+                                `Failed to update speaking: ${response.message}`,
+                                'error'
+                            )
+                            audioVideoState.isSpeaking =
+                                !audioVideoState.isSpeaking // Revert on failure
+                        }
+                    }
+                )
+            }
+
+            // Initialize audio/video status display
+            updateAudioVideoStatus()
+
+            // Add some helpful information
+            log('🚀 Room Gateway Test Client loaded', 'info')
+            log(
+                '💡 Instructions: Enter your JWT token and room ID, then connect',
+                'info'
+            )
+            log(
+                '📝 Make sure your server is running on http://localhost:3001',
+                'info'
+            )
+        </script>
+    </body>
+</html>

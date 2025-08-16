@@ -34,7 +34,10 @@ export class ConversationGateway
     private userSocketMap = new Map<string, string>() // userId -> socketId
     private socketUserMap = new Map<string, string>() // socketId -> userId
 
-    constructor(private conversationService: ConversationService) {}
+    constructor(
+        private conversationService: ConversationService,
+        private jwtService: JwtService
+    ) {}
 
     async handleConnection(client: Socket) {
         this.logger.log(`Client connected: ${client.id}`)
@@ -75,11 +78,8 @@ export class ConversationGateway
         try {
             this.logger.log(`Authenticating client: ${client.id}`)
 
-            // Manually verify JWT if guard is not working
-            const jwtService = new JwtService({
-                secret: process.env.JWT_SECRET || 'your-secret-key'
-            })
-            const payload = await jwtService.verifyAsync(data.token)
+            // Use the injected JWT service
+            const payload = await this.jwtService.verifyAsync(data.token)
 
             const userId = payload.uuid
             client['user'] = payload
@@ -94,8 +94,14 @@ export class ConversationGateway
             // Join all user's conversations
             const conversations =
                 await this.conversationService.getUserConversations(userId)
+            this.logger.log(
+                `User ${userId} has ${conversations.length} existing conversations`
+            )
             conversations.forEach((conv) => {
                 client.join(`conversation:${conv.uuid}`)
+                this.logger.log(
+                    `User ${userId} joined conversation room: ${conv.uuid}`
+                )
             })
 
             // Update user status to online
@@ -115,13 +121,14 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
+    // @UseGuards(WsJwtGuard)
     @SubscribeMessage('sendMessage')
     async handleMessage(
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
             conversationId?: string
+            senderId?: string
             recipientId?: string
             type: MessageType
             content?: string
@@ -129,21 +136,32 @@ export class ConversationGateway
             replyTo?: string
         }
     ) {
-        const senderId = client['user'].uuid
+        const senderId = data.senderId ?? client['user'].uuid
 
         try {
+            this.logger.log(`User ${senderId} attempting to send message`)
+
             // Get or create conversation
             let conversation
             if (data.conversationId) {
+                this.logger.log(
+                    `Using existing conversation: ${data.conversationId}`
+                )
                 conversation = await this.conversationService.getConversation(
                     data.conversationId
                 )
             } else if (data.recipientId) {
+                this.logger.log(
+                    `Creating/getting conversation between ${senderId} and ${data.recipientId}`
+                )
                 conversation =
                     await this.conversationService.getOrCreateDirectConversation(
                         senderId,
                         data.recipientId
                     )
+                this.logger.log(
+                    `Conversation resolved: ${conversation.uuid}, participants: ${conversation.participantIds.join(', ')}`
+                )
             } else {
                 throw new Error(
                     'Either conversationId or recipientId is required'
@@ -160,13 +178,57 @@ export class ConversationGateway
                 replyTo: data.replyTo
             })
 
+            // Ensure all participants are in the conversation room
+            conversation.participantIds.forEach((participantId) => {
+                const participantSocketId =
+                    this.userSocketMap.get(participantId)
+                if (participantSocketId) {
+                    const participantSocket =
+                        this.server.sockets.sockets.get(participantSocketId)
+                    if (participantSocket) {
+                        participantSocket.join(
+                            `conversation:${conversation.uuid}`
+                        )
+                        this.logger.log(
+                            `Added participant ${participantId} to conversation room ${conversation.uuid}`
+                        )
+                    }
+                }
+            })
+
             // Emit message to all participants
+            this.logger.log(
+                `Emitting newMessage to conversation room: conversation:${conversation.uuid}`
+            )
             this.server
                 .to(`conversation:${conversation.uuid}`)
                 .emit('newMessage', {
                     conversation: conversation.uuid,
-                    message
+                    message: {
+                        ...message,
+                        senderName: client['user'].email || 'Unknown User' // Add sender name for better identification
+                    }
                 })
+
+            // Also emit to individual user rooms as fallback
+            this.logger.log(
+                `Emitting newMessage to individual participant rooms`
+            )
+            conversation.participantIds.forEach((participantId) => {
+                if (participantId !== senderId) {
+                    // Don't send to sender
+                    this.logger.log(
+                        `Emitting to user room: user:${participantId}`
+                    )
+                    this.server.to(`user:${participantId}`).emit('newMessage', {
+                        conversation: conversation.uuid,
+                        message: {
+                            ...message,
+                            senderName: client['user'].email || 'Unknown User'
+                        }
+                    })
+                }
+            })
 
             // Send push notification to offline users
             const offlineUsers =
@@ -302,6 +364,129 @@ export class ConversationGateway
                 })
 
             return { success: true, message: updatedMessage }
+        } catch (error) {
+            return { success: false, error: error.message }
+        }
+    }
+
+    @UseGuards(WsJwtGuard)
+    @SubscribeMessage('joinConversation')
+    async handleJoinConversation(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { conversationId: string }
+    ) {
+        try {
+            const userId = client['user'].uuid
+
+            // Verify user is participant
+            const conversation = await this.conversationService.getConversation(
+                data.conversationId
+            )
+            if (!conversation.participantIds.includes(userId)) {
+                return { success: false, error: 'Access denied' }
+            }
+
+            client.join(`conversation:${data.conversationId}`)
+            this.logger.log(
+                `User ${userId} joined conversation ${data.conversationId}`
+            )
+
+            return { success: true, conversationId: data.conversationId }
+        } catch (error) {
+            return { success: false, error: error.message }
+        }
+    }
+
+    @UseGuards(WsJwtGuard)
+    @SubscribeMessage('leaveConversation')
+    async handleLeaveConversation(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { conversationId: string }
+    ) {
+        try {
+            const userId = client['user'].uuid
+            client.leave(`conversation:${data.conversationId}`)
+            this.logger.log(
+                `User ${userId} left conversation ${data.conversationId}`
+            )
+
+            return { success: true, conversationId: data.conversationId }
+        } catch (error) {
+            return { success: false, error: error.message }
+        }
+    }
+
+    @UseGuards(WsJwtGuard)
+    @SubscribeMessage('getConversationHistory')
+    async handleGetConversationHistory(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            conversationId?: string
+            recipientId?: string
+            limit?: number
+            before?: string
+        }
+    ) {
+        try {
+            const userId = client['user'].uuid
+            let conversationId = data.conversationId
+
+            // If no conversationId but recipientId provided, get or create conversation
+            if (!conversationId && data.recipientId) {
+                const conversation =
+                    await this.conversationService.getOrCreateDirectConversation(
+                        userId,
+                        data.recipientId
+                    )
+                conversationId = conversation.uuid
+            }
+
+            if (!conversationId) {
+                return {
+                    success: false,
+                    error: 'conversationId or recipientId required'
+                }
+            }
+
+            const messages = await this.conversationService.getMessages(
+                conversationId,
+                userId,
+                data.limit || 50,
+                data.before
+            )
+
+            // Auto-join conversation room when fetching history
+            client.join(`conversation:${conversationId}`)
+
+            return {
+                success: true,
+                conversationId,
+                messages,
+                hasMore: messages.length === (data.limit || 50)
+            }
+        } catch (error) {
+            return { success: false, error: error.message }
+        }
+    }
+
+    @UseGuards(WsJwtGuard)
+    @SubscribeMessage('getUserConversations')
+    async handleGetUserConversations(@ConnectedSocket() client: Socket) {
+        try {
+            const userId = client['user'].uuid
+            const conversations =
+                await this.conversationService.getUserConversations(userId)
+
+            // Auto-join all conversation rooms
+            conversations.forEach((conv) => {
+                client.join(`conversation:${conv.uuid}`)
+            })
+
+            return {
+                success: true,
+                conversations
+            }
         } catch (error) {
             return { success: false, error: error.message }
         }

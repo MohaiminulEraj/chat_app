@@ -1,0 +1,26 @@
+{
+    "name": "socketio-test-client",
+    "version": "1.0.0",
+    "description": "Test client for Socket.IO one-to-one chat functionality",
+    "main": "socketio-one-to-one-test.js",
+    "scripts": {
+        "test": "node socketio-one-to-one-test.js",
+        "test:watch": "nodemon socketio-one-to-one-test.js",
+        "install-deps": "npm install socket.io-client"
+    },
+    "dependencies": {
+        "socket.io-client": "^4.7.2"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    },
+    "keywords": [
+        "socketio",
+        "testing",
+        "real-time",
+        "chat",
+        "websocket"
+    ],
+    "author": "Your Name",
+    "license": "MIT"
+}

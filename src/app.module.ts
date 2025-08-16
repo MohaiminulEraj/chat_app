@@ -18,6 +18,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor'
 import { LoggerMiddleware } from './common/middleware/logger.middleware'
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware'
 import smtpConfig from './config/smtp.config'
+import { AgoraModule } from './modules/agora/agora.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
 import { ConversationModule } from './modules/conversation/conversation.module'
@@ -26,13 +27,18 @@ import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
 import { GroupModule } from './modules/group/group.module'
 import { RoomModule } from './modules/room/room.module'
-import { WebsocketModule } from './modules/websocket/websocket.module'
+import { SocketIOModule } from './modules/socketio/socketio.module'
+
 @Module({
     imports: [
         ConfigModule.forRoot({
-            envFilePath: ['.env'],
             isGlobal: true,
-            cache: true
+            load: [
+                () => ({
+                    envFilePath: ['.env'],
+                    cache: true
+                })
+            ]
         }),
         ThrottlerModule.forRootAsync({
             useFactory: async () => ({
@@ -62,11 +68,12 @@ import { WebsocketModule } from './modules/websocket/websocket.module'
             dropSchema: false // dev only: drop & recreate database on each run
         }),
         ScheduleModule.forRoot(),
+        AgoraModule,
         AuthModule,
         UserModule,
         FriendshipModule,
         GroupModule,
-        WebsocketModule,
+        SocketIOModule, // New unified Socket.IO implementation
         CloudinaryModule,
         // UploadModule,
         RoomModule, // Add RoomModule to imports

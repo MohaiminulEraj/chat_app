@@ -1,0 +1,1492 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kitty Chat Local Testing - Complete System</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                padding: 20px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            }
+
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+                padding: 20px;
+                background: linear-gradient(135deg, #ff6b6b, #ffa500);
+                border-radius: 10px;
+                color: white;
+            }
+
+            .user-section {
+                display: flex;
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+
+            .user-panel {
+                flex: 1;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 20px;
+                background: #f9f9f9;
+            }
+
+            .user-header {
+                background: linear-gradient(135deg, #4caf50, #45a049);
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                text-align: center;
+                margin-bottom: 15px;
+                font-weight: bold;
+            }
+
+            .auth-section {
+                margin-bottom: 20px;
+                padding: 15px;
+                background: white;
+                border-radius: 8px;
+                border: 1px solid #ddd;
+            }
+
+            .status {
+                padding: 8px 12px;
+                border-radius: 20px;
+                font-weight: bold;
+                text-align: center;
+                margin: 10px 0;
+            }
+
+            .status.connected {
+                background: #4caf50;
+                color: white;
+            }
+            .status.disconnected {
+                background: #f44336;
+                color: white;
+            }
+            .status.authenticated {
+                background: #2196f3;
+                color: white;
+            }
+            .status.joining {
+                background: #ff9800;
+                color: white;
+            }
+
+            input,
+            button,
+            select,
+            textarea {
+                width: 100%;
+                padding: 10px;
+                margin: 5px 0;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+
+            button {
+                background: linear-gradient(135deg, #4caf50, #45a049);
+                color: white;
+                border: none;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.3s;
+            }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            }
+
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .chat-section {
+                margin-top: 20px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                background: white;
+            }
+
+            .chat-header {
+                background: linear-gradient(135deg, #2196f3, #1976d2);
+                color: white;
+                padding: 15px;
+                border-radius: 8px 8px 0 0;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .chat-tabs {
+                display: flex;
+                background: #f0f0f0;
+                border-bottom: 1px solid #ddd;
+            }
+
+            .chat-tab {
+                flex: 1;
+                padding: 15px;
+                text-align: center;
+                cursor: pointer;
+                border: none;
+                background: #f0f0f0;
+                font-weight: bold;
+                transition: all 0.3s;
+            }
+
+            .chat-tab.active {
+                background: white;
+                border-bottom: 3px solid #2196f3;
+                color: #2196f3;
+            }
+
+            .chat-content {
+                padding: 20px;
+            }
+
+            .chat-messages {
+                height: 300px;
+                overflow-y: auto;
+                border: 1px solid #e0e0e0;
+                padding: 15px;
+                margin-bottom: 15px;
+                background: #fafafa;
+                border-radius: 5px;
+            }
+
+            .message {
+                margin: 10px 0;
+                padding: 10px;
+                border-radius: 10px;
+                word-wrap: break-word;
+            }
+
+            .message.sent {
+                background: linear-gradient(135deg, #4caf50, #45a049);
+                color: white;
+                margin-left: 20%;
+                text-align: right;
+            }
+
+            .message.received {
+                background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+                color: #333;
+                margin-right: 20%;
+            }
+
+            .message.system {
+                background: linear-gradient(135deg, #fff3e0, #ffcc02);
+                color: #333;
+                text-align: center;
+                font-style: italic;
+                margin: 5px 0;
+            }
+
+            .message-info {
+                font-size: 12px;
+                opacity: 0.8;
+                margin-top: 5px;
+            }
+
+            .typing-indicator {
+                color: #666;
+                font-style: italic;
+                padding: 5px 15px;
+                background: #f0f0f0;
+                border-radius: 15px;
+                margin: 5px 0;
+                display: none;
+            }
+
+            .message-input {
+                display: flex;
+                gap: 10px;
+                margin-top: 15px;
+            }
+
+            .message-input textarea {
+                flex: 1;
+                resize: vertical;
+                min-height: 40px;
+                max-height: 100px;
+            }
+
+            .message-input button {
+                width: auto;
+                min-width: 80px;
+            }
+
+            .logs {
+                background: #1e1e1e;
+                color: #00ff00;
+                padding: 15px;
+                border-radius: 5px;
+                height: 200px;
+                overflow-y: auto;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                margin-top: 20px;
+            }
+
+            .config-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin-bottom: 15px;
+            }
+
+            .hidden {
+                display: none;
+            }
+
+            .error {
+                background: #ffebee;
+                color: #c62828;
+                padding: 10px;
+                border-radius: 5px;
+                border-left: 4px solid #c62828;
+                margin: 10px 0;
+            }
+
+            .success {
+                background: #e8f5e8;
+                color: #2e7d32;
+                padding: 10px;
+                border-radius: 5px;
+                border-left: 4px solid #2e7d32;
+                margin: 10px 0;
+            }
+
+            @media (max-width: 768px) {
+                .user-section {
+                    flex-direction: column;
+                }
+
+                .config-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🐾 Kitty Chat Local Testing System</h1>
+                <p>
+                    Real-time Chat Testing for localhost:3001 | Users:
+                    eraj@gmail.com & faysal@mobile.com
+                </p>
+            </div>
+
+            <!-- User Authentication Section -->
+            <div class="user-section">
+                <!-- User 1 Panel -->
+                <div class="user-panel">
+                    <div class="user-header">
+                        👤 User 1: Eraj (eraj@gmail.com)
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>🔐 Authentication</h4>
+                        <input
+                            type="email"
+                            id="user1Email"
+                            value="eraj@gmail.com"
+                            placeholder="Email"
+                        />
+                        <input
+                            type="password"
+                            id="user1Password"
+                            value="12345678"
+                            placeholder="Password"
+                        />
+                        <button onclick="loginUser1()">🔑 Login User 1</button>
+                        <div id="user1Status" class="status disconnected">
+                            Not Logged In
+                        </div>
+                        <div
+                            id="user1Token"
+                            style="
+                                font-size: 10px;
+                                word-break: break-all;
+                                color: #666;
+                            "
+                        ></div>
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>💬 One-to-One Chat Connection</h4>
+                        <button
+                            onclick="connectUser1Chat()"
+                            id="user1ChatConnectBtn"
+                        >
+                            🔗 Connect to Chat
+                        </button>
+                        <div id="user1ChatStatus" class="status disconnected">
+                            Not Connected
+                        </div>
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>👥 Group Chat Connection</h4>
+                        <button
+                            onclick="connectUser1Group()"
+                            id="user1GroupConnectBtn"
+                        >
+                            🔗 Connect to Group
+                        </button>
+                        <div id="user1GroupStatus" class="status disconnected">
+                            Not Connected
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User 2 Panel -->
+                <div class="user-panel">
+                    <div class="user-header">
+                        👤 User 2: Faysal (faysal@mobile.com)
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>🔐 Authentication</h4>
+                        <input
+                            type="email"
+                            id="user2Email"
+                            value="faysal@mobile.com"
+                            placeholder="Email"
+                        />
+                        <input
+                            type="password"
+                            id="user2Password"
+                            value="12345678"
+                            placeholder="Password"
+                        />
+                        <button onclick="loginUser2()">🔑 Login User 2</button>
+                        <div id="user2Status" class="status disconnected">
+                            Not Logged In
+                        </div>
+                        <div
+                            id="user2Token"
+                            style="
+                                font-size: 10px;
+                                word-break: break-all;
+                                color: #666;
+                            "
+                        ></div>
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>💬 One-to-One Chat Connection</h4>
+                        <button
+                            onclick="connectUser2Chat()"
+                            id="user2ChatConnectBtn"
+                        >
+                            🔗 Connect to Chat
+                        </button>
+                        <div id="user2ChatStatus" class="status disconnected">
+                            Not Connected
+                        </div>
+                    </div>
+
+                    <div class="auth-section">
+                        <h4>👥 Group Chat Connection</h4>
+                        <button
+                            onclick="connectUser2Group()"
+                            id="user2GroupConnectBtn"
+                        >
+                            🔗 Connect to Group
+                        </button>
+                        <div id="user2GroupStatus" class="status disconnected">
+                            Not Connected
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setup Section -->
+            <div class="auth-section">
+                <h3>🔧 Setup Configuration</h3>
+                <div class="config-grid">
+                    <div>
+                        <label>Conversation ID:</label>
+                        <input
+                            type="text"
+                            id="conversationId"
+                            placeholder="Will be auto-filled after setup"
+                        />
+                    </div>
+                    <div>
+                        <label>Group UUID:</label>
+                        <input
+                            type="text"
+                            id="groupUuid"
+                            placeholder="Will be auto-filled after setup"
+                        />
+                    </div>
+                </div>
+                <button onclick="setupFriendshipAndChats()">
+                    🚀 Auto Setup (Friendship + Conversation + Group)
+                </button>
+                <div id="setupStatus"></div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="chat-section">
+                <div class="chat-header">
+                    💬 Real-time Chat Testing Interface
+                </div>
+
+                <div class="chat-tabs">
+                    <button
+                        class="chat-tab active"
+                        onclick="switchTab('oneToOne')"
+                    >
+                        💬 One-to-One Chat
+                    </button>
+                    <button class="chat-tab" onclick="switchTab('group')">
+                        👥 Group Chat
+                    </button>
+                </div>
+
+                <!-- One-to-One Chat -->
+                <div id="oneToOneContent" class="chat-content">
+                    <h4>💬 One-to-One Chat Between Eraj & Faysal</h4>
+                    <div id="chatMessages" class="chat-messages"></div>
+                    <div id="chatTyping" class="typing-indicator"></div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px">
+                        <button onclick="sendChatMessage('user1')">
+                            📤 Send as User 1 (Eraj)
+                        </button>
+                        <button onclick="sendChatMessage('user2')">
+                            📤 Send as User 2 (Faysal)
+                        </button>
+                    </div>
+
+                    <div class="message-input">
+                        <textarea
+                            id="chatMessageInput"
+                            placeholder="Type your message here..."
+                            onkeydown="handleChatTyping(event)"
+                            onkeyup="handleChatTyping(event)"
+                        ></textarea>
+                        <button onclick="toggleChatTyping()">
+                            ⌨️ Toggle Typing
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Group Chat -->
+                <div id="groupContent" class="chat-content hidden">
+                    <h4>👥 Group Chat: Eraj & Faysal Test Group</h4>
+                    <div id="groupMessages" class="chat-messages"></div>
+                    <div id="groupTyping" class="typing-indicator"></div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px">
+                        <button onclick="sendGroupMessage('user1')">
+                            📤 Send as User 1 (Eraj)
+                        </button>
+                        <button onclick="sendGroupMessage('user2')">
+                            📤 Send as User 2 (Faysal)
+                        </button>
+                    </div>
+
+                    <div class="message-input">
+                        <textarea
+                            id="groupMessageInput"
+                            placeholder="Type your group message here..."
+                            onkeydown="handleGroupTyping(event)"
+                            onkeyup="handleGroupTyping(event)"
+                        ></textarea>
+                        <button onclick="toggleGroupTyping()">
+                            ⌨️ Toggle Group Typing
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Section -->
+            <div class="auth-section">
+                <h3>📋 System Logs</h3>
+                <div id="logs" class="logs">
+                    System initialized. Ready for testing...
+                </div>
+                <button onclick="clearLogs()">🗑️ Clear Logs</button>
+            </div>
+        </div>
+
+        <script>
+            // Configuration
+            const config = {
+                apiUrl: 'http://localhost:3001/api/v1',
+                chatSocketUrl: 'http://localhost:3001',
+                groupSocketUrl: 'http://localhost:3001'
+            }
+
+            // State management
+            let state = {
+                user1: { id: null, token: null, email: 'eraj@gmail.com' },
+                user2: { id: null, token: null, email: 'faysal@mobile.com' },
+                conversationId: null,
+                groupUuid: null,
+                sockets: {
+                    user1Chat: null,
+                    user2Chat: null,
+                    user1Group: null,
+                    user2Group: null
+                },
+                typing: {
+                    chat: false,
+                    group: false
+                }
+            }
+
+            // Utility functions
+            function log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString()
+                const logElement = document.getElementById('logs')
+                const logMessage = `[${timestamp}] ${message}`
+
+                logElement.innerHTML += logMessage + '\n'
+                logElement.scrollTop = logElement.scrollHeight
+
+                console.log(logMessage)
+            }
+
+            function clearLogs() {
+                document.getElementById('logs').innerHTML = 'Logs cleared...\n'
+            }
+
+            function updateStatus(elementId, status, className) {
+                const element = document.getElementById(elementId)
+                element.textContent = status
+                element.className = `status ${className}`
+            }
+
+            function showError(message) {
+                log(`ERROR: ${message}`, 'error')
+            }
+
+            function showSuccess(message) {
+                log(`SUCCESS: ${message}`, 'success')
+            }
+
+            // Authentication functions
+            async function loginUser1() {
+                const email = document.getElementById('user1Email').value
+                const password = document.getElementById('user1Password').value
+
+                try {
+                    log('Attempting to login User 1...')
+                    const response = await fetch(
+                        `${config.apiUrl}/auth/login`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        }
+                    )
+
+                    const data = await response.json()
+
+                    if (response.ok && data.data) {
+                        state.user1.token = data.data.jwt_token
+                        state.user1.id = data.data.user.uuid
+
+                        updateStatus(
+                            'user1Status',
+                            'Logged In ✅',
+                            'authenticated'
+                        )
+                        document.getElementById('user1Token').textContent =
+                            `Token: ${state.user1.token.substring(0, 50)}...`
+
+                        showSuccess(`User 1 (${email}) logged in successfully`)
+                        log(`User 1 ID: ${state.user1.id}`)
+                    } else {
+                        throw new Error(data.message || 'Login failed')
+                    }
+                } catch (error) {
+                    showError(`User 1 login failed: ${error.message}`)
+                    updateStatus(
+                        'user1Status',
+                        'Login Failed ❌',
+                        'disconnected'
+                    )
+                }
+            }
+
+            async function loginUser2() {
+                const email = document.getElementById('user2Email').value
+                const password = document.getElementById('user2Password').value
+
+                try {
+                    log('Attempting to login User 2...')
+                    const response = await fetch(
+                        `${config.apiUrl}/auth/login`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        }
+                    )
+
+                    const data = await response.json()
+
+                    if (response.ok && data.data) {
+                        state.user2.token = data.data.jwt_token
+                        state.user2.id = data.data.user.uuid
+
+                        updateStatus(
+                            'user2Status',
+                            'Logged In ✅',
+                            'authenticated'
+                        )
+                        document.getElementById('user2Token').textContent =
+                            `Token: ${state.user2.token.substring(0, 50)}...`
+
+                        showSuccess(`User 2 (${email}) logged in successfully`)
+                        log(`User 2 ID: ${state.user2.id}`)
+                    } else {
+                        throw new Error(data.message || 'Login failed')
+                    }
+                } catch (error) {
+                    showError(`User 2 login failed: ${error.message}`)
+                    updateStatus(
+                        'user2Status',
+                        'Login Failed ❌',
+                        'disconnected'
+                    )
+                }
+            }
+
+            // Setup functions
+            async function setupFriendshipAndChats() {
+                if (!state.user1.token || !state.user2.token) {
+                    showError('Please login both users first!')
+                    return
+                }
+
+                try {
+                    document.getElementById('setupStatus').innerHTML =
+                        '<div class="status joining">Setting up friendship and chats...</div>'
+
+                    // Step 1: Send friend request
+                    log('Step 1: Sending friend request...')
+                    const friendRequest = await fetch(
+                        `${config.apiUrl}/friendship/send-request`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${state.user1.token}`
+                            },
+                            body: JSON.stringify({ friend_id: state.user2.id })
+                        }
+                    )
+
+                    const friendData = await friendRequest.json()
+                    if (!friendRequest.ok) {
+                        if (friendData.message?.includes('already exists')) {
+                            log('Friendship already exists, continuing...')
+                        } else {
+                            throw new Error(
+                                friendData.message || 'Friend request failed'
+                            )
+                        }
+                    }
+
+                    // Step 2: Accept friend request
+                    log('Step 2: Accepting friend request...')
+                    if (friendData.data?.uuid) {
+                        const acceptRequest = await fetch(
+                            `${config.apiUrl}/friendship/accept-request`,
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${state.user2.token}`
+                                },
+                                body: JSON.stringify({
+                                    friendship_uuid: friendData.data.uuid
+                                })
+                            }
+                        )
+
+                        if (!acceptRequest.ok) {
+                            const acceptData = await acceptRequest.json()
+                            if (
+                                !acceptData.message?.includes(
+                                    'already accepted'
+                                )
+                            ) {
+                                throw new Error(
+                                    acceptData.message ||
+                                        'Accept request failed'
+                                )
+                            }
+                        }
+                    }
+
+                    // Step 3: Create conversation
+                    log('Step 3: Creating conversation...')
+                    const conversation = await fetch(
+                        `${config.apiUrl}/conversation`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${state.user1.token}`
+                            },
+                            body: JSON.stringify({
+                                participant_ids: [state.user2.id]
+                            })
+                        }
+                    )
+
+                    const convData = await conversation.json()
+                    if (conversation.ok && convData.data) {
+                        state.conversationId = convData.data.uuid
+                        document.getElementById('conversationId').value =
+                            state.conversationId
+                        log(`Conversation created: ${state.conversationId}`)
+                    } else {
+                        // Try to get existing conversation
+                        const existingConv = await fetch(
+                            `${config.apiUrl}/conversation`,
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${state.user1.token}`
+                                }
+                            }
+                        )
+                        const existingData = await existingConv.json()
+                        if (existingData.data && existingData.data.length > 0) {
+                            state.conversationId = existingData.data[0].uuid
+                            document.getElementById('conversationId').value =
+                                state.conversationId
+                            log(
+                                `Using existing conversation: ${state.conversationId}`
+                            )
+                        }
+                    }
+
+                    // Step 4: Create group
+                    log('Step 4: Creating group...')
+                    const group = await fetch(`${config.apiUrl}/group`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${state.user1.token}`
+                        },
+                        body: JSON.stringify({
+                            name: 'Eraj & Faysal Test Group',
+                            description: 'Real-time testing group',
+                            member_ids: [state.user2.id]
+                        })
+                    })
+
+                    const groupData = await group.json()
+                    if (group.ok && groupData.data) {
+                        state.groupUuid = groupData.data.uuid
+                        document.getElementById('groupUuid').value =
+                            state.groupUuid
+                        log(`Group created: ${state.groupUuid}`)
+                    } else {
+                        // Try to get existing group
+                        const existingGroup = await fetch(
+                            `${config.apiUrl}/group`,
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${state.user1.token}`
+                                }
+                            }
+                        )
+                        const existingGroupData = await existingGroup.json()
+                        if (
+                            existingGroupData.data &&
+                            existingGroupData.data.length > 0
+                        ) {
+                            state.groupUuid = existingGroupData.data[0].uuid
+                            document.getElementById('groupUuid').value =
+                                state.groupUuid
+                            log(`Using existing group: ${state.groupUuid}`)
+                        }
+                    }
+
+                    document.getElementById('setupStatus').innerHTML =
+                        '<div class="success">✅ Setup completed successfully! You can now test real-time chat.</div>'
+                    showSuccess('All setup completed! Ready for chat testing.')
+                } catch (error) {
+                    showError(`Setup failed: ${error.message}`)
+                    document.getElementById('setupStatus').innerHTML =
+                        `<div class="error">❌ Setup failed: ${error.message}</div>`
+                }
+            }
+
+            // WebSocket connection functions
+            function connectUser1Chat() {
+                if (!state.user1.token) {
+                    showError('Please login User 1 first!')
+                    return
+                }
+
+                try {
+                    log('Connecting User 1 to chat...')
+                    state.sockets.user1Chat = io(
+                        `${config.chatSocketUrl}/chat`,
+                        {
+                            transports: ['websocket', 'polling']
+                        }
+                    )
+
+                    state.sockets.user1Chat.on('connect', () => {
+                        log('User 1 connected to chat')
+                        updateStatus(
+                            'user1ChatStatus',
+                            'Connected 🟢',
+                            'connected'
+                        )
+
+                        // Authenticate
+                        state.sockets.user1Chat.emit('authenticate', {
+                            token: state.user1.token
+                        })
+                    })
+
+                    state.sockets.user1Chat.on('authenticated', (data) => {
+                        log('User 1 authenticated in chat')
+                        updateStatus(
+                            'user1ChatStatus',
+                            'Authenticated ✅',
+                            'authenticated'
+                        )
+
+                        // Join conversation if available
+                        if (state.conversationId) {
+                            state.sockets.user1Chat.emit('joinConversation', {
+                                conversationId: state.conversationId
+                            })
+                        }
+                    })
+
+                    state.sockets.user1Chat.on('joinedConversation', (data) => {
+                        log(
+                            `User 1 joined conversation: ${data.conversationId}`
+                        )
+                        updateStatus(
+                            'user1ChatStatus',
+                            'In Conversation 💬',
+                            'authenticated'
+                        )
+                    })
+
+                    state.sockets.user1Chat.on('messageReceived', (data) => {
+                        addChatMessage(data, 'received')
+                    })
+
+                    state.sockets.user1Chat.on('userTyping', (data) => {
+                        handleTypingIndicator('chat', data)
+                    })
+
+                    state.sockets.user1Chat.on('disconnect', () => {
+                        log('User 1 disconnected from chat')
+                        updateStatus(
+                            'user1ChatStatus',
+                            'Disconnected ❌',
+                            'disconnected'
+                        )
+                    })
+
+                    state.sockets.user1Chat.on('error', (error) => {
+                        showError(
+                            `User 1 chat error: ${error.message || error}`
+                        )
+                    })
+                } catch (error) {
+                    showError(`User 1 chat connection failed: ${error.message}`)
+                }
+            }
+
+            function connectUser2Chat() {
+                if (!state.user2.token) {
+                    showError('Please login User 2 first!')
+                    return
+                }
+
+                try {
+                    log('Connecting User 2 to chat...')
+                    state.sockets.user2Chat = io(
+                        `${config.chatSocketUrl}/chat`,
+                        {
+                            transports: ['websocket', 'polling']
+                        }
+                    )
+
+                    state.sockets.user2Chat.on('connect', () => {
+                        log('User 2 connected to chat')
+                        updateStatus(
+                            'user2ChatStatus',
+                            'Connected 🟢',
+                            'connected'
+                        )
+
+                        // Authenticate
+                        state.sockets.user2Chat.emit('authenticate', {
+                            token: state.user2.token
+                        })
+                    })
+
+                    state.sockets.user2Chat.on('authenticated', (data) => {
+                        log('User 2 authenticated in chat')
+                        updateStatus(
+                            'user2ChatStatus',
+                            'Authenticated ✅',
+                            'authenticated'
+                        )
+
+                        // Join conversation if available
+                        if (state.conversationId) {
+                            state.sockets.user2Chat.emit('joinConversation', {
+                                conversationId: state.conversationId
+                            })
+                        }
+                    })
+
+                    state.sockets.user2Chat.on('joinedConversation', (data) => {
+                        log(
+                            `User 2 joined conversation: ${data.conversationId}`
+                        )
+                        updateStatus(
+                            'user2ChatStatus',
+                            'In Conversation 💬',
+                            'authenticated'
+                        )
+                    })
+
+                    state.sockets.user2Chat.on('messageReceived', (data) => {
+                        addChatMessage(data, 'received')
+                    })
+
+                    state.sockets.user2Chat.on('userTyping', (data) => {
+                        handleTypingIndicator('chat', data)
+                    })
+
+                    state.sockets.user2Chat.on('disconnect', () => {
+                        log('User 2 disconnected from chat')
+                        updateStatus(
+                            'user2ChatStatus',
+                            'Disconnected ❌',
+                            'disconnected'
+                        )
+                    })
+
+                    state.sockets.user2Chat.on('error', (error) => {
+                        showError(
+                            `User 2 chat error: ${error.message || error}`
+                        )
+                    })
+                } catch (error) {
+                    showError(`User 2 chat connection failed: ${error.message}`)
+                }
+            }
+
+            function connectUser1Group() {
+                if (!state.user1.token) {
+                    showError('Please login User 1 first!')
+                    return
+                }
+
+                try {
+                    log('Connecting User 1 to group chat...')
+                    state.sockets.user1Group = io(
+                        `${config.groupSocketUrl}/group-chat`,
+                        {
+                            transports: ['websocket', 'polling']
+                        }
+                    )
+
+                    state.sockets.user1Group.on('connect', () => {
+                        log('User 1 connected to group chat')
+                        updateStatus(
+                            'user1GroupStatus',
+                            'Connected 🟢',
+                            'connected'
+                        )
+
+                        // Authenticate
+                        state.sockets.user1Group.emit('authenticate', {
+                            token: state.user1.token
+                        })
+                    })
+
+                    state.sockets.user1Group.on('authenticated', (data) => {
+                        log('User 1 authenticated in group chat')
+                        updateStatus(
+                            'user1GroupStatus',
+                            'Authenticated ✅',
+                            'authenticated'
+                        )
+
+                        // Join group if available
+                        if (state.groupUuid) {
+                            state.sockets.user1Group.emit('joinGroup', {
+                                groupId: state.groupUuid
+                            })
+                        }
+                    })
+
+                    state.sockets.user1Group.on('joinedGroup', (data) => {
+                        log(`User 1 joined group: ${data.groupId}`)
+                        updateStatus(
+                            'user1GroupStatus',
+                            'In Group 👥',
+                            'authenticated'
+                        )
+                    })
+
+                    state.sockets.user1Group.on(
+                        'groupMessageReceived',
+                        (data) => {
+                            addGroupMessage(data, 'received')
+                        }
+                    )
+
+                    state.sockets.user1Group.on('userTypingInGroup', (data) => {
+                        handleTypingIndicator('group', data)
+                    })
+
+                    state.sockets.user1Group.on('disconnect', () => {
+                        log('User 1 disconnected from group chat')
+                        updateStatus(
+                            'user1GroupStatus',
+                            'Disconnected ❌',
+                            'disconnected'
+                        )
+                    })
+
+                    state.sockets.user1Group.on('error', (error) => {
+                        showError(
+                            `User 1 group chat error: ${error.message || error}`
+                        )
+                    })
+                } catch (error) {
+                    showError(
+                        `User 1 group chat connection failed: ${error.message}`
+                    )
+                }
+            }
+
+            function connectUser2Group() {
+                if (!state.user2.token) {
+                    showError('Please login User 2 first!')
+                    return
+                }
+
+                try {
+                    log('Connecting User 2 to group chat...')
+                    state.sockets.user2Group = io(
+                        `${config.groupSocketUrl}/group-chat`,
+                        {
+                            transports: ['websocket', 'polling']
+                        }
+                    )
+
+                    state.sockets.user2Group.on('connect', () => {
+                        log('User 2 connected to group chat')
+                        updateStatus(
+                            'user2GroupStatus',
+                            'Connected 🟢',
+                            'connected'
+                        )
+
+                        // Authenticate
+                        state.sockets.user2Group.emit('authenticate', {
+                            token: state.user2.token
+                        })
+                    })
+
+                    state.sockets.user2Group.on('authenticated', (data) => {
+                        log('User 2 authenticated in group chat')
+                        updateStatus(
+                            'user2GroupStatus',
+                            'Authenticated ✅',
+                            'authenticated'
+                        )
+
+                        // Join group if available
+                        if (state.groupUuid) {
+                            state.sockets.user2Group.emit('joinGroup', {
+                                groupId: state.groupUuid
+                            })
+                        }
+                    })
+
+                    state.sockets.user2Group.on('joinedGroup', (data) => {
+                        log(`User 2 joined group: ${data.groupId}`)
+                        updateStatus(
+                            'user2GroupStatus',
+                            'In Group 👥',
+                            'authenticated'
+                        )
+                    })
+
+                    state.sockets.user2Group.on(
+                        'groupMessageReceived',
+                        (data) => {
+                            addGroupMessage(data, 'received')
+                        }
+                    )
+
+                    state.sockets.user2Group.on('userTypingInGroup', (data) => {
+                        handleTypingIndicator('group', data)
+                    })
+
+                    state.sockets.user2Group.on('disconnect', () => {
+                        log('User 2 disconnected from group chat')
+                        updateStatus(
+                            'user2GroupStatus',
+                            'Disconnected ❌',
+                            'disconnected'
+                        )
+                    })
+
+                    state.sockets.user2Group.on('error', (error) => {
+                        showError(
+                            `User 2 group chat error: ${error.message || error}`
+                        )
+                    })
+                } catch (error) {
+                    showError(
+                        `User 2 group chat connection failed: ${error.message}`
+                    )
+                }
+            }
+
+            // Chat functionality
+            function switchTab(tabName) {
+                // Update tab buttons
+                document
+                    .querySelectorAll('.chat-tab')
+                    .forEach((tab) => tab.classList.remove('active'))
+                event.target.classList.add('active')
+
+                // Show/hide content
+                if (tabName === 'oneToOne') {
+                    document
+                        .getElementById('oneToOneContent')
+                        .classList.remove('hidden')
+                    document
+                        .getElementById('groupContent')
+                        .classList.add('hidden')
+                } else {
+                    document
+                        .getElementById('oneToOneContent')
+                        .classList.add('hidden')
+                    document
+                        .getElementById('groupContent')
+                        .classList.remove('hidden')
+                }
+            }
+
+            function sendChatMessage(user) {
+                const messageInput = document.getElementById('chatMessageInput')
+                const message = messageInput.value.trim()
+
+                if (!message) {
+                    showError('Please enter a message!')
+                    return
+                }
+
+                if (!state.conversationId) {
+                    showError('Please complete setup first!')
+                    return
+                }
+
+                const socket =
+                    user === 'user1'
+                        ? state.sockets.user1Chat
+                        : state.sockets.user2Chat
+                if (!socket || !socket.connected) {
+                    showError(`${user} is not connected to chat!`)
+                    return
+                }
+
+                const messageData = {
+                    conversationId: state.conversationId,
+                    content: message,
+                    type: 'text'
+                }
+
+                socket.emit('sendMessage', messageData)
+
+                // Add to UI immediately as sent message
+                addChatMessage(
+                    {
+                        content: message,
+                        senderId:
+                            user === 'user1' ? state.user1.id : state.user2.id,
+                        senderEmail:
+                            user === 'user1'
+                                ? state.user1.email
+                                : state.user2.email,
+                        timestamp: new Date().toISOString()
+                    },
+                    'sent'
+                )
+
+                messageInput.value = ''
+                log(`${user} sent chat message: ${message}`)
+            }
+
+            function sendGroupMessage(user) {
+                const messageInput =
+                    document.getElementById('groupMessageInput')
+                const message = messageInput.value.trim()
+
+                if (!message) {
+                    showError('Please enter a message!')
+                    return
+                }
+
+                if (!state.groupUuid) {
+                    showError('Please complete setup first!')
+                    return
+                }
+
+                const socket =
+                    user === 'user1'
+                        ? state.sockets.user1Group
+                        : state.sockets.user2Group
+                if (!socket || !socket.connected) {
+                    showError(`${user} is not connected to group chat!`)
+                    return
+                }
+
+                const messageData = {
+                    groupId: state.groupUuid,
+                    content: message,
+                    messageType: 'text'
+                }
+
+                socket.emit('sendMessage', messageData)
+
+                // Add to UI immediately as sent message
+                addGroupMessage(
+                    {
+                        content: message,
+                        senderId:
+                            user === 'user1' ? state.user1.id : state.user2.id,
+                        senderName: user === 'user1' ? 'Eraj' : 'Faysal',
+                        timestamp: new Date().toISOString()
+                    },
+                    'sent'
+                )
+
+                messageInput.value = ''
+                log(`${user} sent group message: ${message}`)
+            }
+
+            function addChatMessage(data, type) {
+                const messagesContainer =
+                    document.getElementById('chatMessages')
+                const messageDiv = document.createElement('div')
+                messageDiv.className = `message ${type}`
+
+                const senderName =
+                    data.senderEmail ||
+                    (data.senderId === state.user1.id ? 'Eraj' : 'Faysal')
+                const timestamp = new Date(data.timestamp).toLocaleTimeString()
+
+                messageDiv.innerHTML = `
+                <div>${data.content}</div>
+                <div class="message-info">${senderName} • ${timestamp}</div>
+            `
+
+                messagesContainer.appendChild(messageDiv)
+                messagesContainer.scrollTop = messagesContainer.scrollHeight
+            }
+
+            function addGroupMessage(data, type) {
+                const messagesContainer =
+                    document.getElementById('groupMessages')
+                const messageDiv = document.createElement('div')
+                messageDiv.className = `message ${type}`
+
+                const senderName =
+                    data.senderName ||
+                    (data.senderId === state.user1.id ? 'Eraj' : 'Faysal')
+                const timestamp = new Date(data.timestamp).toLocaleTimeString()
+
+                messageDiv.innerHTML = `
+                <div>${data.content}</div>
+                <div class="message-info">${senderName} • ${timestamp}</div>
+            `
+
+                messagesContainer.appendChild(messageDiv)
+                messagesContainer.scrollTop = messagesContainer.scrollHeight
+            }
+
+            // Typing indicators
+            function handleChatTyping(event) {
+                if (event.type === 'keydown' && !state.typing.chat) {
+                    state.typing.chat = true
+                    // Simulate typing from User 1
+                    if (
+                        state.sockets.user1Chat &&
+                        state.sockets.user1Chat.connected
+                    ) {
+                        state.sockets.user1Chat.emit('typing', {
+                            conversationId: state.conversationId,
+                            isTyping: true
+                        })
+                    }
+                }
+
+                if (event.type === 'keyup') {
+                    clearTimeout(state.chatTypingTimeout)
+                    state.chatTypingTimeout = setTimeout(() => {
+                        state.typing.chat = false
+                        if (
+                            state.sockets.user1Chat &&
+                            state.sockets.user1Chat.connected
+                        ) {
+                            state.sockets.user1Chat.emit('typing', {
+                                conversationId: state.conversationId,
+                                isTyping: false
+                            })
+                        }
+                    }, 1000)
+                }
+            }
+
+            function handleGroupTyping(event) {
+                if (event.type === 'keydown' && !state.typing.group) {
+                    state.typing.group = true
+                    // Simulate typing from User 1
+                    if (
+                        state.sockets.user1Group &&
+                        state.sockets.user1Group.connected
+                    ) {
+                        state.sockets.user1Group.emit('groupTyping', {
+                            groupId: state.groupUuid,
+                            isTyping: true
+                        })
+                    }
+                }
+
+                if (event.type === 'keyup') {
+                    clearTimeout(state.groupTypingTimeout)
+                    state.groupTypingTimeout = setTimeout(() => {
+                        state.typing.group = false
+                        if (
+                            state.sockets.user1Group &&
+                            state.sockets.user1Group.connected
+                        ) {
+                            state.sockets.user1Group.emit('groupTyping', {
+                                groupId: state.groupUuid,
+                                isTyping: false
+                            })
+                        }
+                    }, 1000)
+                }
+            }
+
+            function toggleChatTyping() {
+                state.typing.chat = !state.typing.chat
+
+                if (
+                    state.sockets.user1Chat &&
+                    state.sockets.user1Chat.connected
+                ) {
+                    state.sockets.user1Chat.emit('typing', {
+                        conversationId: state.conversationId,
+                        isTyping: state.typing.chat
+                    })
+                }
+
+                log(
+                    `Chat typing indicator: ${state.typing.chat ? 'ON' : 'OFF'}`
+                )
+            }
+
+            function toggleGroupTyping() {
+                state.typing.group = !state.typing.group
+
+                if (
+                    state.sockets.user1Group &&
+                    state.sockets.user1Group.connected
+                ) {
+                    state.sockets.user1Group.emit('groupTyping', {
+                        groupId: state.groupUuid,
+                        isTyping: state.typing.group
+                    })
+                }
+
+                log(
+                    `Group typing indicator: ${state.typing.group ? 'ON' : 'OFF'}`
+                )
+            }
+
+            function handleTypingIndicator(chatType, data) {
+                const elementId =
+                    chatType === 'chat' ? 'chatTyping' : 'groupTyping'
+                const element = document.getElementById(elementId)
+
+                if (data.isTyping) {
+                    const userName =
+                        data.userId === state.user1.id ? 'Eraj' : 'Faysal'
+                    element.textContent = `${userName} is typing...`
+                    element.style.display = 'block'
+                    log(`${userName} is typing in ${chatType}`)
+                } else {
+                    element.style.display = 'none'
+                    log(`Typing stopped in ${chatType}`)
+                }
+            }
+
+            // Initialize on page load
+            document.addEventListener('DOMContentLoaded', function () {
+                log('🐾 Kitty Chat Local Testing System Initialized')
+                log('📍 Server: localhost:3001')
+                log('👥 Users: eraj@gmail.com & faysal@mobile.com')
+                log('🔑 Password: 12345678')
+                log('')
+                log('📋 Quick Start:')
+                log('1. Click "Login User 1" and "Login User 2"')
+                log(
+                    '2. Click "Auto Setup" to create friendship, conversation, and group'
+                )
+                log('3. Click "Connect to Chat" buttons for both users')
+                log(
+                    '4. Start testing real-time messaging and typing indicators!'
+                )
+                log('')
+                log(
+                    '✨ Ready for testing! Follow the steps above to get started.'
+                )
+            })
+        </script>
+    </body>
+</html>

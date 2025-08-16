@@ -5,67 +5,142 @@ import {
     HttpStatus,
     Post,
     Request,
-    UseGuards
+    UseGuards,
+    Logger
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { JwtService } from '@nestjs/jwt'
 import {
     ApiBearerAuth,
+    ApiBody,
     ApiOperation,
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
-import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'
-
+import { AuthService } from './service/auth.service'
 import {
-    EmailVerificationDto,
-    ForgetPasswordDto,
     LoginDto,
     RegistrationDto,
-    UpdatePasswordDto,
-    VerificationCodeSenderDto
+    EmailVerificationDto,
+    VerificationCodeSenderDto,
+    ForgetPasswordDto,
+    UpdatePasswordDto
 } from './dto/auth.dto'
-import { AuthService } from './service/auth.service'
+import { LocalAuthGuard } from './guards/local-auth.guard'
+import { JwtAuthGuard } from './guards/jwt-auth.guard'
 
 @ApiTags('🌏 🔒 Auth API')
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
-    @Post('login')
-    @ApiOperation({
-        summary: 'Login Endpoint'
-    })
-    @ApiResponse({
-        description: 'Something went wrong',
-        status: HttpStatus.BAD_REQUEST
-    })
-    @ApiResponse({
-        description: 'Login successful',
-        status: HttpStatus.OK
-    })
-    async login(@Request() req, @Body() loginDto: LoginDto) {
+    private readonly logger = new Logger('AuthController')
+
+    constructor(
+        private readonly authService: AuthService,
+        private readonly configService: ConfigService,
+        private readonly jwtService: JwtService
+    ) {}
+
+    @Get('test')
+    @ApiOperation({ summary: 'Test endpoint (no auth required)' })
+    test() {
+        this.logger.log('Test endpoint called')
         return {
             statusCode: HttpStatus.OK,
-            message: 'Login done successfully',
-            result: await this.authService.login(req, loginDto)
+            message: 'API is working',
+            timestamp: new Date().toISOString()
         }
     }
 
-    @Post('registration')
-    @ApiOperation({
-        summary: 'Registration Endpoint'
-    })
+    @Get('test-auth')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Test authentication' })
+    testAuth(@Request() req) {
+        this.logger.log('Test auth endpoint called')
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Authentication is working',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
+            }
+        }
+    }
+
+    @Post('login')
+    @UseGuards(LocalAuthGuard)
+    @ApiOperation({ summary: 'Login with email and password' })
+    @ApiBody({ type: LoginDto })
     @ApiResponse({
-        description: 'Something went wrong',
-        status: HttpStatus.BAD_REQUEST
+        status: 200,
+        description: 'Login successful',
+        schema: {
+            example: {
+                statusCode: 200,
+                message: 'Login successful',
+                data: {
+                    user: {
+                        id: 1,
+                        uuid: '123e4567-e89b-12d3-a456-426614174000',
+                        email: 'user@example.com',
+                        name: 'John Doe'
+                    },
+                    access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                }
+            }
+        }
     })
+    async login(@Request() req) {
+        // req.user now contains the validated user from LocalStrategy
+        const data = await this.authService.unifiedAuthResponse(req.user)
+
+        // Do the logging separately
+        await this.authService.logging(req.user, req)
+
+        // Log the generated token for debugging
+        this.logger.log(
+            `🔐 [LOGIN] Token generated for user: ${req.user.email}`
+        )
+        this.logger.log(
+            `   └─ Token preview: ${data.token.substring(0, 50)}...`
+        )
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Login successful',
+            data
+        }
+    }
+
+    @Post('register')
+    @ApiOperation({ summary: 'Register a new user' })
+    @ApiBody({ type: RegistrationDto })
     @ApiResponse({
-        description: 'Registration successful',
-        status: HttpStatus.CREATED
+        status: 201,
+        description: 'Registration successful'
     })
-    async registration(@Body() registrationDto: RegistrationDto) {
+    async register(@Body() registrationDto: RegistrationDto) {
         return {
             statusCode: HttpStatus.CREATED,
-            message: 'Registration done successfully',
-            result: await this.authService.registration(registrationDto)
+            message: 'Registration successful',
+            data: await this.authService.registration(registrationDto)
+        }
+    }
+
+    @Get('me')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get current user info' })
+    @ApiResponse({
+        status: 200,
+        description: 'Current user information'
+    })
+    getCurrentUser(@Request() req) {
+        this.logger.log('Get current user endpoint called')
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Current user fetched successfully',
+            data: req.user
         }
     }
 
@@ -99,6 +174,7 @@ export class AuthController {
      */
     @Post('verify-email')
     @ApiOperation({ summary: 'Verifying user email' })
+    @ApiBody({ type: EmailVerificationDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -125,6 +201,7 @@ export class AuthController {
      */
     @Post('regenerate-code')
     @ApiOperation({ summary: 'Code regeneration.' })
+    @ApiBody({ type: VerificationCodeSenderDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -150,6 +227,7 @@ export class AuthController {
 
     @Post('forget-password')
     @ApiOperation({ summary: 'Getting a code when you forgot the password' })
+    @ApiBody({ type: VerificationCodeSenderDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -159,7 +237,7 @@ export class AuthController {
         description: 'A code sent to you mail successfully',
         status: HttpStatus.CREATED
     })
-    private async forgetPassword(
+    async forgetPassword(
         @Body() verificationCodeSenderDto: VerificationCodeSenderDto
     ) {
         return {
@@ -175,6 +253,7 @@ export class AuthController {
     @ApiOperation({
         summary: 'Verify the code when you do not know your password'
     })
+    @ApiBody({ type: ForgetPasswordDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -184,9 +263,7 @@ export class AuthController {
         description: 'Code has been verified successfully',
         status: HttpStatus.OK
     })
-    private async codeVerification(
-        @Body() forgetPasswordDto: ForgetPasswordDto
-    ) {
+    async codeVerification(@Body() forgetPasswordDto: ForgetPasswordDto) {
         return {
             status: HttpStatus.OK,
             message: 'Code verified',
@@ -196,6 +273,7 @@ export class AuthController {
 
     @Post('recover-password')
     @ApiOperation({ summary: 'Update your password' })
+    @ApiBody({ type: UpdatePasswordDto })
     @ApiResponse({ description: 'Bad Request', status: HttpStatus.BAD_REQUEST })
     @ApiResponse({
         description: 'Something went wrong',
@@ -205,13 +283,100 @@ export class AuthController {
         description: 'Password updated successfully',
         status: HttpStatus.OK
     })
-    private async recoverPassword(
-        @Body() updatePasswordDto: UpdatePasswordDto
-    ) {
+    async recoverPassword(@Body() updatePasswordDto: UpdatePasswordDto) {
         return {
             status: HttpStatus.CREATED,
             message: 'Password has been set successfully',
             result: await this.authService.recoverPassword(updatePasswordDto)
+        }
+    }
+
+    @Get('debug/jwt-config')
+    @ApiOperation({ summary: 'Debug JWT configuration (remove in production)' })
+    debugJwtConfig() {
+        const jwtSecret = this.configService.get<string>('APP_SECRET')
+        return {
+            secretConfigured: !!jwtSecret,
+            secretLength: jwtSecret?.length || 0,
+            secretPreview: jwtSecret
+                ? `${jwtSecret.substring(0, 4)}...`
+                : 'Not configured',
+            expiresIn: this.configService.get<string>('APP_EXPIRES', '86400')
+        }
+    }
+
+    @Post('debug/verify-token')
+    @ApiOperation({
+        summary: 'Debug token verification (remove in production)'
+    })
+    async debugVerifyToken(@Body() body: { token: string }) {
+        try {
+            const decoded = this.jwtService.decode(body.token) as any
+            const verified = await this.jwtService.verifyAsync(body.token)
+
+            return {
+                decoded: {
+                    id: decoded?.id,
+                    uuid: decoded?.uuid,
+                    email: decoded?.email,
+                    iat: decoded?.iat
+                        ? new Date(decoded.iat * 1000).toISOString()
+                        : null,
+                    exp: decoded?.exp
+                        ? new Date(decoded.exp * 1000).toISOString()
+                        : null
+                },
+                verified: true,
+                verifiedData: {
+                    id: verified?.id,
+                    uuid: verified?.uuid,
+                    email: verified?.email
+                }
+            }
+        } catch (error) {
+            return {
+                error: error.name,
+                message: error.message,
+                decoded: (() => {
+                    try {
+                        const decoded = this.jwtService.decode(
+                            body.token
+                        ) as any
+                        return {
+                            id: decoded?.id,
+                            uuid: decoded?.uuid,
+                            email: decoded?.email,
+                            iat: decoded?.iat
+                                ? new Date(decoded.iat * 1000).toISOString()
+                                : null,
+                            exp: decoded?.exp
+                                ? new Date(decoded.exp * 1000).toISOString()
+                                : null
+                        }
+                    } catch {
+                        return null
+                    }
+                })()
+            }
+        }
+    }
+
+    @Get('verify-token')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Verify JWT token is valid' })
+    @ApiResponse({
+        status: 200,
+        description: 'Token is valid'
+    })
+    verifyToken(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Token is valid',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
+            }
         }
     }
 }

@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Socket.IO Test</title>
+        <script src="https://cdn.socket.io/4.7.1/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Socket.IO Connection Test</h1>
+        <div id="status">Connecting...</div>
+        <div id="logs"></div>
+
+        <script>
+            const token =
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXVpZCI6ImI5NTNmMmZjLThlNjQtNDRhNS1iMGIwLWExOWFiZGFiODZiZCIsImVtYWlsIjoiZXJhakBnbWFpbC5jb20iLCJpYXQiOjE3NTQ2NTI5MjYsImV4cCI6MTc1NTI1NzcyNn0.JR6aPRaIYd4r_baae8IiY29m2Pr9-5U_A7F0UQaoQ1c'
+
+            function log(message) {
+                const logs = document.getElementById('logs')
+                logs.innerHTML +=
+                    '<div>' +
+                    new Date().toISOString() +
+                    ': ' +
+                    message +
+                    '</div>'
+                console.log(message)
+            }
+
+            function updateStatus(status) {
+                document.getElementById('status').textContent = status
+            }
+
+            // Test 1: Connect with token in URL (Flutter pattern)
+            log('Testing connection with token in URL...')
+            const socket1 = io(`http://103.190.136.200:3000/${token}`, {
+                transports: ['websocket']
+            })
+
+            socket1.on('connect', () => {
+                updateStatus('Connected with token in URL!')
+                log('✅ Connected with token in URL')
+
+                // Send setup event
+                socket1.emit('setup', 'b953f2fc-8e64-44a5-b0b0-a19abdab86bd')
+            })
+
+            socket1.on('connected', (data) => {
+                log('📡 Connected event received: ' + JSON.stringify(data))
+            })
+
+            socket1.on('authenticated', (data) => {
+                log('🔐 Authenticated event received: ' + JSON.stringify(data))
+            })
+
+            socket1.on('setupComplete', (data) => {
+                log('✅ Setup complete: ' + JSON.stringify(data))
+            })
+
+            socket1.on('connect_error', (error) => {
+                updateStatus('Connection Error')
+                log('❌ Connection error: ' + error.message)
+            })
+
+            socket1.on('disconnect', (reason) => {
+                updateStatus('Disconnected')
+                log('🔌 Disconnected: ' + reason)
+            })
+
+            socket1.on('error', (error) => {
+                log('❌ Socket error: ' + error)
+            })
+
+            // Auto-disconnect after 10 seconds for testing
+            setTimeout(() => {
+                if (socket1.connected) {
+                    log('🔌 Auto-disconnecting...')
+                    socket1.disconnect()
+                }
+            }, 10000)
+        </script>
+    </body>
+</html>

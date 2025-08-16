@@ -8,6 +8,7 @@ import {
     Param,
     ParseIntPipe,
     Patch,
+    Post,
     Query,
     Request,
     UploadedFile,
@@ -25,8 +26,9 @@ import {
     ApiResponse,
     ApiTags
 } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { UpdateUserDto } from './dto/update-user.dto'
+import { UpdateUserAchievementsDto } from './dto/update-user-achievements.dto'
 import { User } from './entities/user.entity'
 import { UserService } from './user.service'
 import { IPaginationOptions } from 'nestjs-typeorm-paginate'
@@ -226,6 +228,168 @@ export class UserController {
         }
     }
 
+    @Get('achievement')
+    @ApiOperation({
+        summary: 'Get user achievement data',
+        description:
+            'Get user achievement data including purchased gifts, entry effects, and frames'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'User achievement data retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'User achievement data fetched successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        _id: { type: 'string' },
+                        userId: { type: 'string' },
+                        name: { type: 'string' },
+                        country: { type: 'string' },
+                        email: { type: 'string' },
+                        image: { type: 'string' },
+                        coverImage: { type: 'string' },
+                        level: { type: 'number' },
+                        balance: { type: 'number' },
+                        frameId: { type: 'string', nullable: true },
+                        frameImage: { type: 'string', nullable: true },
+                        badge: { type: 'array', items: { type: 'string' } },
+                        gift: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        },
+                        entryEffect: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        },
+                        frame: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    _id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    achievementImage: { type: 'string' },
+                                    achievementDescription: { type: 'string' },
+                                    count: { type: 'number' }
+                                }
+                            }
+                        },
+                        friend: {
+                            type: 'number',
+                            description: 'Number of friends'
+                        },
+                        follower: {
+                            type: 'number',
+                            description: 'Number of followers'
+                        },
+                        following: {
+                            type: 'number',
+                            description: 'Number of people being followed'
+                        },
+                        visitorCount: {
+                            type: 'number',
+                            description:
+                                'Number of unique visitors to the profile'
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async getAchievement(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'User achievement data fetched successfully',
+            data: await this.userService.getUserAchievementData(req.user.uuid)
+        }
+    }
+
+    @Patch('achievement')
+    @ApiOperation({
+        summary: 'Update user achievement data',
+        description:
+            'Update user achievement data including purchased gifts, entry effects, and frames'
+    })
+    @ApiBody({ type: UpdateUserAchievementsDto })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'User achievement data updated successfully',
+        type: User
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async updateAchievement(
+        @Request() req,
+        @Body() updateDto: UpdateUserAchievementsDto
+    ) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'User achievement data updated successfully',
+            data: await this.userService.updateUserAchievements(
+                req.user.uuid,
+                updateDto
+            )
+        }
+    }
+
+    @Post('visit/:id')
+    @ApiOperation({
+        summary: 'Record profile visit',
+        description:
+            "Record that the current user visited another user's profile"
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'UUID of the user whose profile was visited',
+        example: '123e4567-e89b-12d3-a456-426614174000'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Profile visit recorded successfully'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'User not found'
+    })
+    async recordVisit(@Request() req, @Param('id') visitedUserId: string) {
+        await this.userService.recordProfileVisit(req.user.uuid, visitedUserId)
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Profile visit recorded successfully'
+        }
+    }
+
     @Get(':id')
     @ApiOperation({
         summary: 'Get user by ID',
@@ -245,11 +409,14 @@ export class UserController {
         status: HttpStatus.NOT_FOUND,
         description: 'User not found'
     })
-    async findOne(@Param('id') id: string) {
+    async findOne(@Request() req, @Param('id') id: string) {
         return {
             statusCode: HttpStatus.OK,
             message: 'User fetched successfully',
-            data: await this.userService.findOne(id)
+            data: await this.userService.findOneWithVisitTracking(
+                id,
+                req.user?.uuid
+            )
         }
     }
 
@@ -274,7 +441,8 @@ export class UserController {
                 avatar: {
                     type: 'string',
                     format: 'binary',
-                    description: 'Avatar image file'
+                    description:
+                        'Avatar image file (supports JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO formats, max 10MB)'
                 }
             }
         }
@@ -291,16 +459,36 @@ export class UserController {
     @UseInterceptors(
         FileInterceptor('avatar', {
             fileFilter: (req, file, cb) => {
-                if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+                // Accept all common image formats including modern formats
+                const allowedMimeTypes = [
+                    'image/jpeg',
+                    'image/jpg',
+                    'image/png',
+                    'image/gif',
+                    'image/webp',
+                    'image/bmp',
+                    'image/tiff',
+                    'image/tif',
+                    'image/svg+xml',
+                    'image/avif',
+                    'image/heic',
+                    'image/heif',
+                    'image/ico',
+                    'image/x-icon'
+                ]
+
+                if (!allowedMimeTypes.includes(file.mimetype)) {
                     return cb(
-                        new BadRequestException('Only image files are allowed'),
+                        new BadRequestException(
+                            `Unsupported image format: ${file.mimetype}. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO`
+                        ),
                         false
                     )
                 }
                 cb(null, true)
             },
             limits: {
-                fileSize: 5 * 1024 * 1024 // 5MB limit
+                fileSize: 10 * 1024 * 1024 // Increased to 10MB limit for higher quality images
             }
         })
     )
@@ -310,13 +498,45 @@ export class UserController {
         @Body() updateUserDto: UpdateUserDto,
         @UploadedFile() avatarFile?: Express.Multer.File
     ) {
-        return {
-            statusCode: HttpStatus.OK,
-            message: 'User updated successfully',
-            data: await this.userService.update(
-                req.user.uuid === id ? req.user.uuid : id,
+        try {
+            // Log the incoming request data for debugging
+            console.log('Update request data:', {
+                userId: id,
+                requestUserId: req.user?.uuid,
+                updateData: updateUserDto,
+                hasFile: !!avatarFile,
+                fileName: avatarFile?.originalname
+            })
+
+            // Check if user is trying to update their own profile or has admin rights
+            const targetUserId = req.user.uuid === id ? req.user.uuid : id
+
+            const updatedUser = await this.userService.update(
+                targetUserId,
                 updateUserDto,
                 avatarFile
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'User updated successfully',
+                data: updatedUser
+            }
+        } catch (error) {
+            // Log the specific error for debugging
+            console.error('User update error:', {
+                error: error.message,
+                stack: error.stack,
+                status: error.status,
+                response: error.response
+            })
+
+            if (error.status) {
+                throw error // Re-throw HTTP exceptions
+            }
+
+            throw new BadRequestException(
+                error.message || 'Failed to update user'
             )
         }
     }
@@ -334,7 +554,8 @@ export class UserController {
                 avatar: {
                     type: 'string',
                     format: 'binary',
-                    description: 'Avatar image file'
+                    description:
+                        'Avatar image file (supports JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO formats, max 10MB)'
                 }
             },
             required: ['avatar']
@@ -348,16 +569,37 @@ export class UserController {
     @UseInterceptors(
         FileInterceptor('avatar', {
             fileFilter: (req, file, cb) => {
-                if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+                // Accept all common image formats including modern formats
+                const allowedMimeTypes = [
+                    'image/jpeg',
+                    'image/jpg',
+                    'image/pjpeg', // Progressive JPEG (IE sends this)
+                    'image/png',
+                    'image/gif',
+                    'image/webp',
+                    'image/bmp',
+                    'image/tiff',
+                    'image/tif',
+                    'image/svg+xml',
+                    'image/avif',
+                    'image/heic',
+                    'image/heif',
+                    'image/ico',
+                    'image/x-icon'
+                ]
+
+                if (!allowedMimeTypes.includes(file.mimetype)) {
                     return cb(
-                        new BadRequestException('Only image files are allowed'),
+                        new BadRequestException(
+                            `Unsupported image format: ${file.mimetype}. Supported formats: JPEG/JPG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO`
+                        ),
                         false
                     )
                 }
                 cb(null, true)
             },
             limits: {
-                fileSize: 5 * 1024 * 1024 // 5MB limit
+                fileSize: 10 * 1024 * 1024 // Increased to 10MB limit for higher quality images
             }
         })
     )
@@ -365,14 +607,50 @@ export class UserController {
         @Request() req: any,
         @UploadedFile() avatarFile: Express.Multer.File
     ) {
-        if (!avatarFile) {
-            throw new BadRequestException('Avatar file is required')
-        }
+        try {
+            if (!avatarFile) {
+                throw new BadRequestException('Avatar file is required')
+            }
 
-        return {
-            statusCode: HttpStatus.OK,
-            message: 'Avatar updated successfully',
-            data: await this.userService.update(req.user.uuid, {}, avatarFile)
+            // Log the file details for debugging
+            console.log('Avatar upload details:', {
+                originalname: avatarFile.originalname,
+                mimetype: avatarFile.mimetype,
+                size: avatarFile.size,
+                userId: req.user.uuid
+            })
+
+            const updatedUser = await this.userService.update(
+                req.user.uuid,
+                {},
+                avatarFile
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Avatar updated successfully',
+                data: updatedUser
+            }
+        } catch (error) {
+            console.error('Avatar update error:', {
+                error: error.message,
+                userId: req.user.uuid,
+                fileInfo: avatarFile
+                    ? {
+                          name: avatarFile.originalname,
+                          type: avatarFile.mimetype,
+                          size: avatarFile.size
+                      }
+                    : 'No file'
+            })
+
+            if (error.status) {
+                throw error
+            }
+
+            throw new BadRequestException(
+                error.message || 'Failed to update avatar'
+            )
         }
     }
 

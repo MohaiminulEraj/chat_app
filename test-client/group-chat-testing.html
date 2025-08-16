@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kitty Group Chat Real-Time Testing</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+
+            .container {
+                background: white;
+                border-radius: 15px;
+                padding: 30px;
+                box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            }
+
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
+            }
+
+            .header h1 {
+                margin: 0;
+                color: #667eea;
+                font-size: 2.5em;
+            }
+
+            .header p {
+                margin: 10px 0 0 0;
+                color: #666;
+                font-size: 1.1em;
+            }
+
+            .section {
+                margin-bottom: 25px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                border-left: 4px solid #667eea;
+            }
+
+            .section h3 {
+                margin-top: 0;
+                color: #333;
+                font-size: 1.3em;
+            }
+
+            .form-group {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 15px;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+
+            .form-group label {
+                min-width: 120px;
+                font-weight: 600;
+                color: #555;
+            }
+
+            input,
+            select,
+            button {
+                padding: 10px 15px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: all 0.3s ease;
+            }
+
+            input:focus,
+            select:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+
+            button {
+                background: #667eea;
+                color: white;
+                border: none;
+                cursor: pointer;
+                font-weight: 600;
+                min-width: 120px;
+            }
+
+            button:hover {
+                background: #5a6fd8;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+            }
+
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+
+            .status {
+                padding: 10px 15px;
+                border-radius: 8px;
+                margin: 10px 0;
+                font-weight: 600;
+            }
+
+            .status.connected {
+                background: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+
+            .status.disconnected {
+                background: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+
+            .status.connecting {
+                background: #fff3cd;
+                color: #856404;
+                border: 1px solid #ffeaa7;
+            }
+
+            .messages {
+                height: 300px;
+                overflow-y: auto;
+                border: 2px solid #e9ecef;
+                border-radius: 10px;
+                padding: 15px;
+                background: white;
+                font-family: 'Courier New', monospace;
+                font-size: 13px;
+                line-height: 1.4;
+            }
+
+            .message {
+                margin-bottom: 10px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                border-left: 3px solid #667eea;
+                background: #f8f9ff;
+            }
+
+            .message.sent {
+                background: #e8f5e8;
+                border-left-color: #28a745;
+                margin-left: 20px;
+            }
+
+            .message.received {
+                background: #fff3cd;
+                border-left-color: #ffc107;
+                margin-right: 20px;
+            }
+
+            .message.system {
+                background: #e2e3e5;
+                border-left-color: #6c757d;
+                font-style: italic;
+            }
+
+            .message.error {
+                background: #f8d7da;
+                border-left-color: #dc3545;
+                color: #721c24;
+            }
+
+            .timestamp {
+                font-size: 11px;
+                color: #666;
+                margin-right: 10px;
+            }
+
+            .message-content {
+                margin-left: 10px;
+            }
+
+            .grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-top: 30px;
+            }
+
+            .user-panel {
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                border: 2px solid #e9ecef;
+            }
+
+            .user-panel h4 {
+                margin-top: 0;
+                color: #667eea;
+                font-size: 1.2em;
+                border-bottom: 2px solid #e9ecef;
+                padding-bottom: 10px;
+            }
+
+            .action-buttons {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                margin-top: 15px;
+            }
+
+            .action-buttons button {
+                min-width: auto;
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+
+            .quick-messages {
+                margin-top: 15px;
+            }
+
+            .quick-messages button {
+                display: block;
+                width: 100%;
+                margin-bottom: 5px;
+                text-align: left;
+                background: #f8f9fa;
+                color: #333;
+                border: 1px solid #ddd;
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+
+            .quick-messages button:hover {
+                background: #e9ecef;
+                transform: none;
+                box-shadow: none;
+            }
+
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin-top: 20px;
+            }
+
+            .stat-item {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                text-align: center;
+                border: 2px solid #e9ecef;
+            }
+
+            .stat-value {
+                font-size: 24px;
+                font-weight: bold;
+                color: #667eea;
+            }
+
+            .stat-label {
+                font-size: 12px;
+                color: #666;
+                margin-top: 5px;
+            }
+
+            @media (max-width: 768px) {
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .form-group {
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .form-group label {
+                    min-width: auto;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🗨️ Group Chat Testing Suite</h1>
+                <p>Real-time group chat testing for Kitty Backend</p>
+            </div>
+
+            <!-- Configuration Section -->
+            <div class="section">
+                <h3>🔧 Configuration</h3>
+                <div class="form-group">
+                    <label>Server URL:</label>
+                    <input
+                        type="text"
+                        id="serverUrl"
+                        value="http://localhost:3001"
+                        placeholder="Server URL"
+                    />
+                    <button onclick="updateServerUrl()">Update</button>
+                </div>
+                <div class="form-group">
+                    <label>Environment:</label>
+                    <select id="environment" onchange="changeEnvironment()">
+                        <option value="localhost">Localhost (3001)</option>
+                        <option value="live">
+                            Live Server (103.190.136.200:3000)
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Authentication Section -->
+            <div class="section">
+                <h3>🔐 Authentication</h3>
+                <div class="form-group">
+                    <label>User 1 Email:</label>
+                    <input
+                        type="email"
+                        id="user1Email"
+                        value="eraj@gmail.com"
+                    />
+                    <label>Password:</label>
+                    <input
+                        type="password"
+                        id="user1Password"
+                        value="password123"
+                    />
+                    <button onclick="loginUser1()">Login User 1</button>
+                </div>
+                <div class="form-group">
+                    <label>User 2 Email:</label>
+                    <input
+                        type="email"
+                        id="user2Email"
+                        value="faysal@mobile.com"
+                    />
+                    <label>Password:</label>
+                    <input
+                        type="password"
+                        id="user2Password"
+                        value="password123"
+                    />
+                    <button onclick="loginUser2()">Login User 2</button>
+                </div>
+            </div>
+
+            <!-- Group Management Section -->
+            <div class="section">
+                <h3>👥 Group Management</h3>
+                <div class="form-group">
+                    <label>Group Name:</label>
+                    <input
+                        type="text"
+                        id="groupName"
+                        value="Test Group Chat"
+                        placeholder="Group name"
+                    />
+                    <button onclick="createGroup()">Create Group</button>
+                </div>
+                <div class="form-group">
+                    <label>Group ID:</label>
+                    <input
+                        type="text"
+                        id="groupId"
+                        placeholder="Group ID (auto-filled after creation)"
+                    />
+                    <button onclick="getGroupMembers()">Get Members</button>
+                    <button onclick="getGroupStats()">Get Stats</button>
+                </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="section">
+                <h3>🔗 Connection Status</h3>
+                <div id="connectionStatus" class="status disconnected">
+                    Disconnected
+                </div>
+                <div class="action-buttons">
+                    <button onclick="connectUser1()">Connect User 1</button>
+                    <button onclick="connectUser2()">Connect User 2</button>
+                    <button onclick="disconnectAll()">Disconnect All</button>
+                </div>
+            </div>
+
+            <!-- Dual User Testing -->
+            <div class="grid">
+                <!-- User 1 Panel -->
+                <div class="user-panel">
+                    <h4>👤 User 1 (Eraj)</h4>
+                    <div id="user1Status" class="status disconnected">
+                        Disconnected
+                    </div>
+
+                    <div class="form-group">
+                        <input
+                            type="text"
+                            id="user1Message"
+                            placeholder="Type message..."
+                            style="flex: 1"
+                        />
+                        <button onclick="sendMessageUser1()">Send</button>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button onclick="joinGroupUser1()">Join Group</button>
+                        <button onclick="leaveGroupUser1()">Leave Group</button>
+                        <button onclick="startTypingUser1()">
+                            Start Typing
+                        </button>
+                        <button onclick="stopTypingUser1()">Stop Typing</button>
+                        <button onclick="getHistoryUser1()">Get History</button>
+                    </div>
+
+                    <div class="quick-messages">
+                        <h5>Quick Messages:</h5>
+                        <button
+                            onclick="sendQuickMessage1('Hello everyone! 👋')"
+                        >
+                            Hello everyone! 👋
+                        </button>
+                        <button
+                            onclick="sendQuickMessage1('How is everyone doing?')"
+                        >
+                            How is everyone doing?
+                        </button>
+                        <button
+                            onclick="sendQuickMessage1('Testing group chat features 🧪')"
+                        >
+                            Testing group chat features 🧪
+                        </button>
+                        <button
+                            onclick="sendQuickMessage1('This is a longer message to test how the group chat handles different message lengths and formatting.')"
+                        >
+                            Long message test
+                        </button>
+                    </div>
+
+                    <div id="user1Messages" class="messages"></div>
+                </div>
+
+                <!-- User 2 Panel -->
+                <div class="user-panel">
+                    <h4>👤 User 2 (Faysal)</h4>
+                    <div id="user2Status" class="status disconnected">
+                        Disconnected
+                    </div>
+
+                    <div class="form-group">
+                        <input
+                            type="text"
+                            id="user2Message"
+                            placeholder="Type message..."
+                            style="flex: 1"
+                        />
+                        <button onclick="sendMessageUser2()">Send</button>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button onclick="joinGroupUser2()">Join Group</button>
+                        <button onclick="leaveGroupUser2()">Leave Group</button>
+                        <button onclick="startTypingUser2()">
+                            Start Typing
+                        </button>
+                        <button onclick="stopTypingUser2()">Stop Typing</button>
+                        <button onclick="getHistoryUser2()">Get History</button>
+                    </div>
+
+                    <div class="quick-messages">
+                        <h5>Quick Messages:</h5>
+                        <button onclick="sendQuickMessage2('Hi there! 😊')">
+                            Hi there! 😊
+                        </button>
+                        <button
+                            onclick="sendQuickMessage2('Great to see you!')"
+                        >
+                            Great to see you!
+                        </button>
+                        <button
+                            onclick="sendQuickMessage2('Group chat is working perfectly! ✅')"
+                        >
+                            Group chat is working! ✅
+                        </button>
+                        <button
+                            onclick="sendQuickMessage2('Let me reply to your message...')"
+                        >
+                            Let me reply...
+                        </button>
+                    </div>
+
+                    <div id="user2Messages" class="messages"></div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="section">
+                <h3>📊 Real-Time Statistics</h3>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="messageCount">0</div>
+                        <div class="stat-label">Messages Sent</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="connectionCount">0</div>
+                        <div class="stat-label">Active Connections</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="errorCount">0</div>
+                        <div class="stat-label">Errors</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="eventCount">0</div>
+                        <div class="stat-label">Events Received</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Log -->
+            <div class="section">
+                <h3>📝 System Log</h3>
+                <div id="systemLog" class="messages"></div>
+            </div>
+        </div>
+
+        <script>
+            // Global variables
+            let serverUrl = 'http://localhost:3001'
+            let user1Socket = null
+            let user2Socket = null
+            let user1Token = ''
+            let user2Token = ''
+            let user1Data = {}
+            let user2Data = {}
+            let currentGroupId = ''
+            let messageCount = 0
+            let connectionCount = 0
+            let errorCount = 0
+            let eventCount = 0
+
+            // Configuration functions
+            function updateServerUrl() {
+                serverUrl = document.getElementById('serverUrl').value
+                logSystem(`Server URL updated to: ${serverUrl}`)
+            }
+
+            function changeEnvironment() {
+                const env = document.getElementById('environment').value
+                if (env === 'localhost') {
+                    serverUrl = 'http://localhost:3001'
+                    document.getElementById('serverUrl').value = serverUrl
+                } else {
+                    serverUrl = 'http://103.190.136.200:3000'
+                    document.getElementById('serverUrl').value = serverUrl
+                }
+                logSystem(`Environment changed to: ${env} (${serverUrl})`)
+            }
+
+            // Authentication functions
+            async function loginUser1() {
+                const email = document.getElementById('user1Email').value
+                const password = document.getElementById('user1Password').value
+
+                try {
+                    const response = await fetch(
+                        `${serverUrl}/api/v1/auth/login`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        }
+                    )
+
+                    const data = await response.json()
+                    if (response.ok) {
+                        user1Token = data.data.token
+                        user1Data = data.data.user
+                        logSystem(
+                            `User 1 authenticated: ${user1Data.name || user1Data.email}`
+                        )
+                        updateConnectionStatus()
+                    } else {
+                        logError(`User 1 login failed: ${data.message}`)
+                    }
+                } catch (error) {
+                    logError(`User 1 login error: ${error.message}`)
+                }
+            }
+
+            async function loginUser2() {
+                const email = document.getElementById('user2Email').value
+                const password = document.getElementById('user2Password').value
+
+                try {
+                    const response = await fetch(
+                        `${serverUrl}/api/v1/auth/login`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        }
+                    )
+
+                    const data = await response.json()
+                    if (response.ok) {
+                        user2Token = data.data.token
+                        user2Data = data.data.user
+                        logSystem(
+                            `User 2 authenticated: ${user2Data.name || user2Data.email}`
+                        )
+                        updateConnectionStatus()
+                    } else {
+                        logError(`User 2 login failed: ${data.message}`)
+                    }
+                } catch (error) {
+                    logError(`User 2 login error: ${error.message}`)
+                }
+            }
+
+            // Group management functions
+            async function createGroup() {
+                if (!user1Token) {
+                    logError('User 1 must be logged in to create group')
+                    return
+                }
+
+                const groupName = document.getElementById('groupName').value
+
+                try {
+                    const response = await fetch(`${serverUrl}/api/v1/groups`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${user1Token}`
+                        },
+                        body: JSON.stringify({
+                            name: groupName,
+                            description:
+                                'Group for testing real-time chat functionality',
+                            tag: 'testing',
+                            isPublic: false,
+                            memberIds: user2Data.uuid ? [user2Data.uuid] : []
+                        })
+                    })
+
+                    const data = await response.json()
+                    if (response.ok) {
+                        currentGroupId = data.data.uuid
+                        document.getElementById('groupId').value =
+                            currentGroupId
+                        logSystem(
+                            `Group created: ${groupName} (ID: ${currentGroupId})`
+                        )
+                    } else {
+                        logError(`Group creation failed: ${data.message}`)
+                    }
+                } catch (error) {
+                    logError(`Group creation error: ${error.message}`)
+                }
+            }
+
+            async function getGroupMembers() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (!groupId || !user1Token) {
+                    logError('Group ID and authentication required')
+                    return
+                }
+
+                try {
+                    const response = await fetch(
+                        `${serverUrl}/api/v1/groups/${groupId}/members`,
+                        {
+                            headers: { Authorization: `Bearer ${user1Token}` }
+                        }
+                    )
+
+                    const data = await response.json()
+                    if (response.ok) {
+                        logSystem(
+                            `Group members (${data.data.length}): ${data.data.map((m) => m.user.name || m.user.email).join(', ')}`
+                        )
+                    } else {
+                        logError(`Failed to get group members: ${data.message}`)
+                    }
+                } catch (error) {
+                    logError(`Group members error: ${error.message}`)
+                }
+            }
+
+            async function getGroupStats() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (!groupId || !user1Token) {
+                    logError('Group ID and authentication required')
+                    return
+                }
+
+                try {
+                    const response = await fetch(
+                        `${serverUrl}/api/v1/group-chat/${groupId}/stats`,
+                        {
+                            headers: { Authorization: `Bearer ${user1Token}` }
+                        }
+                    )
+
+                    const data = await response.json()
+                    if (response.ok) {
+                        logSystem(
+                            `Group Stats - Messages: ${data.data.totalMessages}, Members: ${data.data.totalMembers}, Active Today: ${data.data.activeToday}`
+                        )
+                    } else {
+                        logError(`Failed to get group stats: ${data.message}`)
+                    }
+                } catch (error) {
+                    logError(`Group stats error: ${error.message}`)
+                }
+            }
+
+            // WebSocket connection functions
+            function connectUser1() {
+                if (!user1Token) {
+                    logError('User 1 must be logged in first')
+                    return
+                }
+
+                const wsUrl = serverUrl.replace('http', 'ws') + '/group-chat'
+                user1Socket = io(wsUrl, {
+                    transports: ['websocket', 'polling']
+                })
+
+                setupSocketEvents(user1Socket, 'User 1', 'user1')
+                user1Socket.emit('authenticate', { token: user1Token })
+            }
+
+            function connectUser2() {
+                if (!user2Token) {
+                    logError('User 2 must be logged in first')
+                    return
+                }
+
+                const wsUrl = serverUrl.replace('http', 'ws') + '/group-chat'
+                user2Socket = io(wsUrl, {
+                    transports: ['websocket', 'polling']
+                })
+
+                setupSocketEvents(user2Socket, 'User 2', 'user2')
+                user2Socket.emit('authenticate', { token: user2Token })
+            }
+
+            function setupSocketEvents(socket, userName, userPrefix) {
+                socket.on('connect', () => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${userName} connected to WebSocket`
+                    )
+                    connectionCount++
+                    updateStats()
+                    updateConnectionStatus()
+                })
+
+                socket.on('disconnect', () => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${userName} disconnected from WebSocket`
+                    )
+                    connectionCount = Math.max(0, connectionCount - 1)
+                    updateStats()
+                    updateConnectionStatus()
+                })
+
+                socket.on('authenticated', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${userName} authenticated: ${data.userName}`
+                    )
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('authenticationError', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'error',
+                        `${userName} authentication failed: ${data.message}`
+                    )
+                    errorCount++
+                    updateStats()
+                })
+
+                socket.on('joinedGroup', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${userName} joined group: ${data.groupId}`
+                    )
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('userJoinedGroup', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${data.userName} joined the group`
+                    )
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('userLeftGroup', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${data.userName} left the group`
+                    )
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('groupMessageReceived', (data) => {
+                    const isOwn =
+                        (userPrefix === 'user1' &&
+                            data.senderId === user1Data.uuid) ||
+                        (userPrefix === 'user2' &&
+                            data.senderId === user2Data.uuid)
+                    const messageType = isOwn ? 'sent' : 'received'
+                    logMessage(
+                        userPrefix,
+                        messageType,
+                        `${data.senderName}: ${data.content}`
+                    )
+                    messageCount++
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('userTypingInGroup', (data) => {
+                    const action = data.isTyping ? 'started' : 'stopped'
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `${data.userName} ${action} typing`
+                    )
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('groupMessageHistory', (data) => {
+                    logMessage(
+                        userPrefix,
+                        'system',
+                        `Received ${data.messages.length} historical messages`
+                    )
+                    data.messages.reverse().forEach((msg) => {
+                        const isOwn =
+                            (userPrefix === 'user1' &&
+                                msg.senderId === user1Data.uuid) ||
+                            (userPrefix === 'user2' &&
+                                msg.senderId === user2Data.uuid)
+                        const messageType = isOwn ? 'sent' : 'received'
+                        logMessage(
+                            userPrefix,
+                            messageType,
+                            `${msg.senderName}: ${msg.content}`,
+                            new Date(msg.timestamp)
+                        )
+                    })
+                    eventCount++
+                    updateStats()
+                })
+
+                socket.on('error', (data) => {
+                    logMessage(userPrefix, 'error', `Error: ${data.message}`)
+                    errorCount++
+                    updateStats()
+                })
+            }
+
+            // Group interaction functions
+            function joinGroupUser1() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user1Socket && groupId) {
+                    user1Socket.emit('joinGroup', { groupId })
+                }
+            }
+
+            function joinGroupUser2() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user2Socket && groupId) {
+                    user2Socket.emit('joinGroup', { groupId })
+                }
+            }
+
+            function leaveGroupUser1() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user1Socket && groupId) {
+                    user1Socket.emit('leaveGroup', { groupId })
+                }
+            }
+
+            function leaveGroupUser2() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user2Socket && groupId) {
+                    user2Socket.emit('leaveGroup', { groupId })
+                }
+            }
+
+            // Messaging functions
+            function sendMessageUser1() {
+                const message = document.getElementById('user1Message').value
+                if (message && user1Socket) {
+                    sendMessage(user1Socket, message)
+                    document.getElementById('user1Message').value = ''
+                }
+            }
+
+            function sendMessageUser2() {
+                const message = document.getElementById('user2Message').value
+                if (message && user2Socket) {
+                    sendMessage(user2Socket, message)
+                    document.getElementById('user2Message').value = ''
+                }
+            }
+
+            function sendQuickMessage1(message) {
+                if (user1Socket) {
+                    sendMessage(user1Socket, message)
+                }
+            }
+
+            function sendQuickMessage2(message) {
+                if (user2Socket) {
+                    sendMessage(user2Socket, message)
+                }
+            }
+
+            function sendMessage(socket, content) {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (!groupId) {
+                    logError('Group ID required to send message')
+                    return
+                }
+
+                socket.emit('sendGroupMessage', {
+                    groupId,
+                    content,
+                    messageType: 'text',
+                    metadata: {}
+                })
+            }
+
+            // Typing indicators
+            function startTypingUser1() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user1Socket && groupId) {
+                    user1Socket.emit('groupTyping', { groupId, isTyping: true })
+                }
+            }
+
+            function stopTypingUser1() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user1Socket && groupId) {
+                    user1Socket.emit('groupTyping', {
+                        groupId,
+                        isTyping: false
+                    })
+                }
+            }
+
+            function startTypingUser2() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user2Socket && groupId) {
+                    user2Socket.emit('groupTyping', { groupId, isTyping: true })
+                }
+            }
+
+            function stopTypingUser2() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user2Socket && groupId) {
+                    user2Socket.emit('groupTyping', {
+                        groupId,
+                        isTyping: false
+                    })
+                }
+            }
+
+            // Message history
+            function getHistoryUser1() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user1Socket && groupId) {
+                    user1Socket.emit('getGroupMessageHistory', {
+                        groupId,
+                        page: 1,
+                        limit: 10
+                    })
+                }
+            }
+
+            function getHistoryUser2() {
+                const groupId =
+                    document.getElementById('groupId').value || currentGroupId
+                if (user2Socket && groupId) {
+                    user2Socket.emit('getGroupMessageHistory', {
+                        groupId,
+                        page: 1,
+                        limit: 10
+                    })
+                }
+            }
+
+            // Utility functions
+            function disconnectAll() {
+                if (user1Socket) {
+                    user1Socket.disconnect()
+                    user1Socket = null
+                }
+                if (user2Socket) {
+                    user2Socket.disconnect()
+                    user2Socket = null
+                }
+                updateConnectionStatus()
+            }
+
+            function logMessage(
+                userPrefix,
+                type,
+                content,
+                timestamp = new Date()
+            ) {
+                const messagesDiv = document.getElementById(
+                    `${userPrefix}Messages`
+                )
+                const messageDiv = document.createElement('div')
+                messageDiv.className = `message ${type}`
+
+                const timeStr = timestamp.toLocaleTimeString()
+                messageDiv.innerHTML = `<span class="timestamp">${timeStr}</span><span class="message-content">${content}</span>`
+
+                messagesDiv.appendChild(messageDiv)
+                messagesDiv.scrollTop = messagesDiv.scrollHeight
+            }
+
+            function logSystem(message) {
+                const systemLog = document.getElementById('systemLog')
+                const messageDiv = document.createElement('div')
+                messageDiv.className = 'message system'
+
+                const timeStr = new Date().toLocaleTimeString()
+                messageDiv.innerHTML = `<span class="timestamp">${timeStr}</span><span class="message-content">${message}</span>`
+
+                systemLog.appendChild(messageDiv)
+                systemLog.scrollTop = systemLog.scrollHeight
+            }
+
+            function logError(message) {
+                const systemLog = document.getElementById('systemLog')
+                const messageDiv = document.createElement('div')
+                messageDiv.className = 'message error'
+
+                const timeStr = new Date().toLocaleTimeString()
+                messageDiv.innerHTML = `<span class="timestamp">${timeStr}</span><span class="message-content">❌ ${message}</span>`
+
+                systemLog.appendChild(messageDiv)
+                systemLog.scrollTop = systemLog.scrollHeight
+
+                errorCount++
+                updateStats()
+            }
+
+            function updateConnectionStatus() {
+                const statusDiv = document.getElementById('connectionStatus')
+                const user1StatusDiv = document.getElementById('user1Status')
+                const user2StatusDiv = document.getElementById('user2Status')
+
+                // User 1 status
+                if (user1Socket && user1Socket.connected) {
+                    user1StatusDiv.className = 'status connected'
+                    user1StatusDiv.textContent = `Connected (${user1Data.name || user1Data.email})`
+                } else if (user1Token) {
+                    user1StatusDiv.className = 'status connecting'
+                    user1StatusDiv.textContent = 'Authenticated (Click Connect)'
+                } else {
+                    user1StatusDiv.className = 'status disconnected'
+                    user1StatusDiv.textContent = 'Not Authenticated'
+                }
+
+                // User 2 status
+                if (user2Socket && user2Socket.connected) {
+                    user2StatusDiv.className = 'status connected'
+                    user2StatusDiv.textContent = `Connected (${user2Data.name || user2Data.email})`
+                } else if (user2Token) {
+                    user2StatusDiv.className = 'status connecting'
+                    user2StatusDiv.textContent = 'Authenticated (Click Connect)'
+                } else {
+                    user2StatusDiv.className = 'status disconnected'
+                    user2StatusDiv.textContent = 'Not Authenticated'
+                }
+
+                // Overall status
+                const connectedCount =
+                    (user1Socket && user1Socket.connected ? 1 : 0) +
+                    (user2Socket && user2Socket.connected ? 1 : 0)
+
+                if (connectedCount === 2) {
+                    statusDiv.className = 'status connected'
+                    statusDiv.textContent = 'Both Users Connected ✅'
+                } else if (connectedCount === 1) {
+                    statusDiv.className = 'status connecting'
+                    statusDiv.textContent = 'One User Connected ⚠️'
+                } else {
+                    statusDiv.className = 'status disconnected'
+                    statusDiv.textContent = 'No Users Connected ❌'
+                }
+            }
+
+            function updateStats() {
+                document.getElementById('messageCount').textContent =
+                    messageCount
+                document.getElementById('connectionCount').textContent =
+                    connectionCount
+                document.getElementById('errorCount').textContent = errorCount
+                document.getElementById('eventCount').textContent = eventCount
+            }
+
+            // Keyboard shortcuts
+            document
+                .getElementById('user1Message')
+                .addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        sendMessageUser1()
+                    }
+                })
+
+            document
+                .getElementById('user2Message')
+                .addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        sendMessageUser2()
+                    }
+                })
+
+            // Auto-connect on page load
+            window.addEventListener('load', function () {
+                logSystem('Group Chat Testing Suite Loaded')
+                logSystem('Instructions:')
+                logSystem('1. Login both users')
+                logSystem('2. Create a test group')
+                logSystem('3. Connect both users to WebSocket')
+                logSystem('4. Join the group with both users')
+                logSystem('5. Start sending messages!')
+            })
+        </script>
+    </body>
+</html>

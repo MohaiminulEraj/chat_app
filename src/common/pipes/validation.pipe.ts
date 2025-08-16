@@ -16,10 +16,32 @@ export class ValidationPipe implements PipeTransform<any> {
         const object = plainToClass(metatype, value)
         const errors = await validate(object)
         if (errors.length > 0) {
+            // Log detailed validation errors for debugging
+            console.error(
+                'Validation errors:',
+                errors.map((error) => ({
+                    property: error.property,
+                    value: error.value,
+                    constraints: error.constraints
+                }))
+            )
+
+            const firstError = errors[0]
+            const constraints = firstError.constraints
+            const constraintKeys = Object.keys(constraints || {})
+            const firstConstraintKey = constraintKeys[0]
+            const errorMessage =
+                constraints?.[firstConstraintKey] || 'Validation failed'
+
             throw new BadRequestException({
                 statusCode: 400,
                 message: 'Validation Error',
-                missingProperty: `${errors[0].property} is missing or it should be ${errors[0].constraints.isString}`
+                errors: errors.map((error) => ({
+                    property: error.property,
+                    value: error.value,
+                    constraints: error.constraints
+                })),
+                details: `${firstError.property}: ${errorMessage}`
             })
         }
         return value

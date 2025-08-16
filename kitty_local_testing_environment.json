@@ -1,0 +1,117 @@
+{
+    "info": {
+        "name": "Kitty Chat Local Testing Environment",
+        "description": "Environment variables for testing localhost:3001 chat system",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3001",
+            "type": "string",
+            "description": "Local development server URL"
+        },
+        {
+            "key": "api_base",
+            "value": "http://localhost:3001/api/v1",
+            "type": "string",
+            "description": "API base URL"
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://localhost:3001",
+            "type": "string",
+            "description": "WebSocket base URL"
+        },
+        {
+            "key": "chat_websocket",
+            "value": "ws://localhost:3001/chat",
+            "type": "string",
+            "description": "One-to-one chat WebSocket URL"
+        },
+        {
+            "key": "group_chat_websocket",
+            "value": "ws://localhost:3001/group-chat",
+            "type": "string",
+            "description": "Group chat WebSocket URL"
+        },
+        {
+            "key": "user1_email",
+            "value": "eraj@gmail.com",
+            "type": "string",
+            "description": "First test user email"
+        },
+        {
+            "key": "user1_password",
+            "value": "12345678",
+            "type": "string",
+            "description": "First test user password"
+        },
+        {
+            "key": "user2_email",
+            "value": "faysal@mobile.com",
+            "type": "string",
+            "description": "Second test user email"
+        },
+        {
+            "key": "user2_password",
+            "value": "12345678",
+            "type": "string",
+            "description": "Second test user password"
+        },
+        {
+            "key": "user1_jwt_token",
+            "value": "",
+            "type": "string",
+            "description": "JWT token for user 1 (auto-filled from login)"
+        },
+        {
+            "key": "user2_jwt_token",
+            "value": "",
+            "type": "string",
+            "description": "JWT token for user 2 (auto-filled from login)"
+        },
+        {
+            "key": "user1_id",
+            "value": "",
+            "type": "string",
+            "description": "User 1 ID (auto-filled from login)"
+        },
+        {
+            "key": "user2_id",
+            "value": "",
+            "type": "string",
+            "description": "User 2 ID (auto-filled from login)"
+        },
+        {
+            "key": "conversation_id",
+            "value": "",
+            "type": "string",
+            "description": "Conversation ID between users (auto-filled from create conversation)"
+        },
+        {
+            "key": "group_id",
+            "value": "",
+            "type": "string",
+            "description": "Group ID for testing (auto-filled from create group)"
+        },
+        {
+            "key": "group_uuid",
+            "value": "",
+            "type": "string",
+            "description": "Group UUID for WebSocket (auto-filled from create group)"
+        },
+        {
+            "key": "friendship_id",
+            "value": "",
+            "type": "string",
+            "description": "Friendship ID (auto-filled from friend request)"
+        },
+        {
+            "key": "last_message_id",
+            "value": "",
+            "type": "string",
+            "description": "Last sent message ID (auto-filled from send message)"
+        }
+    ]
+}

@@ -3,6 +3,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm'
 import { Group } from '../../group/entities/group.entity'
 import { User } from '../../user/entities/user.entity'
 import { RoomParticipant } from './room-participant.entity'
+import { RoomRoleAssignment } from './room-role.entity'
 import { RoomWaitingList } from './room-waiting-list.entity'
 
 export enum RoomType {
@@ -33,10 +34,7 @@ export class Room extends CustomBaseEntity {
     @Column({ type: 'uuid' })
     ownerId: string
 
-    @Column({ default: 100 }) // Max participants
-    capacity: number
-
-    @Column({ default: 8 }) // Add maxSeats property
+    @Column({ default: 8 }) // Maximum number of seats in the room
     maxSeats: number
 
     @Column({ default: false })
@@ -44,6 +42,9 @@ export class Room extends CustomBaseEntity {
 
     @Column({ nullable: true })
     password?: string
+
+    @Column({ nullable: true })
+    roomAvatarUrl?: string
 
     @Column({ default: true }) // Add isActive property
     isActive: boolean
@@ -62,4 +63,10 @@ export class Room extends CustomBaseEntity {
 
     @OneToMany(() => RoomWaitingList, (waiting) => waiting.room)
     waitingList: RoomWaitingList[]
+
+    @OneToMany(
+        () => RoomRoleAssignment,
+        (roleAssignment) => roleAssignment.room
+    )
+    roleAssignments: RoomRoleAssignment[]
 }

@@ -15,6 +15,9 @@ export class Group extends CustomBaseEntity {
     description: string
 
     @Column({ nullable: true })
+    tag: string
+
+    @Column({ nullable: true })
     avatarUrl: string
 
     @Column({ default: false })
@@ -28,6 +31,9 @@ export class Group extends CustomBaseEntity {
 
     @Column({ nullable: true })
     location: string
+
+    @Column({ nullable: true })
+    country: string
 
     @Column({ type: 'decimal', precision: 9, scale: 6, nullable: true })
     latitude: number

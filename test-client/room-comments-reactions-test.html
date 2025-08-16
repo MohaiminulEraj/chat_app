@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Room Comments with Reactions Test</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .container {
+                background: white;
+                border-radius: 10px;
+                padding: 20px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+                color: #333;
+            }
+            input,
+            textarea,
+            button {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            button {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                cursor: pointer;
+                margin-top: 10px;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            button:disabled {
+                background-color: #6c757d;
+                cursor: not-allowed;
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            .status.connected {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+            .status.disconnected {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            .comments-section {
+                margin-top: 30px;
+                border-top: 2px solid #007bff;
+                padding-top: 20px;
+            }
+            .comment {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 10px 0;
+                position: relative;
+            }
+            .comment-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .comment-author {
+                font-weight: bold;
+                color: #007bff;
+            }
+            .comment-time {
+                color: #6c757d;
+                font-size: 12px;
+            }
+            .comment-content {
+                margin: 10px 0;
+                line-height: 1.4;
+            }
+            .comment-reactions {
+                display: flex;
+                gap: 10px;
+                margin-top: 10px;
+                flex-wrap: wrap;
+            }
+            .reaction {
+                background: #e9ecef;
+                border: 1px solid #dee2e6;
+                border-radius: 15px;
+                padding: 5px 10px;
+                font-size: 12px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .reaction:hover {
+                background: #dee2e6;
+            }
+            .reaction.user-reacted {
+                background: #007bff;
+                color: white;
+                border-color: #007bff;
+            }
+            .reaction-controls {
+                margin-top: 10px;
+                display: flex;
+                gap: 10px;
+            }
+            .reaction-btn {
+                padding: 5px 10px;
+                font-size: 12px;
+                width: auto;
+                margin: 0;
+            }
+            .typing-indicator {
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                color: #856404;
+                padding: 8px 12px;
+                border-radius: 5px;
+                margin: 5px 0;
+                font-style: italic;
+                font-size: 14px;
+            }
+            .logs {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 5px;
+                padding: 15px;
+                margin-top: 20px;
+                max-height: 300px;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            .log-entry {
+                margin: 2px 0;
+                padding: 2px 0;
+            }
+            .log-entry.error {
+                color: #dc3545;
+            }
+            .log-entry.success {
+                color: #28a745;
+            }
+            .log-entry.info {
+                color: #007bff;
+            }
+            .reply-form {
+                display: none;
+                margin-top: 10px;
+                padding: 10px;
+                background: #e9ecef;
+                border-radius: 5px;
+            }
+            .reply-form textarea {
+                height: 60px;
+                resize: vertical;
+            }
+            .quick-reactions {
+                display: flex;
+                gap: 5px;
+                margin-top: 10px;
+            }
+            .quick-reaction {
+                background: none;
+                border: 1px solid #dee2e6;
+                border-radius: 20px;
+                padding: 5px 8px;
+                font-size: 16px;
+                cursor: pointer;
+                width: auto;
+                margin: 0;
+            }
+            .quick-reaction:hover {
+                background: #f8f9fa;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🏠 Room Comments with Reactions Test</h1>
+
+            <div id="connectionStatus" class="status disconnected">
+                Disconnected
+            </div>
+
+            <div class="form-group">
+                <label for="serverUrl">Server URL:</label>
+                <input
+                    type="text"
+                    id="serverUrl"
+                    value="http://localhost:3000"
+                    placeholder="Enter server URL"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="authToken">Auth Token:</label>
+                <input
+                    type="text"
+                    id="authToken"
+                    placeholder="Enter your JWT token"
+                />
+            </div>
+
+            <button id="connectBtn">Connect to Server</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+
+            <div class="form-group" style="margin-top: 20px">
+                <label for="roomId">Room ID:</label>
+                <input type="text" id="roomId" placeholder="Enter room UUID" />
+            </div>
+
+            <button id="joinRoomBtn" disabled>Join Room</button>
+            <button id="leaveRoomBtn" disabled>Leave Room</button>
+
+            <div class="comments-section">
+                <h3>💬 Send Comment</h3>
+                <div class="form-group">
+                    <label for="commentMessage">Message:</label>
+                    <textarea
+                        id="commentMessage"
+                        rows="3"
+                        placeholder="Type your comment here..."
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="messageType">Message Type:</label>
+                    <select id="messageType">
+                        <option value="text">Text</option>
+                        <option value="emoji">Emoji</option>
+                        <option value="sticker">Sticker</option>
+                        <option value="system">System</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="replyToId"
+                        >Reply To Comment ID (optional):</label
+                    >
+                    <input
+                        type="text"
+                        id="replyToId"
+                        placeholder="Enter comment ID to reply to"
+                    />
+                </div>
+
+                <button id="sendCommentBtn" disabled>Send Comment</button>
+                <button id="getCommentsBtn" disabled>Get Comments</button>
+            </div>
+
+            <div
+                id="typingIndicator"
+                class="typing-indicator"
+                style="display: none"
+            ></div>
+
+            <div class="comments-section">
+                <h3>📝 Comments</h3>
+                <div id="commentsList"></div>
+            </div>
+
+            <div class="logs">
+                <h4>📋 Event Logs</h4>
+                <div id="logs"></div>
+            </div>
+        </div>
+
+        <script>
+            let socket = null
+            let currentRoomId = null
+            let currentUserId = null
+            let typingTimeout = null
+
+            // DOM elements
+            const connectionStatus = document.getElementById('connectionStatus')
+            const serverUrl = document.getElementById('serverUrl')
+            const authToken = document.getElementById('authToken')
+            const connectBtn = document.getElementById('connectBtn')
+            const disconnectBtn = document.getElementById('disconnectBtn')
+            const roomId = document.getElementById('roomId')
+            const joinRoomBtn = document.getElementById('joinRoomBtn')
+            const leaveRoomBtn = document.getElementById('leaveRoomBtn')
+            const commentMessage = document.getElementById('commentMessage')
+            const messageType = document.getElementById('messageType')
+            const replyToId = document.getElementById('replyToId')
+            const sendCommentBtn = document.getElementById('sendCommentBtn')
+            const getCommentsBtn = document.getElementById('getCommentsBtn')
+            const commentsList = document.getElementById('commentsList')
+            const logs = document.getElementById('logs')
+            const typingIndicator = document.getElementById('typingIndicator')
+
+            function log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString()
+                const logEntry = document.createElement('div')
+                logEntry.className = `log-entry ${type}`
+                logEntry.textContent = `[${timestamp}] ${message}`
+                logs.appendChild(logEntry)
+                logs.scrollTop = logs.scrollHeight
+            }
+
+            function updateConnectionStatus(connected) {
+                if (connected) {
+                    connectionStatus.textContent = 'Connected'
+                    connectionStatus.className = 'status connected'
+                    connectBtn.disabled = true
+                    disconnectBtn.disabled = false
+                    joinRoomBtn.disabled = false
+                } else {
+                    connectionStatus.textContent = 'Disconnected'
+                    connectionStatus.className = 'status disconnected'
+                    connectBtn.disabled = false
+                    disconnectBtn.disabled = true
+                    joinRoomBtn.disabled = true
+                    leaveRoomBtn.disabled = true
+                    sendCommentBtn.disabled = true
+                    getCommentsBtn.disabled = true
+                }
+            }
+
+            function updateRoomStatus(inRoom) {
+                if (inRoom) {
+                    leaveRoomBtn.disabled = false
+                    sendCommentBtn.disabled = false
+                    getCommentsBtn.disabled = false
+                    joinRoomBtn.disabled = true
+                } else {
+                    leaveRoomBtn.disabled = true
+                    sendCommentBtn.disabled = true
+                    getCommentsBtn.disabled = true
+                    joinRoomBtn.disabled = false
+                }
+            }
+
+            function displayComment(comment) {
+                const commentDiv = document.createElement('div')
+                commentDiv.className = 'comment'
+                commentDiv.id = `comment-${comment._id}`
+
+                const reactions = comment.reactions || {}
+                const userReactions = {}
+
+                // Calculate total reactions and user participation
+                Object.keys(reactions).forEach((emoji) => {
+                    if (reactions[emoji] && Array.isArray(reactions[emoji])) {
+                        userReactions[emoji] = {
+                            count: reactions[emoji].length,
+                            userReacted:
+                                reactions[emoji].includes(currentUserId)
+                        }
+                    }
+                })
+
+                let replyContent = ''
+                if (comment.replyTo) {
+                    replyContent = `
+                    <div style="background: #e9ecef; padding: 8px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid #007bff;">
+                        <small><strong>${comment.replyTo.senderName}:</strong> ${comment.replyTo.content}</small>
+                    </div>
+                `
+                }
+
+                let reactionsHtml = ''
+                if (Object.keys(userReactions).length > 0) {
+                    reactionsHtml = '<div class="comment-reactions">'
+                    Object.keys(userReactions).forEach((emoji) => {
+                        const reactionData = userReactions[emoji]
+                        reactionsHtml += `
+                        <span class="reaction ${reactionData.userReacted ? 'user-reacted' : ''}"
+                              onclick="toggleReaction('${comment._id}', '${emoji}')">
+                            ${emoji} ${reactionData.count}
+                        </span>
+                    `
+                    })
+                    reactionsHtml += '</div>'
+                }
+
+                commentDiv.innerHTML = `
+                <div class="comment-header">
+                    <span class="comment-author">${comment.senderName}</span>
+                    <span class="comment-time">${new Date(comment.createdAt).toLocaleString()}</span>
+                </div>
+                ${replyContent}
+                <div class="comment-content">${comment.content}</div>
+                ${reactionsHtml}
+                <div class="quick-reactions">
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '👍')">👍</button>
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '❤️')">❤️</button>
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '😂')">😂</button>
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '😮')">😮</button>
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '😢')">😢</button>
+                    <button class="quick-reaction" onclick="addReaction('${comment._id}', '😡')">😡</button>
+                </div>
+                <div class="reaction-controls">
+                    <button class="reaction-btn" onclick="setReplyTo('${comment._id}')">Reply</button>
+                    <button class="reaction-btn" onclick="deleteComment('${comment._id}')">Delete</button>
+                </div>
+            `
+
+                return commentDiv
+            }
+
+            function refreshComments(comments) {
+                commentsList.innerHTML = ''
+                comments.forEach((comment) => {
+                    commentsList.appendChild(displayComment(comment))
+                })
+            }
+
+            function addReaction(commentId, emoji) {
+                if (!socket || !currentRoomId) return
+
+                socket.emit('reactToComment', {
+                    roomId: currentRoomId,
+                    commentId: commentId,
+                    reaction: emoji,
+                    action: 'add'
+                })
+            }
+
+            function toggleReaction(commentId, emoji) {
+                if (!socket || !currentRoomId) return
+
+                // Determine if user already reacted to remove, otherwise add
+                const commentElement = document.getElementById(
+                    `comment-${commentId}`
+                )
+                const reactionElement = commentElement.querySelector(
+                    `.reaction:contains('${emoji}')`
+                )
+                const action =
+                    reactionElement &&
+                    reactionElement.classList.contains('user-reacted')
+                        ? 'remove'
+                        : 'add'
+
+                socket.emit('reactToComment', {
+                    roomId: currentRoomId,
+                    commentId: commentId,
+                    reaction: emoji,
+                    action: action
+                })
+            }
+
+            function setReplyTo(commentId) {
+                replyToId.value = commentId
+                commentMessage.focus()
+                log(`Set reply to comment: ${commentId}`, 'info')
+            }
+
+            function deleteComment(commentId) {
+                if (!socket || !currentRoomId) return
+
+                socket.emit('deleteComment', {
+                    roomId: currentRoomId,
+                    commentId: commentId
+                })
+            }
+
+            // Socket connection
+            connectBtn.addEventListener('click', () => {
+                const url = serverUrl.value
+                const token = authToken.value
+
+                if (!url || !token) {
+                    alert('Please enter both server URL and auth token')
+                    return
+                }
+
+                socket = io(url, {
+                    auth: {
+                        token: token
+                    }
+                })
+
+                socket.on('connect', () => {
+                    log('Connected to server', 'success')
+                    updateConnectionStatus(true)
+                })
+
+                socket.on('disconnect', () => {
+                    log('Disconnected from server', 'error')
+                    updateConnectionStatus(false)
+                    currentRoomId = null
+                })
+
+                socket.on('error', (error) => {
+                    log(`Error: ${error.message || error}`, 'error')
+                })
+
+                // Room events
+                socket.on('joinedRoom', (data) => {
+                    log(
+                        `Joined room: ${data.roomId} (${data.userCount} users)`,
+                        'success'
+                    )
+                    currentRoomId = data.roomId
+                    currentUserId = data.userId
+                    updateRoomStatus(true)
+                })
+
+                socket.on('leftRoom', (data) => {
+                    log(`Left room: ${data.roomId}`, 'info')
+                    currentRoomId = null
+                    updateRoomStatus(false)
+                })
+
+                socket.on('userJoined', (data) => {
+                    log(
+                        `User joined: ${data.userName} (${data.userCount} total)`,
+                        'info'
+                    )
+                })
+
+                socket.on('userLeft', (data) => {
+                    log(
+                        `User left: ${data.userName} (${data.userCount} total)`,
+                        'info'
+                    )
+                })
+
+                // Comment events
+                socket.on('newComment', (data) => {
+                    log(
+                        `New comment from ${data.senderName}: ${data.content}`,
+                        'success'
+                    )
+                    const commentElement = displayComment(data)
+                    commentsList.insertBefore(
+                        commentElement,
+                        commentsList.firstChild
+                    )
+                })
+
+                socket.on('commentDeleted', (data) => {
+                    log(`Comment deleted: ${data.commentId}`, 'info')
+                    const commentElement = document.getElementById(
+                        `comment-${data.commentId}`
+                    )
+                    if (commentElement) {
+                        commentElement.remove()
+                    }
+                })
+
+                socket.on('commentReaction', (data) => {
+                    log(
+                        `${data.userName} ${data.action}ed ${data.reaction} to comment ${data.commentId}`,
+                        'info'
+                    )
+
+                    // Update the specific comment with new reactions
+                    const commentElement = document.getElementById(
+                        `comment-${data.commentId}`
+                    )
+                    if (commentElement) {
+                        // Find and update the reactions section
+                        const reactionsContainer =
+                            commentElement.querySelector('.comment-reactions')
+                        const reactions = data.reactions || {}
+
+                        let reactionsHtml = ''
+                        if (Object.keys(reactions).length > 0) {
+                            Object.keys(reactions).forEach((emoji) => {
+                                if (
+                                    reactions[emoji] &&
+                                    Array.isArray(reactions[emoji]) &&
+                                    reactions[emoji].length > 0
+                                ) {
+                                    const userReacted =
+                                        reactions[emoji].includes(currentUserId)
+                                    reactionsHtml += `
+                                    <span class="reaction ${userReacted ? 'user-reacted' : ''}"
+                                          onclick="toggleReaction('${data.commentId}', '${emoji}')">
+                                        ${emoji} ${reactions[emoji].length}
+                                    </span>
+                                `
+                                }
+                            })
+                        }
+
+                        if (reactionsContainer) {
+                            if (reactionsHtml) {
+                                reactionsContainer.innerHTML = reactionsHtml
+                            } else {
+                                reactionsContainer.innerHTML = ''
+                            }
+                        } else if (reactionsHtml) {
+                            // Create reactions container if it doesn't exist
+                            const newReactionsContainer =
+                                document.createElement('div')
+                            newReactionsContainer.className =
+                                'comment-reactions'
+                            newReactionsContainer.innerHTML = reactionsHtml
+
+                            const quickReactions =
+                                commentElement.querySelector('.quick-reactions')
+                            commentElement.insertBefore(
+                                newReactionsContainer,
+                                quickReactions
+                            )
+                        }
+                    }
+                })
+
+                // Typing events
+                socket.on('userTypingComment', (data) => {
+                    if (data.isTyping) {
+                        typingIndicator.textContent = `${data.userName} is typing...`
+                        typingIndicator.style.display = 'block'
+                    } else {
+                        typingIndicator.style.display = 'none'
+                    }
+                })
+
+                socket.on('roomComments', (data) => {
+                    log(`Received ${data.comments.length} comments`, 'info')
+                    refreshComments(data.comments)
+                })
+            })
+
+            disconnectBtn.addEventListener('click', () => {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                }
+            })
+
+            // Room management
+            joinRoomBtn.addEventListener('click', () => {
+                const id = roomId.value
+                if (!id || !socket) {
+                    alert('Please enter room ID and connect first')
+                    return
+                }
+
+                socket.emit('joinRoom', { roomId: id })
+            })
+
+            leaveRoomBtn.addEventListener('click', () => {
+                if (socket && currentRoomId) {
+                    socket.emit('leaveRoom', { roomId: currentRoomId })
+                }
+            })
+
+            // Comment management
+            sendCommentBtn.addEventListener('click', () => {
+                const message = commentMessage.value.trim()
+                const type = messageType.value
+                const replyTo = replyToId.value.trim()
+
+                if (!message || !socket || !currentRoomId) {
+                    alert('Please enter a message and join a room first')
+                    return
+                }
+
+                const commentData = {
+                    roomId: currentRoomId,
+                    message: message,
+                    messageType: type
+                }
+
+                if (replyTo) {
+                    commentData.replyToId = replyTo
+                }
+
+                socket.emit('sendComment', commentData)
+
+                // Clear form
+                commentMessage.value = ''
+                replyToId.value = ''
+            })
+
+            getCommentsBtn.addEventListener('click', () => {
+                if (socket && currentRoomId) {
+                    socket.emit('getRoomComments', {
+                        roomId: currentRoomId,
+                        limit: 20,
+                        offset: 0
+                    })
+                }
+            })
+
+            // Typing indicator
+            commentMessage.addEventListener('input', () => {
+                if (!socket || !currentRoomId) return
+
+                // Send typing start
+                socket.emit('typingComment', {
+                    roomId: currentRoomId,
+                    isTyping: true
+                })
+
+                // Clear existing timeout
+                if (typingTimeout) {
+                    clearTimeout(typingTimeout)
+                }
+
+                // Set timeout to send typing stop
+                typingTimeout = setTimeout(() => {
+                    socket.emit('typingComment', {
+                        roomId: currentRoomId,
+                        isTyping: false
+                    })
+                }, 2000)
+            })
+
+            // Initialize
+            log('Room Comments Test Client loaded', 'info')
+        </script>
+    </body>
+</html>

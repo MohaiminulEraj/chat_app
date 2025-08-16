@@ -1,0 +1,174 @@
+{
+    "id": "kitty-live-api-environment",
+    "name": "Kitty Live API Environment",
+    "values": [
+        {
+            "key": "base_url",
+            "value": "http://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true,
+            "description": "Live server base URL"
+        },
+        {
+            "key": "api_base_url",
+            "value": "http://103.190.136.200:3000/api/v1",
+            "type": "default",
+            "enabled": true,
+            "description": "Live API base URL"
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true,
+            "description": "Live WebSocket URL"
+        },
+        {
+            "key": "local_base_url",
+            "value": "http://localhost:3001",
+            "type": "default",
+            "enabled": true,
+            "description": "Local development base URL"
+        },
+        {
+            "key": "local_api_base_url",
+            "value": "http://localhost:3001/api/v1",
+            "type": "default",
+            "enabled": true,
+            "description": "Local API base URL"
+        },
+        {
+            "key": "local_websocket_url",
+            "value": "ws://localhost:3001",
+            "type": "default",
+            "enabled": true,
+            "description": "Local WebSocket URL"
+        },
+        {
+            "key": "jwt_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true,
+            "description": "JWT access token from authentication"
+        },
+        {
+            "key": "refresh_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true,
+            "description": "JWT refresh token"
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Current user ID"
+        },
+        {
+            "key": "user_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Current user UUID"
+        },
+        {
+            "key": "conversation_id",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "One-to-one conversation ID"
+        },
+        {
+            "key": "group_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Group UUID for group chat"
+        },
+        {
+            "key": "friend_user_id",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Friend's user ID for one-to-one chat"
+        },
+        {
+            "key": "friend_user_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Friend's user UUID"
+        },
+        {
+            "key": "message_id",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "Message ID for edit/delete operations"
+        },
+        {
+            "key": "chat_namespace",
+            "value": "/chat",
+            "type": "default",
+            "enabled": true,
+            "description": "One-to-one chat WebSocket namespace"
+        },
+        {
+            "key": "group_chat_namespace",
+            "value": "/group-chat",
+            "type": "default",
+            "enabled": true,
+            "description": "Group chat WebSocket namespace"
+        },
+        {
+            "key": "user_name",
+            "value": "Live Test User",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_email",
+            "value": "livetest@example.com",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_phone",
+            "value": "01891234567",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_password",
+            "value": "password123",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "friend_name",
+            "value": "Friend User",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "friend_email",
+            "value": "friend@example.com",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "friend_phone",
+            "value": "01891234568",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "friend_password",
+            "value": "password123",
+            "type": "secret",
+            "enabled": true
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}

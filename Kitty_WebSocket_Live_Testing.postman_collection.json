@@ -1,0 +1,293 @@
+{
+    "info": {
+        "name": "🔗 Kitty WebSocket Live Testing - 103.190.136.200:3000",
+        "description": "WebSocket-focused testing collection for real-time chat on live server with corrected endpoints",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "📋 Authentication Setup",
+            "item": [
+                {
+                    "name": "🔑 Login User 1",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.jwt_token) {",
+                                    "        pm.environment.set('user1_jwt_token', response.data.jwt_token);",
+                                    "        pm.environment.set('user1_id', response.data.user.uuid);",
+                                    "        console.log('User 1 logged in successfully');",
+                                    "        console.log('User 1 ID:', response.data.user.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"eraj@gmail.com\",\n  \"password\": \"12345678\"\n}"
+                        },
+                        "url": {
+                            "raw": "http://103.190.136.200:3000/api/v1/auth/login",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000",
+                            "path": ["api", "v1", "auth", "login"]
+                        }
+                    }
+                },
+                {
+                    "name": "🔑 Login User 2",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.jwt_token) {",
+                                    "        pm.environment.set('user2_jwt_token', response.data.jwt_token);",
+                                    "        pm.environment.set('user2_id', response.data.user.uuid);",
+                                    "        console.log('User 2 logged in successfully');",
+                                    "        console.log('User 2 ID:', response.data.user.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"faysal@mobile.com\",\n  \"password\": \"12345678\"\n}"
+                        },
+                        "url": {
+                            "raw": "http://103.190.136.200:3000/api/v1/auth/login",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000",
+                            "path": ["api", "v1", "auth", "login"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "📝 Setup Data",
+            "item": [
+                {
+                    "name": "📋 Get All Conversations",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.length > 0) {",
+                                    "        pm.environment.set('conversation_id', response.data[0].uuid);",
+                                    "        console.log('Conversation ID set:', response.data[0].uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000/api/v1/conversations",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000",
+                            "path": ["api", "v1", "conversations"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get All Groups",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.length > 0) {",
+                                    "        pm.environment.set('group_uuid', response.data[0].uuid);",
+                                    "        console.log('Group UUID set:', response.data[0].uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000/api/v1/group",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000",
+                            "path": ["api", "v1", "group"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "💬 WebSocket One-to-One Chat",
+            "item": [
+                {
+                    "name": "📖 WebSocket Connection Guide - One-to-One",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000"
+                        },
+                        "description": "# 💬 One-to-One Chat WebSocket Instructions\n\n## 🔗 WebSocket Connection URL:\n```\nws://103.190.136.200:3000/chat\n```\n\n## 📝 How to Create WebSocket Request in Postman:\n\n### Step 1: Create WebSocket Request\n1. Click **\"New\"** in Postman\n2. Select **\"WebSocket Request\"** (NOT HTTP Request)\n3. Enter URL: `ws://103.190.136.200:3000/chat`\n4. Click **\"Connect\"**\n\n### Step 2: Authenticate (Send First)\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"{{user1_jwt_token}}\"\n  }\n}\n```\n\n### Step 3: Join Conversation\n```json\n{\n  \"event\": \"joinConversation\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\"\n  }\n}\n```\n\n### Step 4: Send Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"content\": \"Hello from User 1! 👋\",\n    \"type\": \"text\"\n  }\n}\n```\n\n### Step 5: Send Typing Indicator\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n### Step 6: Stop Typing\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"isTyping\": false\n  }\n}\n```\n\n## 🔄 For User 2 Testing:\n- Create another WebSocket connection\n- Use `{{user2_jwt_token}}` for authentication\n- Use same `{{conversation_id}}`\n- Both users will see real-time messages and typing!"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "👥 WebSocket Group Chat",
+            "item": [
+                {
+                    "name": "📖 WebSocket Connection Guide - Group Chat",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000"
+                        },
+                        "description": "# 👥 Group Chat WebSocket Instructions\n\n## 🔗 WebSocket Connection URL:\n```\nws://103.190.136.200:3000/group-chat\n```\n\n## 📝 How to Create WebSocket Request in Postman:\n\n### Step 1: Create WebSocket Request\n1. Click **\"New\"** in Postman\n2. Select **\"WebSocket Request\"** (NOT HTTP Request)\n3. Enter URL: `ws://103.190.136.200:3000/group-chat`\n4. Click **\"Connect\"**\n\n### Step 2: Authenticate (Send First)\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"{{user1_jwt_token}}\"\n  }\n}\n```\n\n### Step 3: Join Group\n```json\n{\n  \"event\": \"joinGroup\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\"\n  }\n}\n```\n\n### Step 4: Send Group Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"content\": \"Hello group from User 1! 🎉\",\n    \"messageType\": \"text\"\n  }\n}\n```\n\n### Step 5: Send Group Typing Indicator\n```json\n{\n  \"event\": \"groupTyping\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n### Step 6: Stop Group Typing\n```json\n{\n  \"event\": \"groupTyping\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"isTyping\": false\n  }\n}\n```\n\n## 🔄 For User 2 Testing:\n- Create another WebSocket connection\n- Use `{{user2_jwt_token}}` for authentication\n- Use same `{{group_uuid}}`\n- Both users will see real-time group messages and typing!"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🧪 Real-time Testing Scenarios",
+            "item": [
+                {
+                    "name": "🎯 Scenario 1: Basic Message Flow",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000"
+                        },
+                        "description": "# 🎯 Test Scenario 1: Basic Real-time Message Flow\n\n## 📋 Prerequisites:\n1. ✅ Both users logged in (JWT tokens available)\n2. ✅ Conversation ID obtained\n3. ✅ Group UUID obtained\n\n## 🔄 Testing Steps:\n\n### Part A: One-to-One Chat\n1. **User 1**: Create WebSocket connection to `ws://103.190.136.200:3000/chat`\n2. **User 2**: Create WebSocket connection to `ws://103.190.136.200:3000/chat`\n3. **Both**: Send authentication with respective JWT tokens\n4. **Both**: Join conversation using `{{conversation_id}}`\n5. **User 1**: Send message \"Hello Faysal! How are you?\"\n6. **Verify**: User 2 receives message instantly\n7. **User 2**: Send message \"Hi Eraj! I'm doing great!\"\n8. **Verify**: User 1 receives message instantly\n\n### Part B: Typing Indicators\n1. **User 1**: Send typing=true\n2. **Verify**: User 2 sees typing indicator\n3. **User 1**: Send typing=false after 3 seconds\n4. **Verify**: User 2's typing indicator disappears\n5. **Repeat** with User 2 typing\n\n### Part C: Group Chat\n1. **User 1**: Create WebSocket connection to `ws://103.190.136.200:3000/group-chat`\n2. **User 2**: Create WebSocket connection to `ws://103.190.136.200:3000/group-chat`\n3. **Both**: Authenticate and join group using `{{group_uuid}}`\n4. **User 1**: Send \"Hello group! This is Eraj 👋\"\n5. **Verify**: User 2 receives with sender identification\n6. **User 2**: Send \"Hey everyone! Faysal here 🎉\"\n7. **Verify**: User 1 receives with sender identification\n\n## ✅ Expected Results:\n- ✅ **Instant message delivery** (< 100ms)\n- ✅ **Real-time typing indicators**\n- ✅ **Proper sender identification** in group chat\n- ✅ **Message persistence** in MongoDB\n- ✅ **Clean connection handling**"
+                    }
+                },
+                {
+                    "name": "🎯 Scenario 2: Multi-Connection Testing",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000"
+                        },
+                        "description": "# 🎯 Test Scenario 2: Multi-Connection Real-time Testing\n\n## 🔄 Advanced Testing Steps:\n\n### Step 1: Simultaneous Connections\n1. **Open 4 WebSocket connections** in Postman:\n   - User 1 → One-to-One Chat (`ws://103.190.136.200:3000/chat`)\n   - User 2 → One-to-One Chat (`ws://103.190.136.200:3000/chat`)\n   - User 1 → Group Chat (`ws://103.190.136.200:3000/group-chat`)\n   - User 2 → Group Chat (`ws://103.190.136.200:3000/group-chat`)\n\n### Step 2: Authentication All Connections\n```json\n// For User 1 connections\n{\"event\": \"authenticate\", \"data\": {\"token\": \"{{user1_jwt_token}}\"}}\n\n// For User 2 connections  \n{\"event\": \"authenticate\", \"data\": {\"token\": \"{{user2_jwt_token}}\"}}\n```\n\n### Step 3: Join Rooms\n```json\n// One-to-One Chat\n{\"event\": \"joinConversation\", \"data\": {\"conversationId\": \"{{conversation_id}}\"}}\n\n// Group Chat\n{\"event\": \"joinGroup\", \"data\": {\"groupId\": \"{{group_uuid}}\"}}\n```\n\n### Step 4: Cross-Platform Message Testing\n1. **User 1**: Send message in one-to-one chat\n2. **Verify**: User 2 receives in one-to-one chat only\n3. **User 1**: Send message in group chat\n4. **Verify**: User 2 receives in group chat only\n5. **Check**: No cross-contamination between chat types\n\n### Step 5: Rapid Message Testing\n1. **Both users**: Send 5 rapid messages in sequence\n2. **Verify**: All messages delivered in correct order\n3. **Check**: No message loss or duplication\n4. **Monitor**: Server performance and response times\n\n### Step 6: Typing Indicator Stress Test\n1. **Both users**: Rapidly toggle typing indicators\n2. **Verify**: All typing events processed correctly\n3. **Check**: No stuck typing indicators\n4. **Test**: Typing timeout functionality\n\n### Step 7: Connection Resilience\n1. **Disconnect** one user from one-to-one chat\n2. **Continue** sending messages from other user\n3. **Reconnect** first user\n4. **Verify**: Message delivery resumes\n5. **Check**: No lost messages during disconnect\n\n## 📊 Performance Metrics to Monitor:\n- **Message Latency**: < 100ms\n- **Typing Indicator Delay**: < 50ms\n- **Connection Recovery**: < 2s\n- **Memory Usage**: Stable\n- **CPU Usage**: < 10% increase\n\n## 🚨 Error Scenarios to Test:\n1. **Invalid JWT tokens**\n2. **Non-existent conversation/group IDs**\n3. **Malformed message data**\n4. **Unauthorized access attempts**\n5. **Network disconnection/reconnection**"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "📚 WebSocket Message Reference",
+            "item": [
+                {
+                    "name": "📋 Complete Message Format Reference",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://103.190.136.200:3000",
+                            "protocol": "http",
+                            "host": ["103.190.136.200"],
+                            "port": "3000"
+                        },
+                        "description": "# 📚 Complete WebSocket Message Reference\n\n## 🔐 Authentication Messages\n\n### Authenticate User\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"YOUR_JWT_TOKEN_HERE\"\n  }\n}\n```\n\n**Expected Response:**\n```json\n{\n  \"event\": \"authenticated\",\n  \"data\": {\n    \"success\": true,\n    \"userId\": \"user-uuid-here\"\n  }\n}\n```\n\n---\n\n## 💬 One-to-One Chat Messages\n\n### Join Conversation\n```json\n{\n  \"event\": \"joinConversation\",\n  \"data\": {\n    \"conversationId\": \"conversation-uuid-here\"\n  }\n}\n```\n\n### Send Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"conversationId\": \"conversation-uuid-here\",\n    \"content\": \"Your message content here\",\n    \"type\": \"text\"\n  }\n}\n```\n\n### Typing Indicator\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"conversation-uuid-here\",\n    \"isTyping\": true\n  }\n}\n```\n\n**Message Received Event:**\n```json\n{\n  \"event\": \"messageReceived\",\n  \"data\": {\n    \"messageId\": \"msg-uuid\",\n    \"conversationId\": \"conv-uuid\",\n    \"senderId\": \"sender-uuid\",\n    \"content\": \"Message content\",\n    \"type\": \"text\",\n    \"timestamp\": \"2024-01-01T12:00:00Z\"\n  }\n}\n```\n\n**Typing Event:**\n```json\n{\n  \"event\": \"userTyping\",\n  \"data\": {\n    \"userId\": \"user-uuid\",\n    \"conversationId\": \"conv-uuid\",\n    \"isTyping\": true\n  }\n}\n```\n\n---\n\n## 👥 Group Chat Messages\n\n### Join Group\n```json\n{\n  \"event\": \"joinGroup\",\n  \"data\": {\n    \"groupId\": \"group-uuid-here\"\n  }\n}\n```\n\n### Send Group Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"groupId\": \"group-uuid-here\",\n    \"content\": \"Your group message here\",\n    \"messageType\": \"text\"\n  }\n}\n```\n\n### Group Typing Indicator\n```json\n{\n  \"event\": \"groupTyping\",\n  \"data\": {\n    \"groupId\": \"group-uuid-here\",\n    \"isTyping\": true\n  }\n}\n```\n\n**Group Message Received Event:**\n```json\n{\n  \"event\": \"groupMessageReceived\",\n  \"data\": {\n    \"messageId\": \"msg-uuid\",\n    \"groupId\": \"group-uuid\",\n    \"senderId\": \"sender-uuid\",\n    \"senderName\": \"Sender Name\",\n    \"content\": \"Group message content\",\n    \"messageType\": \"text\",\n    \"timestamp\": \"2024-01-01T12:00:00Z\"\n  }\n}\n```\n\n**Group Typing Event:**\n```json\n{\n  \"event\": \"userTypingInGroup\",\n  \"data\": {\n    \"userId\": \"user-uuid\",\n    \"userName\": \"User Name\",\n    \"groupId\": \"group-uuid\",\n    \"isTyping\": true\n  }\n}\n```\n\n---\n\n## 🚨 Error Messages\n\n### Authentication Error\n```json\n{\n  \"event\": \"error\",\n  \"data\": {\n    \"message\": \"Authentication failed\",\n    \"code\": \"AUTH_ERROR\"\n  }\n}\n```\n\n### Invalid Conversation\n```json\n{\n  \"event\": \"error\",\n  \"data\": {\n    \"message\": \"Conversation not found\",\n    \"code\": \"CONVERSATION_NOT_FOUND\"\n  }\n}\n```\n\n### Permission Denied\n```json\n{\n  \"event\": \"error\",\n  \"data\": {\n    \"message\": \"You are not a member of this group\",\n    \"code\": \"PERMISSION_DENIED\"\n  }\n}\n```\n\n---\n\n## 🔄 Connection Events\n\n### Connection Established\n```json\n{\n  \"event\": \"connected\",\n  \"data\": {\n    \"success\": true,\n    \"message\": \"Connected to chat server\"\n  }\n}\n```\n\n### Disconnection\n```json\n{\n  \"event\": \"disconnect\",\n  \"data\": {\n    \"reason\": \"client namespace disconnect\"\n  }\n}\n```\n\n---\n\n## 💡 Quick Copy-Paste Templates\n\n### User 1 (Eraj) Authentication:\n```json\n{\"event\": \"authenticate\", \"data\": {\"token\": \"{{user1_jwt_token}}\"}}\n```\n\n### User 2 (Faysal) Authentication:\n```json\n{\"event\": \"authenticate\", \"data\": {\"token\": \"{{user2_jwt_token}}\"}}\n```\n\n### Join Conversation:\n```json\n{\"event\": \"joinConversation\", \"data\": {\"conversationId\": \"{{conversation_id}}\"}}\n```\n\n### Join Group:\n```json\n{\"event\": \"joinGroup\", \"data\": {\"groupId\": \"{{group_uuid}}\"}}\n```\n\n### Quick Chat Message:\n```json\n{\"event\": \"sendMessage\", \"data\": {\"conversationId\": \"{{conversation_id}}\", \"content\": \"Hello!\", \"type\": \"text\"}}\n```\n\n### Quick Group Message:\n```json\n{\"event\": \"sendMessage\", \"data\": {\"groupId\": \"{{group_uuid}}\", \"content\": \"Hello group!\", \"messageType\": \"text\"}}\n```\n\n### Start Typing:\n```json\n{\"event\": \"typing\", \"data\": {\"conversationId\": \"{{conversation_id}}\", \"isTyping\": true}}\n```\n\n### Stop Typing:\n```json\n{\"event\": \"typing\", \"data\": {\"conversationId\": \"{{conversation_id}}\", \"isTyping\": false}}\n```"
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "user1_jwt_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user2_jwt_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user1_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user2_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "conversation_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "group_uuid",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

@@ -27,6 +27,15 @@ export class CreateGroupDto {
     description?: string
 
     @ApiProperty({
+        description: 'Tag for the group',
+        example: 'education',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    tag?: string
+
+    @ApiProperty({
         description: 'Avatar URL for the group',
         example: 'https://example.com/avatar.jpg',
         required: false
@@ -91,6 +100,15 @@ export class CreateGroupDto {
     @IsString()
     @IsOptional()
     location?: string
+
+    @ApiProperty({
+        description: 'Country name',
+        example: 'Germany',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    country?: string
 
     @ApiProperty({ description: 'Latitude', example: 51.1657, required: false })
     @IsOptional()

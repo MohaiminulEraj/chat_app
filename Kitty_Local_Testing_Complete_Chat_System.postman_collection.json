@@ -1,0 +1,454 @@
+{
+    "info": {
+        "name": "Kitty Chat Local Testing - Complete System",
+        "description": "Complete testing collection for localhost:3001 chat system with real-time features",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "📋 Setup Phase - Authentication",
+            "item": [
+                {
+                    "name": "🔑 Login User 1 (Eraj)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.jwt_token) {",
+                                    "        pm.environment.set('user1_jwt_token', response.data.jwt_token);",
+                                    "        pm.environment.set('user1_id', response.data.user.uuid);",
+                                    "        console.log('User 1 logged in successfully');",
+                                    "        console.log('User 1 ID:', response.data.user.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{user1_email}}\",\n  \"password\": \"{{user1_password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/auth/login",
+                            "host": ["{{api_base}}"],
+                            "path": ["auth", "login"]
+                        }
+                    }
+                },
+                {
+                    "name": "🔑 Login User 2 (Faysal)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.jwt_token) {",
+                                    "        pm.environment.set('user2_jwt_token', response.data.jwt_token);",
+                                    "        pm.environment.set('user2_id', response.data.user.uuid);",
+                                    "        console.log('User 2 logged in successfully');",
+                                    "        console.log('User 2 ID:', response.data.user.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{user2_email}}\",\n  \"password\": \"{{user2_password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/auth/login",
+                            "host": ["{{api_base}}"],
+                            "path": ["auth", "login"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "👥 Friendship Management",
+            "item": [
+                {
+                    "name": "📤 Send Friend Request (User 1 to User 2)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.uuid) {",
+                                    "        pm.environment.set('friendship_id', response.data.uuid);",
+                                    "        console.log('Friend request sent successfully');",
+                                    "        console.log('Friendship ID:', response.data.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"friend_id\": \"{{user2_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/friendship/send-request",
+                            "host": ["{{api_base}}"],
+                            "path": ["friendship", "send-request"]
+                        }
+                    }
+                },
+                {
+                    "name": "✅ Accept Friend Request (User 2)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user2_jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"friendship_uuid\": \"{{friendship_id}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/friendship/accept-request",
+                            "host": ["{{api_base}}"],
+                            "path": ["friendship", "accept-request"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get User 1 Friends List",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/friendship/friends",
+                            "host": ["{{api_base}}"],
+                            "path": ["friendship", "friends"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "💬 One-to-One Chat Setup",
+            "item": [
+                {
+                    "name": "📝 Create Conversation (User 1)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.uuid) {",
+                                    "        pm.environment.set('conversation_id', response.data.uuid);",
+                                    "        console.log('Conversation created successfully');",
+                                    "        console.log('Conversation ID:', response.data.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"participant_ids\": [\"{{user2_id}}\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/conversation",
+                            "host": ["{{api_base}}"],
+                            "path": ["conversation"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get All Conversations (User 1)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/conversation",
+                            "host": ["{{api_base}}"],
+                            "path": ["conversation"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get All Conversations (User 2)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user2_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/conversation",
+                            "host": ["{{api_base}}"],
+                            "path": ["conversation"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "👥 Group Chat Setup",
+            "item": [
+                {
+                    "name": "🏗️ Create Group (User 1)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.data && response.data.uuid) {",
+                                    "        pm.environment.set('group_id', response.data.id);",
+                                    "        pm.environment.set('group_uuid', response.data.uuid);",
+                                    "        console.log('Group created successfully');",
+                                    "        console.log('Group ID:', response.data.id);",
+                                    "        console.log('Group UUID:', response.data.uuid);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Eraj & Faysal Test Group\",\n  \"description\": \"Test group for real-time chat testing\",\n  \"member_ids\": [\"{{user2_id}}\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{api_base}}/group",
+                            "host": ["{{api_base}}"],
+                            "path": ["group"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get All Groups (User 1)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user1_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/group",
+                            "host": ["{{api_base}}"],
+                            "path": ["group"]
+                        }
+                    }
+                },
+                {
+                    "name": "📋 Get All Groups (User 2)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user2_jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{api_base}}/group",
+                            "host": ["{{api_base}}"],
+                            "path": ["group"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🔄 WebSocket Testing Guide",
+            "item": [
+                {
+                    "name": "📖 One-to-One Chat WebSocket Instructions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 💬 One-to-One Chat WebSocket Testing\n\n## 🔗 WebSocket URL: {{chat_websocket}}\n\n### 📋 Step-by-Step Instructions:\n\n#### 1. 🆕 Create New WebSocket Request in Postman\n- Click **\"New\"** → Select **\"WebSocket Request\"**\n- URL: `{{chat_websocket}}`\n- Click **\"Connect\"**\n\n#### 2. 🔐 Authenticate User 1\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"{{user1_jwt_token}}\"\n  }\n}\n```\n\n#### 3. 🏠 Join Conversation\n```json\n{\n  \"event\": \"joinConversation\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\"\n  }\n}\n```\n\n#### 4. 💬 Send Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"content\": \"Hello from User 1! 👋\",\n    \"type\": \"text\"\n  }\n}\n```\n\n#### 5. ⌨️ Send Typing Indicator\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n#### 6. ⌨️ Stop Typing Indicator\n```json\n{\n  \"event\": \"typing\",\n  \"data\": {\n    \"conversationId\": \"{{conversation_id}}\",\n    \"isTyping\": false\n  }\n}\n```\n\n## 🔄 For User 2 Testing:\n- Open another WebSocket connection\n- Use `{{user2_jwt_token}}` for authentication\n- Use same `{{conversation_id}}`\n- Both users should see each other's messages and typing indicators in real-time!"
+                    }
+                },
+                {
+                    "name": "📖 Group Chat WebSocket Instructions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 👥 Group Chat WebSocket Testing\n\n## 🔗 WebSocket URL: {{group_chat_websocket}}\n\n### 📋 Step-by-Step Instructions:\n\n#### 1. 🆕 Create New WebSocket Request in Postman\n- Click **\"New\"** → Select **\"WebSocket Request\"**\n- URL: `{{group_chat_websocket}}`\n- Click **\"Connect\"**\n\n#### 2. 🔐 Authenticate User 1\n```json\n{\n  \"event\": \"authenticate\",\n  \"data\": {\n    \"token\": \"{{user1_jwt_token}}\"\n  }\n}\n```\n\n#### 3. 🏠 Join Group\n```json\n{\n  \"event\": \"joinGroup\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\"\n  }\n}\n```\n\n#### 4. 💬 Send Group Message\n```json\n{\n  \"event\": \"sendMessage\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"content\": \"Hello group from User 1! 🎉\",\n    \"messageType\": \"text\"\n  }\n}\n```\n\n#### 5. ⌨️ Send Group Typing Indicator\n```json\n{\n  \"event\": \"groupTyping\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"isTyping\": true\n  }\n}\n```\n\n#### 6. ⌨️ Stop Group Typing Indicator\n```json\n{\n  \"event\": \"groupTyping\",\n  \"data\": {\n    \"groupId\": \"{{group_uuid}}\",\n    \"isTyping\": false\n  }\n}\n```\n\n## 🔄 For User 2 Testing:\n- Open another WebSocket connection\n- Use `{{user2_jwt_token}}` for authentication\n- Use same `{{group_uuid}}`\n- Both users should see each other's messages and typing indicators in real-time!"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "💻 HTML Test Client",
+            "item": [
+                {
+                    "name": "📖 Use HTML Test Client Instructions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 🌐 HTML Test Client for Easy Testing\n\n## 📁 File Location:\n`/home/eraj/Documents/work/per/kitty_backend/test-client/live-server-complete-chat-test.html`\n\n## 🚀 How to Use:\n\n### Option 1: Direct Browser\n1. **Open** the HTML file in your browser\n2. **Update** the WebSocket URLs to localhost:\n   - One-to-One: `ws://localhost:3001/chat`\n   - Group Chat: `ws://localhost:3001/group-chat`\n3. **Enter** JWT tokens from login responses\n4. **Test** real-time messaging and typing indicators\n\n### Option 2: Live Server (VS Code)\n1. **Install** Live Server extension in VS Code\n2. **Right-click** on the HTML file\n3. **Select** \"Open with Live Server\"\n4. **Browser** opens automatically\n5. **Follow** the same steps as Option 1\n\n## ✨ Features Available:\n- ✅ **Real-time messaging** for both chat types\n- ✅ **Typing indicators** with visual feedback\n- ✅ **Authentication** handling\n- ✅ **Connection status** display\n- ✅ **Message history** display\n- ✅ **Error handling** and logging\n- ✅ **User-friendly interface**\n\n## 🔧 Configuration:\nThe HTML client is already configured for your exact setup:\n- **Users**: eraj@gmail.com & faysal@mobile.com\n- **Passwords**: 12345678\n- **Server**: localhost:3001\n- **Features**: All real-time chat features included\n\n**💡 Tip**: Use this for visual testing while using Postman for API validation!"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🧪 Testing Scenarios",
+            "item": [
+                {
+                    "name": "🎯 Test Scenario 1: Basic Chat Flow",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 🎯 Test Scenario 1: Basic One-to-One Chat\n\n## 📋 Prerequisites:\n1. ✅ Both users logged in\n2. ✅ Friendship established\n3. ✅ Conversation created\n\n## 🔄 Testing Steps:\n\n### Step 1: Connect Both Users\n1. **User 1**: Connect to `{{chat_websocket}}`\n2. **User 2**: Connect to `{{chat_websocket}}`\n3. **Both**: Authenticate with respective JWT tokens\n4. **Both**: Join conversation `{{conversation_id}}`\n\n### Step 2: Test Real-time Messaging\n1. **User 1**: Send message \"Hello from Eraj!\"\n2. **Verify**: User 2 receives message immediately\n3. **User 2**: Send message \"Hi Eraj, this is Faysal!\"\n4. **Verify**: User 1 receives message immediately\n\n### Step 3: Test Typing Indicators\n1. **User 1**: Send typing=true\n2. **Verify**: User 2 sees \"User is typing...\"\n3. **User 1**: Send typing=false\n4. **Verify**: User 2 typing indicator disappears\n5. **Repeat** with User 2 typing\n\n### Step 4: Test Message Persistence\n1. **Disconnect** both users\n2. **Reconnect** and join conversation\n3. **Verify**: Previous messages are visible\n\n## ✅ Expected Results:\n- ✅ **Instant message delivery**\n- ✅ **Real-time typing indicators**\n- ✅ **Message persistence in MongoDB**\n- ✅ **Proper user authentication**\n- ✅ **Clean connection handling**"
+                    }
+                },
+                {
+                    "name": "🎯 Test Scenario 2: Group Chat Flow",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 🎯 Test Scenario 2: Real-time Group Chat\n\n## 📋 Prerequisites:\n1. ✅ Both users logged in\n2. ✅ Group created with both members\n3. ✅ Group UUID available\n\n## 🔄 Testing Steps:\n\n### Step 1: Connect Both Users to Group\n1. **User 1**: Connect to `{{group_chat_websocket}}`\n2. **User 2**: Connect to `{{group_chat_websocket}}`\n3. **Both**: Authenticate with respective JWT tokens\n4. **Both**: Join group `{{group_uuid}}`\n\n### Step 2: Test Group Messaging\n1. **User 1**: Send \"Hello group! This is Eraj 👋\"\n2. **Verify**: User 2 receives with sender info\n3. **User 2**: Send \"Hey everyone! Faysal here 🎉\"\n4. **Verify**: User 1 receives with sender info\n\n### Step 3: Test Group Typing Indicators\n1. **User 1**: Send groupTyping=true\n2. **Verify**: User 2 sees \"Eraj is typing...\"\n3. **User 1**: Send groupTyping=false\n4. **Verify**: User 2 typing indicator disappears\n5. **Repeat** with User 2 typing\n\n### Step 4: Test Group Message Storage\n1. **Check**: Messages stored in MongoDB collection named `{{group_uuid}}`\n2. **Verify**: Messages include sender details\n3. **Verify**: Timestamps are accurate\n\n## ✅ Expected Results:\n- ✅ **Instant group message delivery**\n- ✅ **Sender identification in messages**\n- ✅ **Real-time group typing indicators**\n- ✅ **Messages stored in group-specific collection**\n- ✅ **Proper member authentication**\n- ✅ **Clean group management**"
+                    }
+                },
+                {
+                    "name": "🎯 Test Scenario 3: Multi-User Real-time",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/",
+                            "host": ["{{base_url}}"],
+                            "path": [""]
+                        },
+                        "description": "# 🎯 Test Scenario 3: Advanced Multi-User Testing\n\n## 🔄 Simultaneous Connection Testing:\n\n### Step 1: Multiple Connections\n1. **Open** 4 WebSocket connections in Postman:\n   - User 1 → One-to-One Chat\n   - User 2 → One-to-One Chat\n   - User 1 → Group Chat\n   - User 2 → Group Chat\n\n### Step 2: Cross-Platform Testing\n1. **User 1**: Send message in one-to-one chat\n2. **User 2**: Respond in one-to-one chat\n3. **User 1**: Send message in group chat\n4. **User 2**: Respond in group chat\n5. **Verify**: All messages reach correct destinations\n\n### Step 3: Rapid Message Testing\n1. **Both users**: Send multiple rapid messages\n2. **Verify**: All messages delivered in correct order\n3. **Check**: No message loss or duplication\n\n### Step 4: Typing Indicator Stress Test\n1. **Both users**: Rapidly toggle typing indicators\n2. **Verify**: Indicators update correctly\n3. **Check**: No indicator stuck in \"typing\" state\n\n### Step 5: Connection Resilience\n1. **Disconnect** one user randomly\n2. **Reconnect** after 5 seconds\n3. **Verify**: Auto-rejoin works\n4. **Check**: Message delivery resumes\n\n## 🔍 Monitoring Points:\n- ✅ **Server logs** for connection handling\n- ✅ **MongoDB** for message persistence\n- ✅ **Memory usage** during high activity\n- ✅ **Response times** for real-time features\n- ✅ **Error handling** for edge cases\n\n## 📊 Performance Metrics:\n- **Message latency**: < 100ms\n- **Typing indicator delay**: < 50ms\n- **Connection establishment**: < 1s\n- **Memory per connection**: Stable\n- **CPU usage**: Minimal increase"
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Auto-set environment if not already set",
+                    "if (!pm.environment.get('base_url')) {",
+                    "    pm.environment.set('base_url', 'http://localhost:3001');",
+                    "    pm.environment.set('api_base', 'http://localhost:3001/api/v1');",
+                    "    console.log('Environment variables auto-configured for localhost:3001');",
+                    "}"
+                ]
+            }
+        }
+    ]
+}

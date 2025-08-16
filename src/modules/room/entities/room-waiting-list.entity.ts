@@ -4,6 +4,7 @@ import {
     CreateDateColumn,
     Entity,
     Index,
+    JoinColumn,
     ManyToOne,
     Unique
 } from 'typeorm'
@@ -28,8 +29,10 @@ export class RoomWaitingList extends CustomBaseEntity {
 
     // Relations
     @ManyToOne(() => Room, (room) => room.waitingList)
+    @JoinColumn({ name: 'roomId', referencedColumnName: 'uuid' })
     room: Room
 
     @ManyToOne(() => User)
+    @JoinColumn({ name: 'userId', referencedColumnName: 'uuid' })
     user: User
 }

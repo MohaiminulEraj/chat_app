@@ -10,16 +10,13 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     }
 
     async validate(emailOrPhone: string, password: string): Promise<any> {
-        // Create a mock loginDto to match the service's expected format
-        const loginDto = { emailOrPhone, password }
+        // Use the validateUser method instead of full login
+        const user = await this.authService.validateUser(emailOrPhone, password)
 
-        try {
-            // Use the existing login method but extract just the user info
-            const result = await this.authService.login({}, loginDto)
-            // The result is the full auth response, return it directly
-            return result
-        } catch (error) {
+        if (!user) {
             throw new UnauthorizedException('Invalid credentials')
         }
+
+        return user
     }
 }

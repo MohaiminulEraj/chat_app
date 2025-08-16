@@ -106,13 +106,31 @@ export class FriendshipService {
         await this.friendshipRepository.remove(friendship)
     }
 
-    async getFriends(userUuid: string): Promise<Friendship[]> {
-        return this.friendshipRepository.find({
+    async getFriends(userUuid: string): Promise<any[]> {
+        const friendships = await this.friendshipRepository.find({
             where: [
                 { userId: userUuid, status: FriendshipStatus.ACCEPTED },
                 { friendId: userUuid, status: FriendshipStatus.ACCEPTED }
             ],
             relations: ['user', 'friend']
+        })
+
+        // Transform the data to only return friend information
+        return friendships.map((friendship) => {
+            // Determine which user is the friend (not the logged-in user)
+            const friendUser =
+                friendship.userId === userUuid
+                    ? friendship.friend
+                    : friendship.user
+
+            return {
+                id: friendship.id,
+                uuid: friendship.uuid,
+                createdAt: friendship.createdAt,
+                updatedAt: friendship.updatedAt,
+                status: friendship.status,
+                user: friendUser
+            }
         })
     }
 

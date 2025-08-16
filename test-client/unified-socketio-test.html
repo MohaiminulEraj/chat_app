@@ -1,0 +1,1031 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Unified Socket.IO Chat Test</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                max-width: 1200px;
+            }
+            .container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 20px;
+            }
+            .user-section {
+                border: 1px solid #ccc;
+                padding: 20px;
+                border-radius: 8px;
+            }
+            .messages {
+                height: 300px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                padding: 10px;
+                margin: 10px 0;
+                background: #f9f9f9;
+            }
+            .message {
+                margin: 5px 0;
+                padding: 8px;
+                border-radius: 4px;
+            }
+            .sent {
+                background: #e3f2fd;
+                text-align: right;
+                margin-left: 20%;
+            }
+            .received {
+                background: #f5f5f5;
+                margin-right: 20%;
+            }
+            .system {
+                background: #fff3e0;
+                text-align: center;
+                font-style: italic;
+            }
+            input,
+            button,
+            select {
+                margin: 5px;
+                padding: 8px;
+            }
+            .status {
+                color: green;
+                font-weight: bold;
+            }
+            .offline {
+                color: red;
+            }
+            .controls {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            .log {
+                height: 200px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                padding: 10px;
+                background: #fafafa;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            .section-title {
+                background: #f0f0f0;
+                padding: 10px;
+                margin: 20px 0 10px 0;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🚀 Unified Socket.IO Real-Time Chat System</h1>
+
+        <div class="container">
+            <!-- User 1 Section -->
+            <div class="user-section">
+                <h2>👤 User 1</h2>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="token1"
+                        placeholder="JWT Token"
+                        style="width: 200px"
+                    />
+                    <button onclick="connectUser1()">Connect</button>
+                    <span id="status1" class="status offline"
+                        >Disconnected</span
+                    >
+                </div>
+
+                <div class="section-title">💬 Direct Messages</div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="recipient1"
+                        placeholder="Recipient UUID"
+                        style="width: 200px"
+                    />
+                    <select id="messageType1">
+                        <option value="text">Text</option>
+                        <option value="image">Image</option>
+                        <option value="file">File</option>
+                        <option value="voice">Voice</option>
+                    </select>
+                </div>
+                <div class="messages" id="messages1"></div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="message1"
+                        placeholder="Type a message..."
+                        style="width: 250px"
+                    />
+                    <button onclick="sendDirectMessage1()">Send Direct</button>
+                </div>
+
+                <div class="section-title">👥 Group Messages</div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="groupId1"
+                        placeholder="Group ID"
+                        style="width: 200px"
+                    />
+                    <button onclick="joinGroup1()">Join Group</button>
+                    <button onclick="leaveGroup1()">Leave Group</button>
+                </div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="groupMessage1"
+                        placeholder="Group message..."
+                        style="width: 250px"
+                    />
+                    <button onclick="sendGroupMessage1()">Send to Group</button>
+                </div>
+
+                <div class="section-title">📞 Call Controls</div>
+                <div class="controls">
+                    <button onclick="initiateVoiceCall1()">Voice Call</button>
+                    <button onclick="initiateVideoCall1()">Video Call</button>
+                    <button onclick="endCall1()">End Call</button>
+                </div>
+
+                <div class="section-title">⚡ Status</div>
+                <div class="controls">
+                    <select id="status1Select" onchange="updateStatus1()">
+                        <option value="online">Online</option>
+                        <option value="away">Away</option>
+                        <option value="busy">Busy</option>
+                        <option value="offline">Offline</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- User 2 Section -->
+            <div class="user-section">
+                <h2>👤 User 2</h2>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="token2"
+                        placeholder="JWT Token"
+                        style="width: 200px"
+                    />
+                    <button onclick="connectUser2()">Connect</button>
+                    <span id="status2" class="status offline"
+                        >Disconnected</span
+                    >
+                </div>
+
+                <div class="section-title">💬 Direct Messages</div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="recipient2"
+                        placeholder="Recipient UUID"
+                        style="width: 200px"
+                    />
+                    <select id="messageType2">
+                        <option value="text">Text</option>
+                        <option value="image">Image</option>
+                        <option value="file">File</option>
+                        <option value="voice">Voice</option>
+                    </select>
+                </div>
+                <div class="messages" id="messages2"></div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="message2"
+                        placeholder="Type a message..."
+                        style="width: 250px"
+                    />
+                    <button onclick="sendDirectMessage2()">Send Direct</button>
+                </div>
+
+                <div class="section-title">👥 Group Messages</div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="groupId2"
+                        placeholder="Group ID"
+                        style="width: 200px"
+                    />
+                    <button onclick="joinGroup2()">Join Group</button>
+                    <button onclick="leaveGroup2()">Leave Group</button>
+                </div>
+                <div class="controls">
+                    <input
+                        type="text"
+                        id="groupMessage2"
+                        placeholder="Group message..."
+                        style="width: 250px"
+                    />
+                    <button onclick="sendGroupMessage2()">Send to Group</button>
+                </div>
+
+                <div class="section-title">📞 Call Controls</div>
+                <div class="controls">
+                    <button onclick="initiateVoiceCall2()">Voice Call</button>
+                    <button onclick="initiateVideoCall2()">Video Call</button>
+                    <button onclick="endCall2()">End Call</button>
+                </div>
+
+                <div class="section-title">⚡ Status</div>
+                <div class="controls">
+                    <select id="status2Select" onchange="updateStatus2()">
+                        <option value="online">Online</option>
+                        <option value="away">Away</option>
+                        <option value="busy">Busy</option>
+                        <option value="offline">Offline</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">📋 Event Log</div>
+        <div class="log" id="eventLog"></div>
+
+        <script>
+            let socket1, socket2
+            let user1Id, user2Id
+            let currentCall = null
+
+            function log(message) {
+                const eventLog = document.getElementById('eventLog')
+                const timestamp = new Date().toLocaleTimeString()
+                eventLog.innerHTML += `<div>${timestamp}: ${message}</div>`
+                eventLog.scrollTop = eventLog.scrollHeight
+            }
+
+            function displayMessage(
+                containerId,
+                message,
+                isSent,
+                isSystem = false
+            ) {
+                const container = document.getElementById(containerId)
+                const messageDiv = document.createElement('div')
+
+                if (isSystem) {
+                    messageDiv.className = 'message system'
+                    messageDiv.innerHTML = message
+                } else {
+                    messageDiv.className = `message ${isSent ? 'sent' : 'received'}`
+                    messageDiv.innerHTML = `
+                    <strong>${isSent ? 'You' : message.sender?.name || 'Unknown'}:</strong>
+                    ${message.content || '[Media]'}
+                    <br><small>${new Date().toLocaleTimeString()}</small>
+                `
+                }
+
+                container.appendChild(messageDiv)
+                container.scrollTop = container.scrollHeight
+            }
+
+            // User 1 Functions
+            function connectUser1() {
+                const token = document.getElementById('token1').value
+                if (!token) {
+                    alert('Please enter JWT token for User 1')
+                    return
+                }
+
+                socket1 = io('http://localhost:3000', {
+                    transports: ['websocket', 'polling']
+                })
+
+                setupSocketEvents(socket1, '1', (userId) => {
+                    user1Id = userId
+                })
+
+                socket1.on('connect', () => {
+                    log('User 1: Connected to server')
+                    document.getElementById('status1').textContent = 'Connected'
+                    document
+                        .getElementById('status1')
+                        .classList.remove('offline')
+
+                    // Authenticate
+                    socket1.emit('authenticate', { token }, (response) => {
+                        if (response.success) {
+                            user1Id = response.userId
+                            log(`User 1: Authenticated as ${user1Id}`)
+                            displayMessage(
+                                'messages1',
+                                'Connected and authenticated!',
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 1: Authentication failed - ${response.error}`
+                            )
+                        }
+                    })
+                })
+
+                socket1.on('disconnect', () => {
+                    log('User 1: Disconnected')
+                    document.getElementById('status1').textContent =
+                        'Disconnected'
+                    document.getElementById('status1').classList.add('offline')
+                })
+            }
+
+            function connectUser2() {
+                const token = document.getElementById('token2').value
+                if (!token) {
+                    alert('Please enter JWT token for User 2')
+                    return
+                }
+
+                socket2 = io('http://localhost:3000', {
+                    transports: ['websocket', 'polling']
+                })
+
+                setupSocketEvents(socket2, '2', (userId) => {
+                    user2Id = userId
+                })
+
+                socket2.on('connect', () => {
+                    log('User 2: Connected to server')
+                    document.getElementById('status2').textContent = 'Connected'
+                    document
+                        .getElementById('status2')
+                        .classList.remove('offline')
+
+                    // Authenticate
+                    socket2.emit('authenticate', { token }, (response) => {
+                        if (response.success) {
+                            user2Id = response.userId
+                            log(`User 2: Authenticated as ${user2Id}`)
+                            displayMessage(
+                                'messages2',
+                                'Connected and authenticated!',
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 2: Authentication failed - ${response.error}`
+                            )
+                        }
+                    })
+                })
+
+                socket2.on('disconnect', () => {
+                    log('User 2: Disconnected')
+                    document.getElementById('status2').textContent =
+                        'Disconnected'
+                    document.getElementById('status2').classList.add('offline')
+                })
+            }
+
+            function setupSocketEvents(socket, userNum, setUserId) {
+                // Authentication events
+                socket.on('authenticated', (data) => {
+                    log(`User ${userNum}: Authenticated - ${data.message}`)
+                    setUserId(data.userId)
+                })
+
+                socket.on('authenticationError', (data) => {
+                    log(`User ${userNum}: Auth Error - ${data.message}`)
+                    alert(
+                        `User ${userNum} Authentication failed: ${data.message}`
+                    )
+                })
+
+                // Message events
+                socket.on('newDirectMessage', (data) => {
+                    log(
+                        `User ${userNum}: New direct message in conversation ${data.conversationId}`
+                    )
+                    displayMessage(`messages${userNum}`, data.message, false)
+                })
+
+                socket.on('newGroupMessage', (data) => {
+                    log(
+                        `User ${userNum}: New group message in group ${data.groupId}`
+                    )
+                    displayMessage(`messages${userNum}`, data.message, false)
+                })
+
+                // Typing indicators
+                socket.on('userTyping', (data) => {
+                    const typingMsg = `${data.userName} is ${data.isTyping ? 'typing' : 'stopped typing'}...`
+                    log(`User ${userNum}: ${typingMsg}`)
+                    displayMessage(`messages${userNum}`, typingMsg, false, true)
+                })
+
+                // Status updates
+                socket.on('userStatusChanged', (data) => {
+                    log(
+                        `User ${userNum}: ${data.userId} status changed to ${data.status}`
+                    )
+                })
+
+                // Group events
+                socket.on('userJoinedGroup', (data) => {
+                    log(
+                        `User ${userNum}: ${data.user.name} joined group ${data.groupId}`
+                    )
+                    displayMessage(
+                        `messages${userNum}`,
+                        `${data.user.name} joined the group`,
+                        false,
+                        true
+                    )
+                })
+
+                socket.on('userLeftGroup', (data) => {
+                    log(
+                        `User ${userNum}: ${data.user.name} left group ${data.groupId}`
+                    )
+                    displayMessage(
+                        `messages${userNum}`,
+                        `${data.user.name} left the group`,
+                        false,
+                        true
+                    )
+                })
+
+                // Call events
+                socket.on('incomingCall', (data) => {
+                    log(
+                        `User ${userNum}: Incoming ${data.callType} call from ${data.caller.name}`
+                    )
+                    const accept = confirm(
+                        `Incoming ${data.callType} call from ${data.caller.name}. Accept?`
+                    )
+
+                    socket.emit('respondToCall', {
+                        callId: data.callId,
+                        response: accept ? 'accept' : 'decline',
+                        callerId: data.caller.uuid
+                    })
+                })
+
+                socket.on('callResponse', (data) => {
+                    log(
+                        `User ${userNum}: Call ${data.response}ed by ${data.responder.name}`
+                    )
+                    if (data.response === 'accept') {
+                        currentCall = data.callId
+                        displayMessage(
+                            `messages${userNum}`,
+                            `Call connected with ${data.responder.name}`,
+                            false,
+                            true
+                        )
+                    } else {
+                        displayMessage(
+                            `messages${userNum}`,
+                            `Call declined by ${data.responder.name}`,
+                            false,
+                            true
+                        )
+                    }
+                })
+
+                socket.on('callEnded', (data) => {
+                    log(`User ${userNum}: Call ended by ${data.endedBy.name}`)
+                    currentCall = null
+                    displayMessage(
+                        `messages${userNum}`,
+                        `Call ended by ${data.endedBy.name}`,
+                        false,
+                        true
+                    )
+                })
+
+                // Read receipts
+                socket.on('messagesRead', (data) => {
+                    log(`User ${userNum}: Messages read by ${data.readBy.name}`)
+                })
+
+                // Error handling
+                socket.on('error', (data) => {
+                    log(`User ${userNum}: Error - ${data.message}`)
+                    alert(`Error: ${data.message}`)
+                })
+            }
+
+            // Message Functions
+            function sendDirectMessage1() {
+                const content = document.getElementById('message1').value
+                const recipientId = document.getElementById('recipient1').value
+                const messageType =
+                    document.getElementById('messageType1').value
+
+                if (!content || !recipientId) {
+                    alert('Please enter message and recipient')
+                    return
+                }
+
+                socket1.emit(
+                    'sendDirectMessage',
+                    {
+                        recipientId: recipientId,
+                        type: messageType,
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 1: Direct message sent successfully')
+                            displayMessage(
+                                'messages1',
+                                { content, sender: { name: 'You' } },
+                                true
+                            )
+                            document.getElementById('message1').value = ''
+                        } else {
+                            log(
+                                `User 1: Error sending message: ${response.error}`
+                            )
+                            alert(`Error: ${response.error}`)
+                        }
+                    }
+                )
+            }
+
+            function sendDirectMessage2() {
+                const content = document.getElementById('message2').value
+                const recipientId = document.getElementById('recipient2').value
+                const messageType =
+                    document.getElementById('messageType2').value
+
+                if (!content || !recipientId) {
+                    alert('Please enter message and recipient')
+                    return
+                }
+
+                socket2.emit(
+                    'sendDirectMessage',
+                    {
+                        recipientId: recipientId,
+                        type: messageType,
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 2: Direct message sent successfully')
+                            displayMessage(
+                                'messages2',
+                                { content, sender: { name: 'You' } },
+                                true
+                            )
+                            document.getElementById('message2').value = ''
+                        } else {
+                            log(
+                                `User 2: Error sending message: ${response.error}`
+                            )
+                            alert(`Error: ${response.error}`)
+                        }
+                    }
+                )
+            }
+
+            // Group Functions
+            function joinGroup1() {
+                const groupId = document.getElementById('groupId1').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                socket1.emit('joinGroup', { groupId }, (response) => {
+                    if (response.success) {
+                        log(`User 1: Joined group ${groupId}`)
+                        displayMessage(
+                            'messages1',
+                            `Joined group ${groupId}`,
+                            false,
+                            true
+                        )
+                    } else {
+                        log(`User 1: Error joining group: ${response.error}`)
+                        alert(`Error: ${response.error}`)
+                    }
+                })
+            }
+
+            function joinGroup2() {
+                const groupId = document.getElementById('groupId2').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                socket2.emit('joinGroup', { groupId }, (response) => {
+                    if (response.success) {
+                        log(`User 2: Joined group ${groupId}`)
+                        displayMessage(
+                            'messages2',
+                            `Joined group ${groupId}`,
+                            false,
+                            true
+                        )
+                    } else {
+                        log(`User 2: Error joining group: ${response.error}`)
+                        alert(`Error: ${response.error}`)
+                    }
+                })
+            }
+
+            function leaveGroup1() {
+                const groupId = document.getElementById('groupId1').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                socket1.emit('leaveGroup', { groupId }, (response) => {
+                    if (response.success) {
+                        log(`User 1: Left group ${groupId}`)
+                        displayMessage(
+                            'messages1',
+                            `Left group ${groupId}`,
+                            false,
+                            true
+                        )
+                    } else {
+                        log(`User 1: Error leaving group: ${response.error}`)
+                    }
+                })
+            }
+
+            function leaveGroup2() {
+                const groupId = document.getElementById('groupId2').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                socket2.emit('leaveGroup', { groupId }, (response) => {
+                    if (response.success) {
+                        log(`User 2: Left group ${groupId}`)
+                        displayMessage(
+                            'messages2',
+                            `Left group ${groupId}`,
+                            false,
+                            true
+                        )
+                    } else {
+                        log(`User 2: Error leaving group: ${response.error}`)
+                    }
+                })
+            }
+
+            function sendGroupMessage1() {
+                const content = document.getElementById('groupMessage1').value
+                const groupId = document.getElementById('groupId1').value
+
+                if (!content || !groupId) {
+                    alert(
+                        "Please enter message and make sure you're in a group"
+                    )
+                    return
+                }
+
+                socket1.emit(
+                    'sendGroupMessage',
+                    {
+                        groupId: groupId,
+                        type: 'text',
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 1: Group message sent successfully')
+                            displayMessage(
+                                'messages1',
+                                { content, sender: { name: 'You' } },
+                                true
+                            )
+                            document.getElementById('groupMessage1').value = ''
+                        } else {
+                            log(
+                                `User 1: Error sending group message: ${response.error}`
+                            )
+                            alert(`Error: ${response.error}`)
+                        }
+                    }
+                )
+            }
+
+            function sendGroupMessage2() {
+                const content = document.getElementById('groupMessage2').value
+                const groupId = document.getElementById('groupId2').value
+
+                if (!content || !groupId) {
+                    alert(
+                        "Please enter message and make sure you're in a group"
+                    )
+                    return
+                }
+
+                socket2.emit(
+                    'sendGroupMessage',
+                    {
+                        groupId: groupId,
+                        type: 'text',
+                        content: content
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 2: Group message sent successfully')
+                            displayMessage(
+                                'messages2',
+                                { content, sender: { name: 'You' } },
+                                true
+                            )
+                            document.getElementById('groupMessage2').value = ''
+                        } else {
+                            log(
+                                `User 2: Error sending group message: ${response.error}`
+                            )
+                            alert(`Error: ${response.error}`)
+                        }
+                    }
+                )
+            }
+
+            // Call Functions
+            function initiateVoiceCall1() {
+                const recipientId = document.getElementById('recipient1').value
+                if (!recipientId) {
+                    alert('Please enter recipient ID')
+                    return
+                }
+
+                const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+                socket1.emit(
+                    'initiateCall',
+                    {
+                        recipientId: recipientId,
+                        callType: 'voice',
+                        callId: callId
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log(
+                                `User 1: Voice call initiated to ${recipientId}`
+                            )
+                            currentCall = callId
+                            displayMessage(
+                                'messages1',
+                                `Voice call initiated...`,
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 1: Error initiating call: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            function initiateVideoCall1() {
+                const recipientId = document.getElementById('recipient1').value
+                if (!recipientId) {
+                    alert('Please enter recipient ID')
+                    return
+                }
+
+                const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+                socket1.emit(
+                    'initiateCall',
+                    {
+                        recipientId: recipientId,
+                        callType: 'video',
+                        callId: callId
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log(
+                                `User 1: Video call initiated to ${recipientId}`
+                            )
+                            currentCall = callId
+                            displayMessage(
+                                'messages1',
+                                `Video call initiated...`,
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 1: Error initiating call: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            function initiateVoiceCall2() {
+                const recipientId = document.getElementById('recipient2').value
+                if (!recipientId) {
+                    alert('Please enter recipient ID')
+                    return
+                }
+
+                const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+                socket2.emit(
+                    'initiateCall',
+                    {
+                        recipientId: recipientId,
+                        callType: 'voice',
+                        callId: callId
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log(
+                                `User 2: Voice call initiated to ${recipientId}`
+                            )
+                            currentCall = callId
+                            displayMessage(
+                                'messages2',
+                                `Voice call initiated...`,
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 2: Error initiating call: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            function initiateVideoCall2() {
+                const recipientId = document.getElementById('recipient2').value
+                if (!recipientId) {
+                    alert('Please enter recipient ID')
+                    return
+                }
+
+                const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+                socket2.emit(
+                    'initiateCall',
+                    {
+                        recipientId: recipientId,
+                        callType: 'video',
+                        callId: callId
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log(
+                                `User 2: Video call initiated to ${recipientId}`
+                            )
+                            currentCall = callId
+                            displayMessage(
+                                'messages2',
+                                `Video call initiated...`,
+                                false,
+                                true
+                            )
+                        } else {
+                            log(
+                                `User 2: Error initiating call: ${response.error}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            function endCall1() {
+                if (!currentCall) {
+                    alert('No active call')
+                    return
+                }
+
+                socket1.emit(
+                    'endCall',
+                    {
+                        callId: currentCall,
+                        participants: [
+                            user1Id,
+                            document.getElementById('recipient1').value
+                        ]
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 1: Call ended')
+                            currentCall = null
+                            displayMessage(
+                                'messages1',
+                                'Call ended',
+                                false,
+                                true
+                            )
+                        }
+                    }
+                )
+            }
+
+            function endCall2() {
+                if (!currentCall) {
+                    alert('No active call')
+                    return
+                }
+
+                socket2.emit(
+                    'endCall',
+                    {
+                        callId: currentCall,
+                        participants: [
+                            user2Id,
+                            document.getElementById('recipient2').value
+                        ]
+                    },
+                    (response) => {
+                        if (response.success) {
+                            log('User 2: Call ended')
+                            currentCall = null
+                            displayMessage(
+                                'messages2',
+                                'Call ended',
+                                false,
+                                true
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Status Functions
+            function updateStatus1() {
+                const status = document.getElementById('status1Select').value
+
+                socket1.emit('updateStatus', { status }, (response) => {
+                    if (response.success) {
+                        log(`User 1: Status updated to ${status}`)
+                    } else {
+                        log(`User 1: Error updating status: ${response.error}`)
+                    }
+                })
+            }
+
+            function updateStatus2() {
+                const status = document.getElementById('status2Select').value
+
+                socket2.emit('updateStatus', { status }, (response) => {
+                    if (response.success) {
+                        log(`User 2: Status updated to ${status}`)
+                    } else {
+                        log(`User 2: Error updating status: ${response.error}`)
+                    }
+                })
+            }
+
+            // Typing indicators
+            document
+                .getElementById('message1')
+                .addEventListener('input', (e) => {
+                    if (
+                        socket1 &&
+                        document.getElementById('recipient1').value
+                    ) {
+                        socket1.emit('typing', {
+                            conversationId: 'temp', // You'd get this from actual conversation
+                            isTyping: e.target.value.length > 0
+                        })
+                    }
+                })
+
+            document
+                .getElementById('message2')
+                .addEventListener('input', (e) => {
+                    if (
+                        socket2 &&
+                        document.getElementById('recipient2').value
+                    ) {
+                        socket2.emit('typing', {
+                            conversationId: 'temp', // You'd get this from actual conversation
+                            isTyping: e.target.value.length > 0
+                        })
+                    }
+                })
+
+            // Initialize
+            log(
+                '🚀 Unified Socket.IO Chat System loaded. Enter JWT tokens and click Connect to start!'
+            )
+        </script>
+    </body>
+</html>

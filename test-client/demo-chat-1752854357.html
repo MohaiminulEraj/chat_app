@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Chat Demo - Fresh Tokens Fri Jul 18 09:55:22 PM +06 2025</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        /* Same styles as before */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
+        .container { display: flex; gap: 20px; max-width: 1400px; margin: 0 auto; }
+        .user-panel { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .user-header { padding: 20px; color: white; font-weight: bold; font-size: 18px; }
+        .alice { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .bob { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .chat-area { height: 400px; overflow-y: auto; padding: 20px; background-color: #fafafa; }
+        .message { margin-bottom: 15px; padding: 12px; border-radius: 8px; max-width: 80%; }
+        .message.sent { background: #e3f2fd; margin-left: auto; text-align: right; }
+        .message.received { background: #f3e5f5; margin-right: auto; }
+        .message.system { background: #fff3cd; text-align: center; font-style: italic; margin: 0 auto; max-width: 90%; }
+        .message-time { font-size: 0.8em; color: #666; margin-top: 5px; }
+        .input-area { padding: 20px; border-top: 1px solid #eee; }
+        .input-group { display: flex; gap: 10px; }
+        input[type="text"] { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; }
+        input[type="text"]:focus { outline: none; border-color: #667eea; }
+        button { padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #5a67d8; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { padding: 10px 20px; font-size: 14px; font-weight: bold; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .typing-indicator { padding: 10px 20px; font-style: italic; color: #666; min-height: 20px; }
+        .controls { padding: 10px 20px; background: #f8f9fa; border-top: 1px solid #dee2e6; }
+        .control-btn { padding: 8px 12px; margin-right: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .demo-info { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+    </style>
+</head>
+<body>
+    <div class="demo-info">
+        <h1>🚀 Real-time Chat Demo - Fresh Tokens</h1>
+        <p><strong>Generated:</strong> Fri Jul 18 09:55:22 PM +06 2025</p>
+        <p><strong>Token Expiry:</strong> ~1 hour from generation</p>
+        <button onclick="connectBothUsers()" style="margin-right: 10px;">🔗 Connect Both Users</button>
+        <button onclick="sendTestMessages()">📨 Send Test Messages</button>
+        <button onclick="clearAllChats()">🗑️ Clear All</button>
+    </div>
+
+    <div class="container">
+        <!-- Alice Panel -->
+        <div class="user-panel">
+            <div class="user-header alice">👩‍💻 Alice Chat</div>
+            <div class="status disconnected" id="alice-status">❌ Disconnected</div>
+            <div class="chat-area" id="alice-chat"></div>
+            <div class="typing-indicator" id="alice-typing"></div>
+            <div class="input-area">
+                <div class="input-group">
+                    <input type="text" id="alice-input" placeholder="Type as Alice..." disabled>
+                    <button onclick="sendMessage('alice')" disabled id="alice-send">Send</button>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="control-btn" onclick="connectUser('alice')">Connect</button>
+                <button class="control-btn" onclick="toggleTyping('alice')">Toggle Typing</button>
+            </div>
+        </div>
+
+        <!-- Bob Panel -->
+        <div class="user-panel">
+            <div class="user-header bob">👨‍💻 Bob Chat</div>
+            <div class="status disconnected" id="bob-status">❌ Disconnected</div>
+            <div class="chat-area" id="bob-chat"></div>
+            <div class="typing-indicator" id="bob-typing"></div>
+            <div class="input-area">
+                <div class="input-group">
+                    <input type="text" id="bob-input" placeholder="Type as Bob..." disabled>
+                    <button onclick="sendMessage('bob')" disabled id="bob-send">Send</button>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="control-btn" onclick="connectUser('bob')">Connect</button>
+                <button class="control-btn" onclick="toggleTyping('bob')">Toggle Typing</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const users = {
+            alice: {
+                uuid: 'c90d2f1a-7f3c-4f66-9e07-20a7a511c005',
+                name: 'Alice Chat',
+                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwidXVpZCI6ImM5MGQyZjFhLTdmM2MtNGY2Ni05ZTA3LTIwYTdhNTExYzAwNSIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTI4NTQxMjIsImV4cCI6MTc1Mjg1NzcyMn0.kZN_sjPNV0wOrEkMkmTyvp9_DOPaShyAe-k8SZKtuGc',
+                socket: null,
+                connected: false,
+                typing: false
+            },
+            bob: {
+                uuid: '7f60076a-6384-420f-9adc-c5fe33dbecca',
+                name: 'Bob Chat',
+                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NiwidXVpZCI6IjdmNjAwNzZhLTYzODQtNDIwZi05YWRjLWM1ZmUzM2RiZWNjYSIsImVtYWlsIjoiYm9iQGV4YW1wbGUuY29tIiwiaWF0IjoxNzUyODU0MTIyLCJleHAiOjE3NTI4NTc3MjJ9.3-8EEcKn6OD2ReGvFA-oqwz5OnCnxkW8W5nIouHUnTQ',
+                socket: null,
+                connected: false,
+                typing: false
+            }
+        };
+
+        function connectUser(userKey) {
+            const user = users[userKey];
+            const otherUserKey = userKey === 'alice' ? 'bob' : 'alice';
+            
+            console.log(`Connecting ${user.name}...`);
+            updateStatus(userKey, 'Connecting...', 'connected');
+
+            user.socket = io('http://localhost:3001/direct-chat', {
+                auth: { token: user.token },
+                transports: ['websocket', 'polling']
+            });
+
+            user.socket.on('connect', () => console.log(`${user.name} connected`));
+            user.socket.on('connected', (data) => {
+                user.connected = true;
+                updateStatus(userKey, `✅ Connected as ${data.user.displayName || data.user.email}`, 'connected');
+                enableControls(userKey, true);
+                addMessage(userKey, '✅ Connected successfully!', 'system');
+            });
+            user.socket.on('disconnect', () => {
+                user.connected = false;
+                updateStatus(userKey, '❌ Disconnected', 'disconnected');
+                enableControls(userKey, false);
+            });
+            user.socket.on('error', (error) => {
+                updateStatus(userKey, `❌ Error: ${error.message}`, 'disconnected');
+                addMessage(userKey, `❌ Error: ${error.message}`, 'system');
+            });
+            user.socket.on('newDirectMessage', (data) => {
+                addMessage(userKey, data.message.content, 'received', data.sender.displayName);
+            });
+            user.socket.on('messageDelivered', () => {
+                addMessage(userKey, '✅ Message delivered', 'system');
+            });
+            user.socket.on('userTyping', (data) => {
+                const typingDiv = document.getElementById(`${userKey}-typing`);
+                typingDiv.textContent = data.isTyping ? `${data.displayName} is typing...` : '';
+            });
+        }
+
+        function sendMessage(userKey) {
+            const user = users[userKey];
+            const otherUserKey = userKey === 'alice' ? 'bob' : 'alice';
+            const otherUser = users[otherUserKey];
+            const input = document.getElementById(`${userKey}-input`);
+            const message = input.value.trim();
+
+            if (!message || !user.connected) return;
+
+            user.socket.emit('sendDirectMessage', {
+                recipientId: otherUser.uuid,
+                type: 'text',
+                content: message
+            }, (response) => {
+                if (response.success) {
+                    addMessage(userKey, message, 'sent', 'You');
+                    input.value = '';
+                }
+            });
+        }
+
+        function toggleTyping(userKey) {
+            const user = users[userKey];
+            const otherUserKey = userKey === 'alice' ? 'bob' : 'alice';
+            const otherUser = users[otherUserKey];
+            if (!user.connected) return;
+            user.typing = !user.typing;
+            user.socket.emit('typing', { recipientId: otherUser.uuid, isTyping: user.typing });
+        }
+
+        function addMessage(userKey, content, type, sender = null) {
+            const chatArea = document.getElementById(`${userKey}-chat`);
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            const time = new Date().toLocaleTimeString();
+            const senderText = sender ? `${sender}: ` : '';
+            messageDiv.innerHTML = `${senderText}${content}<div class="message-time">${time}</div>`;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function updateStatus(userKey, message, className) {
+            const statusDiv = document.getElementById(`${userKey}-status`);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function enableControls(userKey, enabled) {
+            document.getElementById(`${userKey}-input`).disabled = !enabled;
+            document.getElementById(`${userKey}-send`).disabled = !enabled;
+        }
+
+        function connectBothUsers() {
+            setTimeout(() => connectUser('alice'), 500);
+            setTimeout(() => connectUser('bob'), 1000);
+        }
+
+        function sendTestMessages() {
+            setTimeout(() => {
+                document.getElementById('alice-input').value = 'Hello Bob! 👋';
+                sendMessage('alice');
+            }, 2000);
+            setTimeout(() => {
+                document.getElementById('bob-input').value = 'Hi Alice! 😊';
+                sendMessage('bob');
+            }, 4000);
+        }
+
+        function clearAllChats() {
+            document.getElementById('alice-chat').innerHTML = '';
+            document.getElementById('bob-chat').innerHTML = '';
+        }
+
+        ['alice', 'bob'].forEach(userKey => {
+            document.getElementById(`${userKey}-input`).addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); sendMessage(userKey); }
+            });
+        });
+
+        console.log('🚀 Fresh Chat Demo Ready!', users);
+    </script>
+</body>
+</html>

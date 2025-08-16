@@ -1,0 +1,33 @@
+import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
+import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from 'typeorm'
+import { User } from '../../user/entities/user.entity'
+import { Room } from './room.entity'
+
+@Entity('room_seats')
+@Unique(['roomId', 'seatIndex']) // Ensure unique seat per room
+@Index(['roomId', 'seatIndex']) // Index for efficient seat queries
+export class RoomSeat extends CustomBaseEntity {
+    @Column({ type: 'uuid' })
+    roomId: string
+
+    @Column({ type: 'int' })
+    seatIndex: number // 0-based index (0 to maxSeats - 1)
+
+    @Column({ default: false })
+    isLocked: boolean
+
+    @Column({ type: 'uuid', nullable: true })
+    lockedBy: string // Who locked this seat (only host/owner can lock)
+
+    @Column({ type: 'timestamp', nullable: true })
+    lockedAt: Date
+
+    // Relations
+    @ManyToOne(() => Room)
+    @JoinColumn({ name: 'roomId', referencedColumnName: 'uuid' })
+    room: Room
+
+    @ManyToOne(() => User, { nullable: true })
+    @JoinColumn({ name: 'lockedBy', referencedColumnName: 'uuid' })
+    lockedByUser: User
+}

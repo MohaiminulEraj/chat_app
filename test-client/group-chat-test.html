@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Group Chat WebSocket Test</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .form-group {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            label {
+                font-weight: bold;
+            }
+            input,
+            textarea,
+            button {
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            button {
+                background-color: #007bff;
+                color: white;
+                cursor: pointer;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            button:disabled {
+                background-color: #ccc;
+                cursor: not-allowed;
+            }
+            .messages {
+                height: 400px;
+                border: 1px solid #ddd;
+                padding: 10px;
+                overflow-y: auto;
+                background-color: #f9f9f9;
+            }
+            .message {
+                margin-bottom: 10px;
+                padding: 8px;
+                border-radius: 4px;
+                background-color: white;
+            }
+            .message.system {
+                background-color: #e3f2fd;
+            }
+            .message.error {
+                background-color: #ffebee;
+            }
+            .status {
+                padding: 10px;
+                border-radius: 4px;
+                margin-bottom: 10px;
+            }
+            .status.connected {
+                background-color: #e8f5e8;
+                color: #2e7d32;
+            }
+            .status.disconnected {
+                background-color: #ffebee;
+                color: #c62828;
+            }
+            .status.connecting {
+                background-color: #fff3e0;
+                color: #ef6c00;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Group Chat WebSocket Test</h1>
+
+            <div id="status" class="status disconnected">Disconnected</div>
+
+            <div class="form-group">
+                <label for="serverUrl">Server URL:</label>
+                <input
+                    type="text"
+                    id="serverUrl"
+                    value="http://localhost:3001"
+                    placeholder="http://localhost:3001"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="jwtToken">JWT Token:</label>
+                <input
+                    type="text"
+                    id="jwtToken"
+                    placeholder="Get token from login API call"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="groupUuid">Group UUID:</label>
+                <input
+                    type="text"
+                    id="groupUuid"
+                    placeholder="UUID of the group to join"
+                />
+            </div>
+
+            <div>
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>
+                    Disconnect
+                </button>
+                <button id="joinGroupBtn" onclick="joinGroup()" disabled>
+                    Join Group
+                </button>
+            </div>
+
+            <div class="messages" id="messages"></div>
+
+            <div style="display: flex; gap: 10px">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Type a message..."
+                    style="flex: 1"
+                    onkeypress="handleKeyPress(event)"
+                />
+                <button id="sendBtn" onclick="sendMessage()" disabled>
+                    Send
+                </button>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 10px">
+                <button onclick="getMessageHistory()" disabled id="historyBtn">
+                    Get History
+                </button>
+                <button onclick="startTyping()" disabled id="typingBtn">
+                    Start Typing
+                </button>
+                <button onclick="stopTyping()" disabled id="stopTypingBtn">
+                    Stop Typing
+                </button>
+            </div>
+        </div>
+
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+        <script>
+            let socket = null
+            let currentGroupUuid = null
+
+            function updateStatus(status, message) {
+                const statusEl = document.getElementById('status')
+                statusEl.className = `status ${status}`
+                statusEl.textContent = message
+            }
+
+            function addMessage(sender, content, type = 'normal') {
+                const messagesEl = document.getElementById('messages')
+                const messageEl = document.createElement('div')
+                messageEl.className = `message ${type}`
+                messageEl.innerHTML = `<strong>${sender}:</strong> ${content} <small>(${new Date().toLocaleTimeString()})</small>`
+                messagesEl.appendChild(messageEl)
+                messagesEl.scrollTop = messagesEl.scrollHeight
+            }
+
+            function connect() {
+                const serverUrl = document.getElementById('serverUrl').value
+                const jwtToken = document.getElementById('jwtToken').value
+
+                if (!serverUrl || !jwtToken) {
+                    alert('Please provide server URL and JWT token')
+                    return
+                }
+
+                updateStatus('connecting', 'Connecting...')
+
+                try {
+                    socket = io(serverUrl + '/group-chat')
+
+                    socket.on('connect', () => {
+                        addMessage(
+                            'System',
+                            'Connected to WebSocket server',
+                            'system'
+                        )
+                        updateStatus(
+                            'connected',
+                            'Connected - Authenticating...'
+                        )
+
+                        // Authenticate
+                        socket.emit('authenticate', { token: jwtToken })
+                    })
+
+                    socket.on('authenticated', (data) => {
+                        addMessage(
+                            'System',
+                            `Authenticated successfully: ${data.message}`,
+                            'system'
+                        )
+                        updateStatus('connected', 'Connected & Authenticated')
+
+                        // Enable buttons
+                        document.getElementById('connectBtn').disabled = true
+                        document.getElementById('disconnectBtn').disabled =
+                            false
+                        document.getElementById('joinGroupBtn').disabled = false
+                    })
+
+                    socket.on('groupJoined', (data) => {
+                        addMessage(
+                            'System',
+                            `Joined group: ${data.message}`,
+                            'system'
+                        )
+                        currentGroupUuid = data.groupUuid
+
+                        // Enable chat buttons
+                        document.getElementById('sendBtn').disabled = false
+                        document.getElementById('historyBtn').disabled = false
+                        document.getElementById('typingBtn').disabled = false
+                        document.getElementById('stopTypingBtn').disabled =
+                            false
+                    })
+
+                    socket.on('newMessage', (data) => {
+                        addMessage(data.senderName || 'Unknown', data.content)
+                    })
+
+                    socket.on('messageHistory', (data) => {
+                        addMessage(
+                            'System',
+                            `Loaded ${data.messages.length} messages from history`,
+                            'system'
+                        )
+                        data.messages.reverse().forEach((msg) => {
+                            addMessage(msg.senderName || 'Unknown', msg.content)
+                        })
+                    })
+
+                    socket.on('messageEdited', (data) => {
+                        addMessage(
+                            'System',
+                            `Message edited: ${data.content}`,
+                            'system'
+                        )
+                    })
+
+                    socket.on('messageDeleted', (data) => {
+                        addMessage(
+                            'System',
+                            `Message deleted: ${data.messageId}`,
+                            'system'
+                        )
+                    })
+
+                    socket.on('userTyping', (data) => {
+                        if (data.isTyping) {
+                            addMessage(
+                                'System',
+                                `${data.userName} is typing...`,
+                                'system'
+                            )
+                        } else {
+                            addMessage(
+                                'System',
+                                `${data.userName} stopped typing`,
+                                'system'
+                            )
+                        }
+                    })
+
+                    socket.on('error', (error) => {
+                        addMessage('Error', error.message || error, 'error')
+                        console.error('Socket error:', error)
+                    })
+
+                    socket.on('disconnect', () => {
+                        addMessage(
+                            'System',
+                            'Disconnected from server',
+                            'system'
+                        )
+                        updateStatus('disconnected', 'Disconnected')
+                        resetButtons()
+                    })
+                } catch (error) {
+                    addMessage(
+                        'Error',
+                        'Failed to connect: ' + error.message,
+                        'error'
+                    )
+                    updateStatus('disconnected', 'Connection failed')
+                }
+            }
+
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                }
+                resetButtons()
+            }
+
+            function resetButtons() {
+                document.getElementById('connectBtn').disabled = false
+                document.getElementById('disconnectBtn').disabled = true
+                document.getElementById('joinGroupBtn').disabled = true
+                document.getElementById('sendBtn').disabled = true
+                document.getElementById('historyBtn').disabled = true
+                document.getElementById('typingBtn').disabled = true
+                document.getElementById('stopTypingBtn').disabled = true
+            }
+
+            function joinGroup() {
+                const groupUuid = document.getElementById('groupUuid').value
+
+                if (!groupUuid || !socket) {
+                    alert(
+                        'Please provide group UUID and ensure connection is established'
+                    )
+                    return
+                }
+
+                socket.emit('joinGroup', { groupUuid: groupUuid })
+            }
+
+            function sendMessage() {
+                const messageInput = document.getElementById('messageInput')
+                const content = messageInput.value.trim()
+                const groupUuid = document.getElementById('groupUuid').value
+
+                if (!content || !groupUuid || !socket) {
+                    return
+                }
+
+                socket.emit('sendMessage', {
+                    groupUuid: groupUuid,
+                    content: content,
+                    messageType: 'text'
+                })
+
+                messageInput.value = ''
+            }
+
+            function getMessageHistory() {
+                const groupUuid = document.getElementById('groupUuid').value
+
+                if (!groupUuid || !socket) {
+                    return
+                }
+
+                socket.emit('getMessageHistory', {
+                    groupUuid: groupUuid,
+                    page: 1,
+                    limit: 20
+                })
+            }
+
+            function startTyping() {
+                const groupUuid = document.getElementById('groupUuid').value
+
+                if (!groupUuid || !socket) {
+                    return
+                }
+
+                socket.emit('typing', {
+                    groupUuid: groupUuid,
+                    isTyping: true
+                })
+            }
+
+            function stopTyping() {
+                const groupUuid = document.getElementById('groupUuid').value
+
+                if (!groupUuid || !socket) {
+                    return
+                }
+
+                socket.emit('typing', {
+                    groupUuid: groupUuid,
+                    isTyping: false
+                })
+            }
+
+            function handleKeyPress(event) {
+                if (event.key === 'Enter') {
+                    sendMessage()
+                }
+            }
+
+            // Initialize
+            addMessage(
+                'System',
+                'Ready to connect. Please provide JWT token and group UUID.',
+                'system'
+            )
+        </script>
+    </body>
+</html>

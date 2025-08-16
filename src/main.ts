@@ -2,17 +2,31 @@ import {
     HttpStatus,
     UnprocessableEntityException,
     ValidationPipe,
-    VersioningType
+    VersioningType,
+    Logger
 } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { IoAdapter } from '@nestjs/platform-socket.io'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module'
 import { PerformanceInterceptor } from './common/interceptors/performance.interceptor'
+import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor'
 
 async function bootstrap() {
+    const logger = new Logger('Bootstrap')
     const app = await NestFactory.create(AppModule, {
         logger: ['error', 'warn', 'log', 'debug', 'verbose']
+    })
+
+    // Set global prefix
+    app.setGlobalPrefix('api/v1')
+
+    // Enable CORS
+    app.enableCors({
+        origin: true,
+        credentials: true,
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+        allowedHeaders: ['Content-Type', 'Accept', 'Authorization']
     })
 
     // Global validation pipe
@@ -43,7 +57,17 @@ async function bootstrap() {
         .setDescription('Kitty API description')
         .setVersion('1.0')
         .addServer('/')
-        .addBearerAuth()
+        .addBearerAuth(
+            {
+                type: 'http',
+                scheme: 'bearer',
+                bearerFormat: 'JWT',
+                name: 'JWT',
+                description: 'Enter JWT token',
+                in: 'header'
+            }
+            // Remove the custom name to use default, since controllers use @ApiBearerAuth() without parameter
+        )
         .build()
 
     const document = SwaggerModule.createDocument(app, options)
@@ -56,19 +80,12 @@ async function bootstrap() {
         }
     })
 
-    // Enable CORS for all origins
-    app.enableCors({
-        origin: '*',
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization']
-    })
-
     // Configure WebSocket adapter with proper CORS settings
     app.useWebSocketAdapter(new IoAdapter(app))
 
     // Add global interceptors
     app.useGlobalInterceptors(new PerformanceInterceptor())
+    app.useGlobalInterceptors(new HttpLoggingInterceptor())
 
     const port = process.env.PORT || 3000
 
@@ -81,7 +98,8 @@ async function bootstrap() {
         process.send('ready')
     }
 
-    console.log(`Application is running on: http://localhost:${port}`)
+    logger.log(`🚀 Application is running on: http://localhost:${port}/api/v1`)
+    logger.log(`📚 Swagger docs available at: http://localhost:${port}/api`)
     console.log(`Process ID: ${process.pid}`)
     console.log(`WebSocket endpoints available at: ws://localhost:${port}`)
 

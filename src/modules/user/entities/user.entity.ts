@@ -6,6 +6,7 @@ import { Column, Entity, Index, OneToMany } from 'typeorm'
 import { LoginLog } from '../../auth/entities/login-log.entity'
 import { Friendship } from '../../friendship/entities/friendship.entity'
 import { Gift } from '../../gift/entities/gift.entity'
+import { AchievementItem } from '../interfaces/achievement.interface'
 
 @Entity('users')
 export class User extends CustomBaseEntity {
@@ -21,6 +22,9 @@ export class User extends CustomBaseEntity {
 
     @Column({ nullable: true })
     avatarUrl: string
+
+    @Column({ nullable: true })
+    coverImage: string
 
     @Column({ nullable: true })
     bio: string
@@ -65,6 +69,34 @@ export class User extends CustomBaseEntity {
 
     @Column({ default: 'user' })
     userType: string
+
+    // Achievement system fields
+    @Column({ nullable: true })
+    country: string
+
+    @Column({ type: 'int', default: 0 })
+    level: number
+
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+    balance: number
+
+    @Column({ nullable: true })
+    frameId: string
+
+    @Column({ nullable: true })
+    frameImage: string
+
+    @Column({ type: 'jsonb', nullable: true })
+    badge: string[]
+
+    @Column({ type: 'jsonb', nullable: true })
+    purchasedGifts: AchievementItem[]
+
+    @Column({ type: 'jsonb', nullable: true })
+    entryEffects: AchievementItem[]
+
+    @Column({ type: 'jsonb', nullable: true })
+    frames: AchievementItem[]
 
     @Column({ type: 'jsonb', nullable: true })
     settings: {

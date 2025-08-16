@@ -47,6 +47,26 @@ import { GroupService } from './group.service'
 export class GroupController {
     constructor(private readonly groupService: GroupService) {}
 
+    @Get('test-auth')
+    @ApiOperation({
+        summary: 'Test authentication',
+        description: 'Test endpoint to verify JWT authentication is working'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Authentication is working'
+    })
+    testAuth(@Request() req) {
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Authentication is working',
+            data: {
+                user: req.user,
+                timestamp: new Date().toISOString()
+            }
+        }
+    }
+
     @Post()
     @ApiOperation({
         summary: 'Create a new group',
@@ -62,6 +82,14 @@ export class GroupController {
                 description: {
                     type: 'string',
                     example: 'A group for discussing study materials'
+                },
+                tag: {
+                    type: 'string',
+                    example: 'education'
+                },
+                country: {
+                    type: 'string',
+                    example: 'United States'
                 },
                 isPublic: { type: 'boolean', example: false },
                 memberIds: {
@@ -162,6 +190,51 @@ export class GroupController {
         return {
             statusCode: HttpStatus.OK,
             message: 'Groups fetched successfully',
+            data
+        }
+    }
+
+    @Get(':id')
+    @ApiOperation({
+        summary: 'Get group details',
+        description:
+            'Get detailed information about a specific group including members, roles, settings, and rooms'
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Group UUID',
+        type: 'string'
+    })
+    @ApiQuery({
+        name: 'includeRelations',
+        description:
+            'Whether to include related data (members, roles, settings, rooms)',
+        required: false,
+        type: 'boolean'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Group details retrieved successfully',
+        type: Group
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Group not found'
+    })
+    async getGroupDetails(
+        @Param('id') groupId: string,
+        @Query('includeRelations') includeRelations: string = 'true'
+    ) {
+        const includeRel = includeRelations === 'true'
+        const data = await this.groupService.getGroupById(groupId, includeRel)
+
+        if (!data) {
+            throw new BadRequestException('Group not found')
+        }
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Group details retrieved successfully',
             data
         }
     }

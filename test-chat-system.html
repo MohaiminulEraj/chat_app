@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Chat System Test</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            .container {
+                display: flex;
+                gap: 20px;
+            }
+            .chat-section {
+                flex: 1;
+                border: 1px solid #ccc;
+                padding: 15px;
+                border-radius: 5px;
+            }
+            .messages {
+                height: 300px;
+                overflow-y: auto;
+                border: 1px solid #eee;
+                padding: 10px;
+                margin: 10px 0;
+            }
+            .message {
+                margin: 5px 0;
+                padding: 5px;
+                background: #f5f5f5;
+                border-radius: 3px;
+            }
+            .input-group {
+                margin: 5px 0;
+            }
+            input,
+            button {
+                padding: 8px;
+                margin: 2px;
+            }
+            .status {
+                font-weight: bold;
+                color: #666;
+            }
+            .error {
+                color: red;
+            }
+            .success {
+                color: green;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Kitty Backend Chat System Test</h1>
+
+        <div class="container">
+            <!-- Direct Chat Section -->
+            <div class="chat-section">
+                <h2>Direct Chat (1-to-1)</h2>
+                <div class="status" id="directStatus">Disconnected</div>
+
+                <div class="input-group">
+                    <input
+                        type="text"
+                        id="directToken"
+                        placeholder="JWT Token"
+                        style="width: 100%"
+                    />
+                </div>
+                <div class="input-group">
+                    <button onclick="connectDirect()">
+                        Connect to Direct Chat
+                    </button>
+                    <button onclick="disconnectDirect()">Disconnect</button>
+                </div>
+
+                <div class="input-group">
+                    <input
+                        type="text"
+                        id="recipientId"
+                        placeholder="Recipient User ID"
+                    />
+                    <input
+                        type="text"
+                        id="directMessage"
+                        placeholder="Message"
+                    />
+                    <button onclick="sendDirectMessage()">
+                        Send Direct Message
+                    </button>
+                </div>
+
+                <div class="messages" id="directMessages"></div>
+            </div>
+
+            <!-- Group Chat Section -->
+            <div class="chat-section">
+                <h2>Group Chat</h2>
+                <div class="status" id="groupStatus">Disconnected</div>
+
+                <div class="input-group">
+                    <input
+                        type="text"
+                        id="groupToken"
+                        placeholder="JWT Token"
+                        style="width: 100%"
+                    />
+                </div>
+                <div class="input-group">
+                    <button onclick="connectGroup()">
+                        Connect to Group Chat
+                    </button>
+                    <button onclick="disconnectGroup()">Disconnect</button>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="groupId" placeholder="Group ID" />
+                    <button onclick="joinGroup()">Join Group</button>
+                    <button onclick="leaveGroup()">Leave Group</button>
+                </div>
+
+                <div class="input-group">
+                    <input
+                        type="text"
+                        id="groupMessage"
+                        placeholder="Message"
+                    />
+                    <button onclick="sendGroupMessage()">
+                        Send Group Message
+                    </button>
+                </div>
+
+                <div class="messages" id="groupMessages"></div>
+            </div>
+        </div>
+
+        <script>
+            let directSocket = null
+            let groupSocket = null
+            const SERVER_URL = 'http://localhost:3000' // Change this to your server URL
+
+            // Direct Chat Functions
+            function connectDirect() {
+                const token = document.getElementById('directToken').value
+                if (!token) {
+                    alert('Please enter a JWT token')
+                    return
+                }
+
+                directSocket = io(`${SERVER_URL}/chat`, {
+                    transports: ['websocket', 'polling']
+                })
+
+                directSocket.on('connect', () => {
+                    updateDirectStatus('Connected', 'success')
+                    addDirectMessage('System: Connected to direct chat server')
+
+                    // Authenticate
+                    directSocket.emit('authenticate', { token })
+                })
+
+                directSocket.on('disconnect', () => {
+                    updateDirectStatus('Disconnected', 'error')
+                    addDirectMessage(
+                        'System: Disconnected from direct chat server'
+                    )
+                })
+
+                directSocket.on('authenticated', (data) => {
+                    addDirectMessage(
+                        `System: Authenticated - ${JSON.stringify(data)}`
+                    )
+                })
+
+                directSocket.on('newDirectMessage', (data) => {
+                    addDirectMessage(
+                        `${data.sender.name}: ${data.message.content}`
+                    )
+                })
+
+                directSocket.on('error', (error) => {
+                    addDirectMessage(
+                        `Error: ${error.message || error}`,
+                        'error'
+                    )
+                })
+            }
+
+            function disconnectDirect() {
+                if (directSocket) {
+                    directSocket.disconnect()
+                    directSocket = null
+                }
+            }
+
+            function sendDirectMessage() {
+                if (!directSocket) {
+                    alert('Not connected to direct chat')
+                    return
+                }
+
+                const recipientId = document.getElementById('recipientId').value
+                const message = document.getElementById('directMessage').value
+
+                if (!recipientId || !message) {
+                    alert('Please enter recipient ID and message')
+                    return
+                }
+
+                directSocket.emit('sendDirectMessage', {
+                    recipientId,
+                    type: 'text',
+                    content: message
+                })
+
+                document.getElementById('directMessage').value = ''
+                addDirectMessage(`You: ${message}`)
+            }
+
+            // Group Chat Functions
+            function connectGroup() {
+                const token = document.getElementById('groupToken').value
+                if (!token) {
+                    alert('Please enter a JWT token')
+                    return
+                }
+
+                groupSocket = io(SERVER_URL, {
+                    transports: ['websocket', 'polling']
+                })
+
+                groupSocket.on('connect', () => {
+                    updateGroupStatus('Connected', 'success')
+                    addGroupMessage('System: Connected to group chat server')
+
+                    // Authenticate
+                    groupSocket.emit('authenticate', { token })
+                })
+
+                groupSocket.on('disconnect', () => {
+                    updateGroupStatus('Disconnected', 'error')
+                    addGroupMessage(
+                        'System: Disconnected from group chat server'
+                    )
+                })
+
+                groupSocket.on('authenticated', (data) => {
+                    addGroupMessage(
+                        `System: Authenticated - ${JSON.stringify(data)}`
+                    )
+                })
+
+                groupSocket.on('GroupMessageReceived', (data) => {
+                    addGroupMessage(`${data.senderName}: ${data.content}`)
+                })
+
+                groupSocket.on('userJoinedGroup', (data) => {
+                    addGroupMessage(`System: ${data.userName} joined the group`)
+                })
+
+                groupSocket.on('userLeftGroup', (data) => {
+                    addGroupMessage(`System: ${data.userName} left the group`)
+                })
+
+                groupSocket.on('error', (error) => {
+                    addGroupMessage(`Error: ${error.message || error}`, 'error')
+                })
+            }
+
+            function disconnectGroup() {
+                if (groupSocket) {
+                    groupSocket.disconnect()
+                    groupSocket = null
+                }
+            }
+
+            function joinGroup() {
+                if (!groupSocket) {
+                    alert('Not connected to group chat')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                groupSocket.emit('joinGroup', { groupId })
+                addGroupMessage(`System: Attempting to join group ${groupId}`)
+            }
+
+            function leaveGroup() {
+                if (!groupSocket) {
+                    alert('Not connected to group chat')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                if (!groupId) {
+                    alert('Please enter group ID')
+                    return
+                }
+
+                groupSocket.emit('leaveGroup', { groupId })
+                addGroupMessage(`System: Left group ${groupId}`)
+            }
+
+            function sendGroupMessage() {
+                if (!groupSocket) {
+                    alert('Not connected to group chat')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                const message = document.getElementById('groupMessage').value
+
+                if (!groupId || !message) {
+                    alert('Please enter group ID and message')
+                    return
+                }
+
+                groupSocket.emit('sendGroupMessage', {
+                    groupId,
+                    type: 'text',
+                    content: message
+                })
+
+                document.getElementById('groupMessage').value = ''
+                addGroupMessage(`You: ${message}`)
+            }
+
+            // Helper Functions
+            function updateDirectStatus(status, className) {
+                const statusEl = document.getElementById('directStatus')
+                statusEl.textContent = status
+                statusEl.className = `status ${className}`
+            }
+
+            function updateGroupStatus(status, className) {
+                const statusEl = document.getElementById('groupStatus')
+                statusEl.textContent = status
+                statusEl.className = `status ${className}`
+            }
+
+            function addDirectMessage(message, className = '') {
+                const messagesEl = document.getElementById('directMessages')
+                const messageEl = document.createElement('div')
+                messageEl.className = `message ${className}`
+                messageEl.textContent = `[${new Date().toLocaleTimeString()}] ${message}`
+                messagesEl.appendChild(messageEl)
+                messagesEl.scrollTop = messagesEl.scrollHeight
+            }
+
+            function addGroupMessage(message, className = '') {
+                const messagesEl = document.getElementById('groupMessages')
+                const messageEl = document.createElement('div')
+                messageEl.className = `message ${className}`
+                messageEl.textContent = `[${new Date().toLocaleTimeString()}] ${message}`
+                messagesEl.appendChild(messageEl)
+                messagesEl.scrollTop = messagesEl.scrollHeight
+            }
+        </script>
+    </body>
+</html>

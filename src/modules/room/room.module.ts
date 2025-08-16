@@ -1,12 +1,20 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule
+import { CloudinaryModule } from '../cloudinary/cloudinary.module' // Import CloudinaryModule
+import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift functionality
 import { GroupMember } from '../group/entities/group-member.entity'
+import { Group } from '../group/entities/group.entity'
+import { User } from '../user/entities/user.entity'
+import { RoomBlockedUser } from './entities/room-blocked-user.entity'
+import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
+import { RoomRoleAssignment } from './entities/room-role.entity'
+import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 import { RoomController } from './room.controller'
-import { RoomGateway } from './room.gateway'
+import { RoomGateway } from './room.gateway' // Main gateway now uses root namespace
 import { RoomService } from './room.service'
 
 @Module({
@@ -15,12 +23,23 @@ import { RoomService } from './room.service'
             Room,
             RoomParticipant,
             RoomWaitingList,
-            GroupMember
+            RoomRoleAssignment,
+            RoomSeat,
+            RoomComment,
+            RoomBlockedUser,
+            GroupMember,
+            Group,
+            User
         ]),
-        AuthModule // Add AuthModule to provide JwtService for WsJwtGuard
+        AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
+        CloudinaryModule, // Add CloudinaryModule for image upload functionality
+        GiftModule // Add GiftModule for gift functionality
     ],
     controllers: [RoomController],
-    providers: [RoomService, RoomGateway],
+    providers: [
+        RoomService,
+        RoomGateway // Main gateway now uses root namespace
+    ],
     exports: [RoomService]
 })
 export class RoomModule {}

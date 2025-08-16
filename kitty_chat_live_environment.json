@@ -1,0 +1,69 @@
+{
+    "id": "kitty-chat-live-environment",
+    "name": "Kitty Chat Live Server Environment",
+    "values": [
+        {
+            "key": "base_url",
+            "value": "http://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "websocket_url",
+            "value": "ws://103.190.136.200:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "jwt_token",
+            "value": "",
+            "type": "secret",
+            "enabled": true,
+            "description": "Generate this by using Login request"
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_name",
+            "value": "Live Test User",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_email",
+            "value": "livetest@example.com",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_phone",
+            "value": "01891234570",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "user_password",
+            "value": "password123",
+            "type": "secret",
+            "enabled": true
+        },
+        {
+            "key": "recipient_uuid",
+            "value": "",
+            "type": "default",
+            "enabled": true,
+            "description": "UUID of the user to send messages to (set after registration/login)"
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}
