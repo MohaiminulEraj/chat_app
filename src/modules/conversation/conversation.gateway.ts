@@ -182,26 +182,24 @@ export class ConversationGateway
                 replyTo: data.replyTo
             })
 
-            // Create enhanced message with sender profile
+            // Create enhanced message with sender profile in specified format
+            const messageObj = message.toObject()
             const enhancedMessage = {
-                ...message.toObject(),
+                _id: messageObj._id,
+                group: conversation.uuid,
                 sender: {
-                    id: senderId,
-                    uuid: senderId,
+                    _id: senderId,
                     name:
                         senderProfile.displayName ||
                         senderProfile.name ||
                         'Unknown User',
-                    displayName:
-                        senderProfile.displayName || senderProfile.name,
-                    email: senderProfile.email,
-                    avatarUrl: senderProfile.avatarUrl,
-                    country: senderProfile.country,
-                    level: senderProfile.level || 0,
-                    badge: senderProfile.badge || [],
-                    frameId: senderProfile.frameId,
-                    frameImage: senderProfile.frameImage
-                }
+                    role: 'member' // Default role, can be enhanced based on conversation permissions
+                },
+                content: messageObj.content || '',
+                avatar: senderProfile.avatarUrl || '',
+                createdAt: messageObj.createdAt,
+                updatedAt: messageObj.updatedAt,
+                __v: messageObj.__v || 0
             }
 
             // Ensure all participants are in the conversation room
@@ -259,13 +257,8 @@ export class ConversationGateway
 
             // TODO: Send push notifications to offline users
 
-            // Return success response with enhanced message including sender profile
-            return {
-                success: true,
-                message: enhancedMessage,
-                conversation: conversation.uuid,
-                timestamp: new Date().toISOString()
-            }
+            // Return success response with enhanced message in the new format
+            return enhancedMessage
         } catch (error) {
             return { success: false, error: error.message }
         }
