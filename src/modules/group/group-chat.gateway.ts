@@ -199,9 +199,22 @@ export class GroupChatGateway
         try {
             const { group: groupId, avatar, sender, content, type } = data
 
+            // Validate required fields
+            if (!groupId || !sender?._id || !content) {
+                client.emit('sendGroupMessageResponse', {
+                    error: 'Missing required fields: group, sender._id, or content',
+                    success: false
+                })
+                return
+            }
+
             // Get sender's information from payload
             const senderId = sender._id
             const senderName = sender.name
+
+            this.logger.log(
+                `Processing message from ${senderId} to group ${groupId}`
+            )
 
             // Get user's actual role from database instead of relying on payload
             const userRole = await this.groupChatService.getUserRole(
@@ -209,6 +222,20 @@ export class GroupChatGateway
                 senderId
             )
             const senderRole = userRole || 'member'
+
+            // Verify user is member of the group
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                senderId,
+                groupId
+            )
+
+            if (!isMember) {
+                client.emit('sendGroupMessageResponse', {
+                    error: 'You are not a member of this group',
+                    success: false
+                })
+                return
+            }
 
             // Save message to MongoDB
             const message = await this.groupChatService.saveGroupMessage({
@@ -237,20 +264,28 @@ export class GroupChatGateway
                 createdAt: messageObj.timestamp || messageObj.createdAt,
                 updatedAt: messageObj.updatedAt || messageObj.timestamp,
                 __v: messageObj.__v || 0,
-                userRole: senderRole // Add user's actual group role
+                userRole: senderRole, // Add user's actual group role
+                success: true
             }
 
-            // Send only one response event
+            // Send response to the sender
             client.emit('sendGroupMessageResponse', response)
 
+            // Broadcast the message to all other members in the group room
+            this.server
+                .to(`group:${groupId}`)
+                .emit('sendGroupMessageResponse', response)
+
             this.logger.log(
-                `Group message sent by ${senderId} (${senderRole}) to group ${groupId}`
+                `Group message sent by ${senderId} (${senderRole}) to group ${groupId} - Message ID: ${messageObj._id}`
             )
         } catch (error) {
             this.logger.error('Error sending group message:', error.message)
+            this.logger.error('Stack trace:', error.stack)
             client.emit('sendGroupMessageResponse', {
                 error: 'Failed to send message',
-                message: error.message
+                message: error.message,
+                success: false
             })
         }
     }
