@@ -275,9 +275,9 @@ export class GroupChatGateway
         @MessageBody()
         data: {
             groupId: string
-            page?: number
-            limit?: number
-            before?: string // messageId to get messages before this
+            // page?: number
+            // limit?: number
+            // before?: string // messageId to get messages before this
         }
     ) {
         if (!client.userUuid) {
@@ -286,7 +286,12 @@ export class GroupChatGateway
         }
 
         try {
-            const { groupId, page = 1, limit = 50, before } = data
+            const {
+                groupId
+                // page = 1,
+                // limit = 50,
+                // before
+            } = data
 
             // Verify user is a member of the group
             const isMember = await this.groupChatService.verifyGroupMembership(
@@ -300,18 +305,18 @@ export class GroupChatGateway
             }
 
             const messages = await this.groupChatService.getGroupMessageHistory(
-                groupId,
-                page,
-                limit,
-                before
+                groupId
+                // page,
+                // limit,
+                // before
             )
 
             client.emit('groupMessageHistory', {
                 groupId,
-                messages,
-                page,
-                limit,
-                hasMore: messages.length === limit
+                messages
+                // page,
+                // limit,
+                // hasMore: messages.length === limit
             })
         } catch (error) {
             this.logger.error('Error getting message history:', error.message)
