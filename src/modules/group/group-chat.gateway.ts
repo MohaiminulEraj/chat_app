@@ -33,10 +33,6 @@ export class GroupChatGateway
     server: Server
 
     private logger = new Logger('GroupChatGateway')
-    private connectedUsers = new Map<
-        string,
-        { userId: string; userName: string; groups: Set<string> }
-    >()
 
     constructor(private readonly groupChatService: GroupChatService) {}
 
@@ -44,13 +40,6 @@ export class GroupChatGateway
         this.logger.log(
             `Client connected to group-chat namespace: ${client.id}`
         )
-
-        // Initialize user connection info
-        this.connectedUsers.set(client.id, {
-            userId: 'pending',
-            userName: 'Unknown',
-            groups: new Set<string>()
-        })
 
         // Send connection acknowledgment
         client.emit('connected', {
@@ -78,13 +67,6 @@ export class GroupChatGateway
                 return
             }
 
-            // Update user info
-            const userInfo = this.connectedUsers.get(client.id)
-            if (userInfo) {
-                userInfo.userId = userId
-                userInfo.userName = userName || userInfo.userName
-            }
-
             client.emit('setupComplete', {
                 success: true,
                 userId,
@@ -103,22 +85,7 @@ export class GroupChatGateway
     }
 
     async handleDisconnect(client: AuthenticatedSocket) {
-        const userInfo = this.connectedUsers.get(client.id)
-        if (userInfo) {
-            // Leave all group rooms
-            userInfo.groups.forEach((groupId) => {
-                client.leave(`group:${groupId}`)
-            })
-
-            this.logger.log(
-                `Client disconnected from group-chat: ${client.id} (${userInfo.userName})`
-            )
-            this.connectedUsers.delete(client.id)
-        } else {
-            this.logger.log(
-                `Unknown client disconnected from group-chat: ${client.id}`
-            )
-        }
+        this.logger.log(`Client disconnected from group-chat: ${client.id}`)
     }
 
     @SubscribeMessage('joinGroup')
@@ -135,26 +102,6 @@ export class GroupChatGateway
                     message: 'Group ID and User ID are required'
                 })
                 return
-            }
-
-            // Verify group membership
-            const isMember = await this.groupChatService.verifyGroupMembership(
-                userId,
-                groupId
-            )
-            if (!isMember) {
-                client.emit('error', {
-                    message: 'User is not a member of this group'
-                })
-                return
-            }
-
-            // Update user info
-            const userInfo = this.connectedUsers.get(client.id)
-            if (userInfo) {
-                userInfo.userId = userId
-                userInfo.userName = userName || userInfo.userName
-                userInfo.groups.add(groupId)
             }
 
             // Join the group room
@@ -188,12 +135,6 @@ export class GroupChatGateway
                     message: 'Group ID and User ID are required'
                 })
                 return
-            }
-
-            // Update user info
-            const userInfo = this.connectedUsers.get(client.id)
-            if (userInfo) {
-                userInfo.groups.delete(groupId)
             }
 
             // Leave the group room
@@ -246,40 +187,14 @@ export class GroupChatGateway
             // Get sender's information from payload
             const senderId = sender._id
             const senderName = sender.name
+            const senderRole = sender.role || 'member'
 
             this.logger.log(
                 `Processing message from ${senderId} (${senderName}) to group ${groupId}`
             )
 
-            // Verify group membership
-            const isMember = await this.groupChatService.verifyGroupMembership(
-                senderId,
-                groupId
-            )
-            if (!isMember) {
-                client.emit('sendGroupMessageResponse', {
-                    error: 'User is not a member of this group',
-                    success: false
-                })
-                return
-            }
-
-            // Auto-join group room if not already joined
-            const userInfo = this.connectedUsers.get(client.id)
-            if (userInfo && !userInfo.groups.has(groupId)) {
-                userInfo.groups.add(groupId)
-                client.join(`group:${groupId}`)
-                this.logger.log(
-                    `Auto-joined user ${senderId} to group room ${groupId}`
-                )
-            }
-
-            // Get user's actual role from database instead of relying on payload
-            const userRole = await this.groupChatService.getUserRole(
-                groupId,
-                senderId
-            )
-            const senderRole = userRole || 'member'
+            // Auto-join the group room if not already joined
+            client.join(`group:${groupId}`)
 
             // Save message to PostgreSQL
             const message = await this.groupChatService.saveGroupMessage({
@@ -310,21 +225,16 @@ export class GroupChatGateway
                 ).toISOString(),
                 __v: 0,
                 type: type || 'text',
-                userRole: senderRole, // Add user's actual group role
                 success: true
             }
 
-            // Broadcast the message to ALL members in the group room (including sender)
-            // This ensures the sender also gets the confirmed message with the database ID
+            // Broadcast the message to all clients in the group room
             this.server
                 .to(`group:${groupId}`)
                 .emit('sendGroupMessageResponse', response)
 
-            // Also send directly to sender to ensure they get it even if room join failed
-            client.emit('sendGroupMessageResponse', response)
-
             this.logger.log(
-                `Group message sent by ${senderId} (${senderRole}) to group ${groupId} - Message ID: ${message.id}`
+                `Group message sent by ${senderId} to group ${groupId} - Message ID: ${message.id}`
             )
 
             return response

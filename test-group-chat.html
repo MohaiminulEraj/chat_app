@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Group Chat Test</title>
+        <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Group Chat WebSocket Test</h1>
+        <div id="messages"></div>
+        <input type="text" id="messageInput" placeholder="Type a message..." />
+        <button onclick="sendMessage()">Send Message</button>
+        <button onclick="connectToGroupChat()">Connect to Group Chat</button>
+        <button onclick="joinRoom()">Join Room</button>
+
+        <script>
+            let socket
+            let isConnected = false
+
+            function log(message) {
+                const div = document.getElementById('messages')
+                div.innerHTML +=
+                    '<p>' +
+                    new Date().toLocaleTimeString() +
+                    ': ' +
+                    message +
+                    '</p>'
+                div.scrollTop = div.scrollHeight
+            }
+
+            function connectToGroupChat() {
+                socket = io('http://localhost:3000/group-chat', {
+                    transports: ['websocket', 'polling'],
+                    cors: {
+                        origin: '*',
+                        methods: ['GET', 'POST']
+                    }
+                })
+
+                socket.on('connect', () => {
+                    log(
+                        'Connected to group-chat namespace. Socket ID: ' +
+                            socket.id
+                    )
+                    isConnected = true
+                })
+
+                socket.on('connected', (data) => {
+                    log('Received connected event: ' + JSON.stringify(data))
+                })
+
+                socket.on('sendGroupMessageResponse', (data) => {
+                    log(
+                        'Received sendGroupMessageResponse: ' +
+                            JSON.stringify(data, null, 2)
+                    )
+                })
+
+                socket.on('error', (error) => {
+                    log('Error: ' + JSON.stringify(error))
+                })
+
+                socket.on('disconnect', () => {
+                    log('Disconnected from group-chat namespace')
+                    isConnected = false
+                })
+            }
+
+            function joinRoom() {
+                if (!isConnected) {
+                    log('Not connected to group chat namespace')
+                    return
+                }
+
+                // Join group room directly using joinGroup event
+                socket.emit('joinGroup', {
+                    groupId: 'test-group-123',
+                    userId: 'test-user-456',
+                    userName: 'Test User'
+                })
+
+                socket.on('joinGroupResponse', (data) => {
+                    log('Join group response: ' + JSON.stringify(data))
+                })
+            }
+
+            function sendMessage() {
+                if (!isConnected) {
+                    log('Not connected to group chat namespace')
+                    return
+                }
+
+                const input = document.getElementById('messageInput')
+                const message = input.value.trim()
+
+                if (!message) {
+                    log('Please enter a message')
+                    return
+                }
+
+                // Send message in Flutter format
+                const messageData = {
+                    group: 'test-group-123',
+                    avatar: null,
+                    sender: {
+                        _id: 'test-user-456',
+                        name: 'Test User',
+                        role: 'member'
+                    },
+                    content: message,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: null,
+                    __v: 0,
+                    type: 'text'
+                }
+
+                log('Sending message: ' + JSON.stringify(messageData, null, 2))
+                socket.emit('sendGroupMessage', messageData)
+
+                input.value = ''
+            }
+
+            // Allow sending message with Enter key
+            document
+                .getElementById('messageInput')
+                .addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        sendMessage()
+                    }
+                })
+        </script>
+    </body>
+</html>
