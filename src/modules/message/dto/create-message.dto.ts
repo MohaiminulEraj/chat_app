@@ -1,5 +1,5 @@
 import { IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator'
-import { MessageType } from '../schemas/message.schema'
+import { MessageType } from '../entities/message.entity'
 
 export class CreateMessageDto {
     @IsUUID()

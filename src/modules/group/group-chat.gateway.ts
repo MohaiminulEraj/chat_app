@@ -88,7 +88,7 @@ export class GroupChatGateway
             )
             const senderRole = userRole || 'member'
 
-            // Save message to MongoDB
+            // Save message to PostgreSQL
             const message = await this.groupChatService.saveGroupMessage({
                 senderId: senderId,
                 senderName: senderName,
@@ -101,9 +101,8 @@ export class GroupChatGateway
             })
 
             // Create response in the specified format
-            const messageObj = message.toObject()
             const response = {
-                _id: messageObj._id,
+                _id: message.id,
                 group: groupId,
                 sender: {
                     _id: senderId,
@@ -112,9 +111,9 @@ export class GroupChatGateway
                 },
                 content: content,
                 avatar: avatar || '',
-                createdAt: messageObj.timestamp || messageObj.createdAt,
-                updatedAt: messageObj.updatedAt || messageObj.timestamp,
-                __v: messageObj.__v || 0,
+                createdAt: message.timestamp,
+                updatedAt: message.updatedAt || message.timestamp,
+                __v: 0,
                 userRole: senderRole, // Add user's actual group role
                 success: true
             }
@@ -128,7 +127,7 @@ export class GroupChatGateway
                 .emit('sendGroupMessageResponse', response)
 
             this.logger.log(
-                `Group message sent by ${senderId} (${senderRole}) to group ${groupId} - Message ID: ${messageObj._id}`
+                `Group message sent by ${senderId} (${senderRole}) to group ${groupId} - Message ID: ${message.id}`
             )
         } catch (error) {
             this.logger.error('Error sending group message:', error.message)

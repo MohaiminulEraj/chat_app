@@ -3,23 +3,21 @@ import {
     Injectable,
     NotFoundException
 } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Model } from 'mongoose'
 import { Repository } from 'typeorm'
 import { v4 as uuidv4 } from 'uuid'
 import { User } from '../user/entities/user.entity'
 import { UserService } from '../user/user.service'
 import { Conversation, ConversationType } from './entities/conversation.entity'
-import { Message, MessageType } from './schemas/message.schema'
+import { Message, MessageType, MessageStatus } from './entities/message.entity'
 
 @Injectable()
 export class ConversationService {
     constructor(
         @InjectRepository(Conversation)
         private conversationRepository: Repository<Conversation>,
-        @InjectModel(Message.name)
-        private messageModel: Model<Message>,
+        @InjectRepository(Message)
+        private messageRepository: Repository<Message>,
         @InjectRepository(User)
         private userRepository: Repository<User>,
         private userService: UserService
@@ -119,15 +117,15 @@ export class ConversationService {
             )
         }
 
-        // Create message in MongoDB
-        const message = new this.messageModel({
+        // Create message in PostgreSQL
+        const message = this.messageRepository.create({
             ...data,
-            status: 'sent',
+            status: MessageStatus.SENT,
             readBy: [data.senderId], // Sender has read their own message
             deliveredTo: [data.senderId]
         })
 
-        const savedMessage = await message.save()
+        const savedMessage = await this.messageRepository.save(message)
 
         // Update conversation metadata
         await this.conversationRepository.update(conversation.uuid, {
@@ -160,20 +158,23 @@ export class ConversationService {
             )
         }
 
-        const query = this.messageModel
-            .find({
-                conversationId,
-                isDeleted: false
+        const queryBuilder = this.messageRepository
+            .createQueryBuilder('message')
+            .where('message.conversationId = :conversationId', {
+                conversationId
             })
-            .sort({ createdAt: -1 })
+            .andWhere('message.isDeleted = false')
+            .andWhere('NOT (:userId = ANY(message.deletedFor))', { userId })
+            .orderBy('message.createdAt', 'DESC')
             .limit(limit)
 
         if (before) {
-            const beforeTime = new Date(before).getTime()
-            query.where('createdAt').lt(beforeTime)
+            queryBuilder.andWhere('message.createdAt < :beforeTime', {
+                beforeTime: new Date(before)
+            })
         }
 
-        return query.exec()
+        return queryBuilder.getMany()
     }
 
     async markMessagesAsRead(
@@ -193,17 +194,18 @@ export class ConversationService {
             )
         }
 
-        await this.messageModel.updateMany(
-            {
-                _id: { $in: messageIds },
-                conversationId,
-                senderId: { $ne: userId }
-            },
-            {
-                $addToSet: { readBy: userId },
-                $set: { status: 'read' }
-            }
-        )
+        await this.messageRepository
+            .createQueryBuilder()
+            .update(Message)
+            .set({
+                readBy: () => `array_append("readBy", '${userId}')`,
+                status: MessageStatus.READ
+            })
+            .where('id IN (:...messageIds)', { messageIds })
+            .andWhere('conversationId = :conversationId', { conversationId })
+            .andWhere('senderId != :userId', { userId })
+            .andWhere('NOT (:userId = ANY("readBy"))', { userId })
+            .execute()
     }
 
     async deleteMessage(
@@ -211,9 +213,11 @@ export class ConversationService {
         messageId: string,
         userId: string
     ): Promise<void> {
-        const message = await this.messageModel.findOne({
-            _id: messageId,
-            conversationId
+        const message = await this.messageRepository.findOne({
+            where: {
+                id: messageId,
+                conversationId
+            }
         })
 
         if (!message) {
@@ -228,7 +232,7 @@ export class ConversationService {
 
         message.isDeleted = true
         message.deletedAt = new Date()
-        await message.save()
+        await this.messageRepository.save(message)
     }
 
     async editMessage(
@@ -237,9 +241,11 @@ export class ConversationService {
         userId: string,
         newContent: string
     ): Promise<Message> {
-        const message = await this.messageModel.findOne({
-            _id: messageId,
-            conversationId
+        const message = await this.messageRepository.findOne({
+            where: {
+                id: messageId,
+                conversationId
+            }
         })
 
         if (!message) {
@@ -258,7 +264,7 @@ export class ConversationService {
         message.isEdited = true
         message.editedAt = new Date()
 
-        return message.save()
+        return this.messageRepository.save(message)
     }
 
     async updateUserStatus(userId: string, status: string): Promise<void> {

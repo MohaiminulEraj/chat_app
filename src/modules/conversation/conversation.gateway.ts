@@ -12,7 +12,7 @@ import {
 import { Server, Socket } from 'socket.io'
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard'
 import { ConversationService } from './conversation.service'
-import { MessageType } from './schemas/message.schema'
+import { MessageType } from './entities/message.entity'
 
 @WebSocketGateway({
     cors: {
@@ -21,8 +21,7 @@ import { MessageType } from './schemas/message.schema'
         credentials: true
     },
     namespace: 'chat',
-    transports: ['websocket', 'polling'],
-    path: '/socket.io/' // Make sure path is standard
+    transports: ['websocket', 'polling']
 })
 export class ConversationGateway
     implements OnGatewayConnection, OnGatewayDisconnect
@@ -172,7 +171,7 @@ export class ConversationGateway
             const senderProfile =
                 await this.conversationService.getUserProfile(senderId)
 
-            // Save message to MongoDB
+            // Save message to PostgreSQL
             const message = await this.conversationService.createMessage({
                 conversationId: conversation.uuid,
                 senderId,
@@ -183,9 +182,8 @@ export class ConversationGateway
             })
 
             // Create enhanced message with sender profile in specified format
-            const messageObj = message.toObject()
             const enhancedMessage = {
-                _id: messageObj._id,
+                _id: message.id,
                 group: conversation.uuid,
                 sender: {
                     _id: senderId,
@@ -195,11 +193,11 @@ export class ConversationGateway
                         'Unknown User',
                     role: 'member' // Default role, can be enhanced based on conversation permissions
                 },
-                content: messageObj.content || '',
+                content: message.content || '',
                 avatar: senderProfile.avatarUrl || '',
-                createdAt: messageObj.createdAt,
-                updatedAt: messageObj.updatedAt,
-                __v: messageObj.__v || 0
+                createdAt: message.createdAt,
+                updatedAt: message.updatedAt,
+                __v: 0
             }
 
             // Ensure all participants are in the conversation room

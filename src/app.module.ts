@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_INTERCEPTOR } from '@nestjs/core'
-import { MongooseModule } from '@nestjs/mongoose'
 import { ScheduleModule } from '@nestjs/schedule'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { TypeOrmModule } from '@nestjs/typeorm'
@@ -78,19 +77,8 @@ import { SocketIOModule } from './modules/socketio/socketio.module'
         // UploadModule,
         RoomModule, // Add RoomModule to imports
         GiftModule, // Add GiftModule to imports
-        ConversationModule,
+        ConversationModule
         // OtpModule // Add OtpModule to imports
-        MongooseModule.forRoot(process.env.MONGO_URI, {
-            connectionFactory: (connection) => {
-                connection.on('connected', () => {
-                    console.log('MongoDB connected successfully')
-                })
-                connection.on('error', (error) => {
-                    console.error('MongoDB connection error:', error)
-                })
-                return connection
-            }
-        })
     ],
     controllers: [AppController],
     providers: [

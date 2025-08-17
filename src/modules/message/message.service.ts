@@ -3,21 +3,19 @@ import {
     Injectable,
     NotFoundException
 } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Model } from 'mongoose'
 import { In, Repository } from 'typeorm'
 import { CreateMessageDto } from './dto/create-message.dto'
 import { Conversation, ConversationType } from './entities/conversation.entity'
-import { Message, MessageDocument } from './schemas/message.schema'
+import { Message } from './entities/message.entity'
 
 @Injectable()
 export class MessageService {
     constructor(
         @InjectRepository(Conversation)
         private conversationRepository: Repository<Conversation>,
-        @InjectModel(Message.name)
-        private messageModel: Model<MessageDocument>
+        @InjectRepository(Message)
+        private messageRepository: Repository<Message>
     ) {}
 
     async createMessage(
@@ -39,13 +37,13 @@ export class MessageService {
             )
         }
 
-        // Create message in MongoDB
-        const message = new this.messageModel({
+        // Create message in PostgreSQL
+        const message = this.messageRepository.create({
             ...createMessageDto,
             senderId: userId
         })
 
-        const savedMessage = await message.save()
+        const savedMessage = await this.messageRepository.save(message)
 
         // Update conversation metadata
         await this.conversationRepository.update(conversation.id, {
@@ -72,23 +70,28 @@ export class MessageService {
             throw new ForbiddenException('Access denied')
         }
 
-        const query: any = {
-            conversationId,
-            deletedFor: { $nin: [userId] }
-        }
+        const queryBuilder = this.messageRepository
+            .createQueryBuilder('message')
+            .where('message.conversationId = :conversationId', {
+                conversationId
+            })
+            .andWhere('NOT (:userId = ANY(message.deletedFor))', { userId })
 
         if (before) {
-            const beforeMessage = await this.messageModel.findById(before)
+            const beforeMessage = await this.messageRepository.findOne({
+                where: { id: before }
+            })
             if (beforeMessage) {
-                query.createdAt = { $lt: beforeMessage.createdAt }
+                queryBuilder.andWhere('message.createdAt < :beforeTime', {
+                    beforeTime: beforeMessage.createdAt
+                })
             }
         }
 
-        return this.messageModel
-            .find(query)
-            .sort({ createdAt: -1 })
+        return queryBuilder
+            .orderBy('message.createdAt', 'DESC')
             .limit(limit)
-            .exec()
+            .getMany()
     }
 
     async createConversation(
@@ -134,22 +137,24 @@ export class MessageService {
         userId: string,
         messageIds: string[]
     ): Promise<void> {
-        await this.messageModel.updateMany(
-            {
-                _id: { $in: messageIds },
-                readBy: { $nin: [userId] }
-            },
-            {
-                $push: { readBy: userId }
-            }
-        )
+        await this.messageRepository
+            .createQueryBuilder()
+            .update(Message)
+            .set({
+                readBy: () => `array_append("readBy", '${userId}')`
+            })
+            .where('id IN (:...messageIds)', { messageIds })
+            .andWhere('NOT (:userId = ANY("readBy"))', { userId })
+            .execute()
     }
 
     async deleteMessageForUser(
         messageId: string,
         userId: string
     ): Promise<void> {
-        const message = await this.messageModel.findById(messageId)
+        const message = await this.messageRepository.findOne({
+            where: { id: messageId }
+        })
 
         if (!message) {
             throw new NotFoundException('Message not found')
@@ -164,10 +169,9 @@ export class MessageService {
             throw new ForbiddenException('Access denied')
         }
 
-        await this.messageModel.updateOne(
-            { _id: messageId },
-            { $push: { deletedFor: userId } }
-        )
+        await this.messageRepository.update(messageId, {
+            deletedFor: [...(message.deletedFor || []), userId]
+        })
     }
 
     async editMessage(
@@ -175,7 +179,9 @@ export class MessageService {
         userId: string,
         content: string
     ): Promise<Message> {
-        const message = await this.messageModel.findById(messageId)
+        const message = await this.messageRepository.findOne({
+            where: { id: messageId }
+        })
 
         if (!message) {
             throw new NotFoundException('Message not found')
@@ -189,7 +195,7 @@ export class MessageService {
         message.isEdited = true
         message.editedAt = new Date()
 
-        return message.save()
+        return this.messageRepository.save(message)
     }
 
     async addReaction(
@@ -197,7 +203,9 @@ export class MessageService {
         userId: string,
         emoji: string
     ): Promise<void> {
-        const message = await this.messageModel.findById(messageId)
+        const message = await this.messageRepository.findOne({
+            where: { id: messageId }
+        })
 
         if (!message) {
             throw new NotFoundException('Message not found')
@@ -216,7 +224,7 @@ export class MessageService {
         // Add user if not already reacted
         if (!message.reactions[emoji].includes(userId)) {
             message.reactions[emoji].push(userId)
-            await message.save()
+            await this.messageRepository.save(message)
         }
     }
 
@@ -225,7 +233,9 @@ export class MessageService {
         userId: string,
         emoji: string
     ): Promise<void> {
-        const message = await this.messageModel.findById(messageId)
+        const message = await this.messageRepository.findOne({
+            where: { id: messageId }
+        })
 
         if (!message) {
             throw new NotFoundException('Message not found')
@@ -241,7 +251,7 @@ export class MessageService {
                 delete message.reactions[emoji]
             }
 
-            await message.save()
+            await this.messageRepository.save(message)
         }
     }
 }
