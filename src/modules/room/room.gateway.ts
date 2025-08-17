@@ -1144,147 +1144,49 @@ export class RoomGateway
         data: {
             roomId?: string
             seatIndex: number
-            userId?: string // Allow client to send userId for validation
+            userId?: string
             password?: string
         }
     ) {
-        const requestId = Math.random().toString(36).substr(2, 9) // Generate unique request ID
-
-        // Support both roomId and roomID for client compatibility
         const roomId = data.roomId
 
-        this.logger.log(
-            `🪑 SIT_IN_SEAT request [${requestId}]: Client ${client.id} wants to sit in seat ${data.seatIndex} in room ${roomId}`
-        )
-
-        // Helper function to emit sitInSeatResponse with duplicate prevention
-        const emitSitInSeatResponse = (response: any, responseType: string) => {
-            const requestKey = `${requestId}-${client.id}-${data.seatIndex}-${roomId}`
-
-            // Check for duplicate emissions
-            if (!this.sentSitInSeatResponses.has(requestKey)) {
-                this.sentSitInSeatResponses.set(requestKey, new Set())
-            }
-
-            const clientsForRequest =
-                this.sentSitInSeatResponses.get(requestKey)
-            if (clientsForRequest.has(client.id)) {
-                this.logger.warn(
-                    `⚠️ SIT_IN_SEAT [${requestId}]: Duplicate emission prevented for ${responseType} to client ${client.id}`
-                )
-                return false
-            }
-
-            // Mark this client as having received this response
-            clientsForRequest.add(client.id)
-
-            this.logger.log(
-                `📤 SIT_IN_SEAT [${requestId}]: About to emit sitInSeatResponse (${responseType}) to client ${client.id} | Status: ${response.status}`
-            )
-
-            client.emit('sitInSeatResponse', response)
-
-            this.logger.log(
-                `✅ SIT_IN_SEAT [${requestId}]: Successfully emitted sitInSeatResponse (${responseType}) to client ${client.id} | Response: ${JSON.stringify(response)}`
-            )
-
-            // Clean up old request tracking (prevent memory leaks)
-            if (this.sentSitInSeatResponses.size > 500) {
-                const firstKey = this.sentSitInSeatResponses.keys().next().value
-                this.sentSitInSeatResponses.delete(firstKey)
-            }
-
-            return true
-        }
-
-        if (!roomId) {
-            const errorResponse = {
-                status: 'rejected',
-                user: {
-                    id: '',
-                    name: '',
-                    email: '',
-                    sitIndex: '',
-                    image: ''
-                },
-                message: 'Room ID is required'
-            }
-
-            emitSitInSeatResponse(errorResponse, 'ROOM_ID_ERROR')
-            return errorResponse
-        }
-
-        // Get validated user information with fallback from message data
+        // Get validated user information
         const validatedUser = await this.getUserInfo(client, data.userId)
-
         if (!validatedUser) {
-            const errorResponse = {
+            client.emit('sitInSeatResponse', {
                 status: 'rejected',
-                user: {
-                    id: '',
-                    name: '',
-                    email: '',
-                    sitIndex: '',
-                    image: ''
-                },
-                message: 'User information not available for seat operation'
-            }
-
-            emitSitInSeatResponse(errorResponse, 'USER_VALIDATION_ERROR')
-            return errorResponse
+                message: 'User information not available'
+            })
+            return
         }
 
         const { userId, userName } = validatedUser
 
-        // Get the userInfo for tracking (from connectedUsers)
-        const userInfo = this.connectedUsers.get(client.id)
-
         this.logger.log(
-            `🪑 SIT_IN_SEAT [${requestId}]: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${roomId}`
+            `🪑 SIT_IN_SEAT: User ${userName} (${userId}) wants to sit in seat ${data.seatIndex} in room ${roomId}`
         )
 
         try {
+            // Validate inputs
+            if (!roomId) {
+                throw new Error('Room ID is required')
+            }
             if (data.seatIndex === undefined) {
                 throw new Error('Seat index is required')
             }
 
-            // Check if user is in the room (as observer) - if not, join them
+            // Auto-join socket room if not already joined
             const roomName = `room:${roomId}`
-            const isInSocketRoom = client.rooms.has(roomName)
-            if (!isInSocketRoom) {
-                // Automatically join the socket room if user is not already in it
+            if (!client.rooms.has(roomName)) {
                 client.join(roomName)
-
-                // Update tracking
+                const userInfo = this.connectedUsers.get(client.id)
                 if (userInfo) {
                     userInfo.rooms.add(roomId)
                 }
-
-                this.logger.log(
-                    `🔄 Auto-joined socket room [${requestId}]: User ${userName} (${userId}) automatically joined room ${roomId} for sitting`
-                )
             }
 
-            // Get current room seats with lock information
+            // Get current room seats
             const currentSeats = await this.roomService.getRoomSeats(roomId)
-
-            // Check if user is the room owner
-            const roomDetails = await this.roomService.getRoomDetails(roomId)
-            const userRoles = await this.roomService.getUserRolesInRoom(
-                roomId,
-                userId
-            )
-            const isOwner =
-                roomDetails?.hostId === userId ||
-                userRoles.includes(RoomRole.OWNER) // Owner role check
-
-            this.logger.log(
-                `🔍 DEBUG SIT_IN_SEAT: Available seats for room ${roomId}: ${JSON.stringify(currentSeats.map((s) => ({ index: s.index, locked: s.locked, occupied: s.occupied })))}`
-            )
-            this.logger.log(
-                `🔍 DEBUG SIT_IN_SEAT: Looking for seat with index: ${data.seatIndex} | User is owner: ${isOwner}`
-            )
-
             const targetSeat = currentSeats.find(
                 (seat) => seat.index === data.seatIndex
             )
@@ -1293,86 +1195,28 @@ export class RoomGateway
                 throw new Error('Invalid seat index')
             }
 
-            // Handle occupied seat - owner can kick existing participant
+            // Check if seat is occupied
             if (targetSeat.occupied) {
-                if (isOwner) {
-                    // Owner can kick any participant from their seat
-                    try {
-                        const kickResult =
-                            await this.roomService.kickUserFromSeat(
-                                roomId,
-                                data.seatIndex,
-                                userId
-                            )
-
-                        this.logger.log(
-                            `👑 OWNER PRIVILEGE: Owner ${userName} (${userId}) kicked ${kickResult.userName} (${kickResult.userId}) from seat ${data.seatIndex}`
-                        )
-
-                        // Notify the kicked user and room
-                        this.server.to(`room:${roomId}`).emit('userKicked', {
-                            roomId: roomId,
-                            kickedUserId: kickResult.userId,
-                            kickedUserName: kickResult.userName,
-                            seatIndex: data.seatIndex,
-                            kickedBy: userId,
-                            kickedByName: userName,
-                            reason: 'Owner taking seat',
-                            timestamp: new Date().toISOString()
-                        })
-                    } catch (kickError) {
-                        this.logger.error(
-                            `❌ Failed to kick user from seat ${data.seatIndex}: ${kickError.message}`
-                        )
-                        throw new Error(
-                            `Failed to take seat: ${kickError.message}`
-                        )
-                    }
-                } else {
-                    throw new Error('Seat is already occupied')
-                }
+                throw new Error('Seat is already occupied')
             }
 
-            // Handle locked seat - owner can bypass lock
-            if (targetSeat.locked && !isOwner) {
-                // Non-owners cannot sit in locked seats, add to waiting list
-                await this.roomService.addToWaitingList(roomId, userId)
-
-                const waitingList =
-                    await this.roomService.getRoomWaitingList(roomId)
-                const userPosition = parseInt(
-                    waitingList.find((w) => w.id === userId)?.sitIndex || '0'
+            // Check if seat is locked - only host can unlock or sit in locked seats
+            if (targetSeat.locked) {
+                const roomDetails =
+                    await this.roomService.getRoomDetails(roomId)
+                const userRoles = await this.roomService.getUserRolesInRoom(
+                    roomId,
+                    userId
                 )
+                const isHost =
+                    roomDetails?.hostId === userId ||
+                    userRoles.includes(RoomRole.OWNER)
 
-                const waitingResponse = {
-                    status: 'waiting',
-                    user: {
-                        id: userId,
-                        name: userName,
-                        email: '',
-                        sitIndex: data.seatIndex.toString(),
-                        image: userInfo?.avatarUrl || ''
-                    },
-                    action: 'added_to_waiting_list',
-                    position: userPosition,
-                    message: `Seat ${data.seatIndex} is locked. Added to waiting list at position ${userPosition}`
+                if (!isHost) {
+                    throw new Error(
+                        'Seat is locked. Host needs to unlock it first.'
+                    )
                 }
-
-                // Emit to the user
-                emitSitInSeatResponse(waitingResponse, 'WAITING_LIST')
-
-                // Emit to all room participants
-                this.server.to(roomName).emit('roomJoinUpdate', waitingResponse)
-
-                this.logger.log(
-                    `⏳ SIT_IN_SEAT [${requestId}] waiting: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${roomId}`
-                )
-
-                return waitingResponse
-            } else if (targetSeat.locked && isOwner) {
-                this.logger.log(
-                    `👑 OWNER PRIVILEGE: Owner ${userName} (${userId}) bypassing lock on seat ${data.seatIndex}`
-                )
             }
 
             // Seat is available - proceed with sitting
@@ -1383,115 +1227,42 @@ export class RoomGateway
                 data.password
             )
 
-            // Update tracking
-            const currentCount = this.roomUserCounts.get(roomId) || 0
-            const newCount = currentCount + 1
-            this.roomUserCounts.set(roomId, newCount)
-
             // Update seat state in memory
             await this.updateRoomSeatsState(roomId)
-            const updatedSeats = this.roomSeats.get(roomId) || []
 
-            // Format participant in the new requested format
-            const sitInSeatResponse = {
+            // Success response
+            const response = {
                 status: 'accepted',
                 user: {
                     id: userId,
                     name: participant.user?.name || userName,
                     email: participant.user?.email || '',
                     sitIndex: data.seatIndex.toString(),
-                    image:
-                        participant.user?.avatarUrl || userInfo?.avatarUrl || ''
+                    image: participant.user?.avatarUrl || ''
                 }
             }
 
-            // Keep the old format for joinRoomResponse compatibility
-            const joinRoomFormattedParticipant = {
-                userId: userId,
-                name: participant.user?.name || userName,
-                avatar:
-                    participant.user?.avatarUrl || userInfo?.avatarUrl || null,
-                seatIndex: data.seatIndex,
-                isSpeaking: false,
-                micOn: !participant.isMuted, // micOn is inverse of isMuted
-                role: 'participant'
-            }
+            client.emit('sitInSeatResponse', response)
 
             this.logger.log(
-                `📤 SIT_IN_SEAT [${requestId}]: About to emit sitInSeatResponse (SUCCESS) to client ${client.id} | Status: accepted | User: ${sitInSeatResponse.user.name} | Seat: ${data.seatIndex}`
-            )
-
-            // Emit to the user who sat with new format
-            emitSitInSeatResponse(sitInSeatResponse, 'SUCCESS')
-
-            this.logger.log(
-                `✅ SIT_IN_SEAT [${requestId}]: Successfully emitted sitInSeatResponse (SUCCESS) to client ${client.id} | Response: ${JSON.stringify(sitInSeatResponse)}`
-            )
-
-            // ALSO emit joinRoomResponse for Flutter compatibility with old format
-            // This ensures Flutter gets participant data when user sits in seat
-            client.emit('joinRoomResponse', joinRoomFormattedParticipant)
-
-            this.logger.log(
-                `📤 SIT_IN_SEAT: Emitted both sitInSeatResponse and joinRoomResponse for participant: ${sitInSeatResponse.user.name}`
-            )
-
-            // Notify all room participants about user sitting
-            this.server.to(roomName).emit('userSeated', {
-                roomId: roomId,
-                participant,
-                userName,
-                seatIndex: data.seatIndex,
-                userId: userId
-            })
-
-            // Broadcast updated seat state
-            this.server.to(roomName).emit('seatUpdated', {
-                roomId: roomId,
-                seats: updatedSeats,
-                action: 'user_seated',
-                seatIndex: data.seatIndex,
-                userId: userId
-            })
-
-            // Emit comprehensive room update with formatted participant
-            this.server
-                .to(roomName)
-                .emit('roomJoinUpdate', joinRoomFormattedParticipant)
-
-            // Check and promote from waiting list if needed
-            await this.checkAndPromoteFromWaitingList(roomId)
-
-            this.logger.log(
-                `✅ SIT_IN_SEAT [${requestId}] success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
+                `✅ SIT_IN_SEAT success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
             )
 
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
 
-            return sitInSeatResponse
+            return response
         } catch (error) {
             this.logger.error(
-                `❌ SIT_IN_SEAT [${requestId}] failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | ` +
-                    `Error: ${error.message}`,
-                error.stack
+                `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | Error: ${error.message}`
             )
 
             const errorResponse = {
                 status: 'rejected',
-                user: {
-                    id: userId || '',
-                    name: userName || '',
-                    email: '',
-                    sitIndex: data.seatIndex?.toString() || '',
-                    image: ''
-                },
                 message: error.message
             }
 
-            // Emit error response directly to the client
-            emitSitInSeatResponse(errorResponse, 'CATCH_ERROR')
-
+            client.emit('sitInSeatResponse', errorResponse)
             return errorResponse
         }
     }
