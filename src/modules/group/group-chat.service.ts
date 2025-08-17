@@ -74,19 +74,32 @@ export class GroupChatService {
     }
 
     async getGroupMessageHistory(
-        groupId: string
-        // page: number = 1,
-        // limit: number = 50,
-        // before?: string
+        groupId: string,
+        page: number = 1,
+        limit: number = 50,
+        before?: string
     ): Promise<GroupMessage[]> {
-        return await this.groupMessageRepository.find({
-            where: {
-                groupId,
-                isDeleted: false
-            },
-            order: { timestamp: 'DESC' },
-            take: 50
-        })
+        const queryBuilder = this.groupMessageRepository
+            .createQueryBuilder('message')
+            .where('message.groupId = :groupId', { groupId })
+            .andWhere('message.isDeleted = false')
+            .orderBy('message.timestamp', 'DESC')
+            .take(limit)
+            .skip((page - 1) * limit)
+
+        if (before) {
+            // Get messages before a specific message ID
+            const beforeMessage = await this.groupMessageRepository.findOne({
+                where: { id: before }
+            })
+            if (beforeMessage) {
+                queryBuilder.andWhere('message.timestamp < :beforeTimestamp', {
+                    beforeTimestamp: beforeMessage.timestamp
+                })
+            }
+        }
+
+        return await queryBuilder.getMany()
     }
 
     async markMessagesAsRead(

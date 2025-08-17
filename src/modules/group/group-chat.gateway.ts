@@ -12,6 +12,8 @@ import { Server, Socket } from 'socket.io'
 import { GroupChatService } from './group-chat.service'
 
 interface AuthenticatedSocket extends Socket {
+    userId?: string
+    userName?: string
     // Optional user info that can be set for convenience
 }
 
@@ -31,15 +33,183 @@ export class GroupChatGateway
     server: Server
 
     private logger = new Logger('GroupChatGateway')
+    private connectedUsers = new Map<
+        string,
+        { userId: string; userName: string; groups: Set<string> }
+    >()
 
     constructor(private readonly groupChatService: GroupChatService) {}
 
     async handleConnection(client: AuthenticatedSocket) {
-        this.logger.log(`Client connected: ${client.id}`)
+        this.logger.log(
+            `Client connected to group-chat namespace: ${client.id}`
+        )
+
+        // Initialize user connection info
+        this.connectedUsers.set(client.id, {
+            userId: 'pending',
+            userName: 'Unknown',
+            groups: new Set<string>()
+        })
+
+        // Send connection acknowledgment
+        client.emit('connected', {
+            success: true,
+            message: 'Connected to Group Chat Gateway',
+            socketId: client.id,
+            namespace: 'group-chat',
+            timestamp: new Date().toISOString()
+        })
+    }
+
+    @SubscribeMessage('setup')
+    async handleSetup(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { userId: string; userName?: string }
+    ) {
+        try {
+            const { userId, userName } = data
+
+            if (!userId) {
+                client.emit('setupError', {
+                    message: 'User ID is required',
+                    success: false
+                })
+                return
+            }
+
+            // Update user info
+            const userInfo = this.connectedUsers.get(client.id)
+            if (userInfo) {
+                userInfo.userId = userId
+                userInfo.userName = userName || userInfo.userName
+            }
+
+            client.emit('setupComplete', {
+                success: true,
+                userId,
+                userName,
+                message: 'Setup completed successfully'
+            })
+
+            this.logger.log(`Setup completed for user ${userId} (${userName})`)
+        } catch (error) {
+            this.logger.error('Error in setup:', error.message)
+            client.emit('setupError', {
+                message: 'Setup failed',
+                success: false
+            })
+        }
     }
 
     async handleDisconnect(client: AuthenticatedSocket) {
-        this.logger.log(`Client disconnected: ${client.id}`)
+        const userInfo = this.connectedUsers.get(client.id)
+        if (userInfo) {
+            // Leave all group rooms
+            userInfo.groups.forEach((groupId) => {
+                client.leave(`group:${groupId}`)
+            })
+
+            this.logger.log(
+                `Client disconnected from group-chat: ${client.id} (${userInfo.userName})`
+            )
+            this.connectedUsers.delete(client.id)
+        } else {
+            this.logger.log(
+                `Unknown client disconnected from group-chat: ${client.id}`
+            )
+        }
+    }
+
+    @SubscribeMessage('joinGroup')
+    async handleJoinGroup(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody()
+        data: { groupId: string; userId: string; userName?: string }
+    ) {
+        try {
+            const { groupId, userId, userName } = data
+
+            if (!groupId || !userId) {
+                client.emit('error', {
+                    message: 'Group ID and User ID are required'
+                })
+                return
+            }
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('error', {
+                    message: 'User is not a member of this group'
+                })
+                return
+            }
+
+            // Update user info
+            const userInfo = this.connectedUsers.get(client.id)
+            if (userInfo) {
+                userInfo.userId = userId
+                userInfo.userName = userName || userInfo.userName
+                userInfo.groups.add(groupId)
+            }
+
+            // Join the group room
+            client.join(`group:${groupId}`)
+
+            this.logger.log(
+                `User ${userId} (${userName}) joined group ${groupId}`
+            )
+
+            client.emit('joinGroupResponse', {
+                success: true,
+                groupId,
+                message: 'Successfully joined group chat'
+            })
+        } catch (error) {
+            this.logger.error('Error joining group:', error.message)
+            client.emit('error', { message: 'Failed to join group' })
+        }
+    }
+
+    @SubscribeMessage('leaveGroup')
+    async handleLeaveGroup(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { groupId: string; userId: string }
+    ) {
+        try {
+            const { groupId, userId } = data
+
+            if (!groupId || !userId) {
+                client.emit('error', {
+                    message: 'Group ID and User ID are required'
+                })
+                return
+            }
+
+            // Update user info
+            const userInfo = this.connectedUsers.get(client.id)
+            if (userInfo) {
+                userInfo.groups.delete(groupId)
+            }
+
+            // Leave the group room
+            client.leave(`group:${groupId}`)
+
+            this.logger.log(`User ${userId} left group ${groupId}`)
+
+            client.emit('leaveGroupResponse', {
+                success: true,
+                groupId,
+                message: 'Successfully left group chat'
+            })
+        } catch (error) {
+            this.logger.error('Error leaving group:', error.message)
+            client.emit('error', { message: 'Failed to leave group' })
+        }
     }
 
     @SubscribeMessage('sendGroupMessage')
@@ -48,17 +218,17 @@ export class GroupChatGateway
         @MessageBody()
         data: {
             group: string
-            avatar: string | null
+            avatar?: string | null
             sender: {
                 _id: string
                 name: string
-                role: string | null
+                role?: string | null
             }
             content: string
-            createdAt: string
-            updatedAt: string | null
-            __v: number | null
-            type: string | null
+            createdAt?: string
+            updatedAt?: string | null
+            __v?: number | null
+            type?: string | null
         }
     ) {
         try {
@@ -78,8 +248,31 @@ export class GroupChatGateway
             const senderName = sender.name
 
             this.logger.log(
-                `Processing message from ${senderId} to group ${groupId}`
+                `Processing message from ${senderId} (${senderName}) to group ${groupId}`
             )
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                senderId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('sendGroupMessageResponse', {
+                    error: 'User is not a member of this group',
+                    success: false
+                })
+                return
+            }
+
+            // Auto-join group room if not already joined
+            const userInfo = this.connectedUsers.get(client.id)
+            if (userInfo && !userInfo.groups.has(groupId)) {
+                userInfo.groups.add(groupId)
+                client.join(`group:${groupId}`)
+                this.logger.log(
+                    `Auto-joined user ${senderId} to group room ${groupId}`
+                )
+            }
 
             // Get user's actual role from database instead of relying on payload
             const userRole = await this.groupChatService.getUserRole(
@@ -100,43 +293,53 @@ export class GroupChatGateway
                 replyToMessageId: undefined
             })
 
-            // Create response in the specified format
+            // Create response in the Flutter-expected format
             const response = {
-                _id: message.id,
+                _id: message.id, // Flutter expects _id
                 group: groupId,
                 sender: {
-                    _id: senderId,
+                    _id: senderId, // Flutter expects _id
                     name: senderName,
                     role: senderRole
                 },
                 content: content,
                 avatar: avatar || '',
-                createdAt: message.timestamp,
-                updatedAt: message.updatedAt || message.timestamp,
+                createdAt: message.timestamp.toISOString(), // Ensure ISO string format
+                updatedAt: (
+                    message.updatedAt || message.timestamp
+                ).toISOString(),
                 __v: 0,
+                type: type || 'text',
                 userRole: senderRole, // Add user's actual group role
                 success: true
             }
 
-            // Send response to the sender
-            client.emit('sendGroupMessageResponse', response)
-
-            // Broadcast the message to all other members in the group room
+            // Broadcast the message to ALL members in the group room (including sender)
+            // This ensures the sender also gets the confirmed message with the database ID
             this.server
                 .to(`group:${groupId}`)
                 .emit('sendGroupMessageResponse', response)
 
+            // Also send directly to sender to ensure they get it even if room join failed
+            client.emit('sendGroupMessageResponse', response)
+
             this.logger.log(
                 `Group message sent by ${senderId} (${senderRole}) to group ${groupId} - Message ID: ${message.id}`
             )
+
+            return response
         } catch (error) {
             this.logger.error('Error sending group message:', error.message)
             this.logger.error('Stack trace:', error.stack)
-            client.emit('sendGroupMessageResponse', {
+
+            const errorResponse = {
                 error: 'Failed to send message',
                 message: error.message,
                 success: false
-            })
+            }
+
+            client.emit('sendGroupMessageResponse', errorResponse)
+            return errorResponse
         }
     }
 
@@ -147,39 +350,70 @@ export class GroupChatGateway
         data: {
             groupId: string
             userId: string
-            // page?: number
-            // limit?: number
-            // before?: string // messageId to get messages before this
+            page?: number
+            limit?: number
+            before?: string // messageId to get messages before this
         }
     ) {
         try {
-            const {
-                groupId,
-                userId
-                // page = 1,
-                // limit = 50,
-                // before
-            } = data
+            const { groupId, userId, page = 1, limit = 50, before } = data
 
-            if (!userId) {
-                client.emit('error', { message: 'User ID is required' })
+            if (!userId || !groupId) {
+                client.emit('error', {
+                    message: 'Group ID and User ID are required'
+                })
+                return
+            }
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('error', {
+                    message: 'User is not a member of this group'
+                })
                 return
             }
 
             const messages = await this.groupChatService.getGroupMessageHistory(
-                groupId
-                // page,
-                // limit,
-                // before
+                groupId,
+                page,
+                limit,
+                before
             )
+
+            // Format messages for Flutter compatibility
+            const formattedMessages = messages.map((message) => ({
+                _id: message.id, // Flutter expects _id
+                group: message.groupId,
+                sender: {
+                    _id: message.senderId, // Flutter expects _id
+                    name: message.senderName,
+                    role: 'member' // You might want to get the actual role from GroupChatService
+                },
+                content: message.content,
+                avatar: message.senderAvatarUrl || '',
+                createdAt: message.timestamp.toISOString(),
+                updatedAt: (
+                    message.updatedAt || message.timestamp
+                ).toISOString(),
+                __v: 0,
+                type: message.messageType || 'text'
+            }))
 
             client.emit('groupMessageHistory', {
                 groupId,
-                messages
-                // page,
-                // limit,
-                // hasMore: messages.length === limit
+                messages: formattedMessages,
+                page,
+                limit,
+                hasMore: messages.length === limit
             })
+
+            this.logger.log(
+                `Message history sent for group ${groupId} to user ${userId}`
+            )
         } catch (error) {
             this.logger.error('Error getting message history:', error.message)
             client.emit('error', { message: 'Failed to get message history' })
@@ -200,7 +434,24 @@ export class GroupChatGateway
         try {
             const { groupId, messageIds, userId, userName } = data
 
-            if (!userId) return
+            if (!userId || !groupId) {
+                client.emit('error', {
+                    message: 'Group ID and User ID are required'
+                })
+                return
+            }
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('error', {
+                    message: 'User is not a member of this group'
+                })
+                return
+            }
 
             await this.groupChatService.markMessagesAsRead(
                 groupId,
@@ -215,8 +466,13 @@ export class GroupChatGateway
                 readBy: userId,
                 userName: userName
             })
+
+            this.logger.log(
+                `User ${userId} marked ${messageIds.length} messages as read in group ${groupId}`
+            )
         } catch (error) {
             this.logger.error('Error marking messages as read:', error.message)
+            client.emit('error', { message: 'Failed to mark messages as read' })
         }
     }
 
@@ -233,14 +489,29 @@ export class GroupChatGateway
     ) {
         const { groupId, isTyping, userId, userName } = data
 
-        if (!userId) return
+        if (!userId || !groupId) return
 
-        client.to(`group:${groupId}`).emit('userTypingInGroup', {
-            groupId,
-            userId: userId,
-            userName: userName,
-            isTyping
-        })
+        // Verify group membership
+        try {
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) return
+
+            client.to(`group:${groupId}`).emit('userTypingInGroup', {
+                groupId,
+                userId: userId,
+                userName: userName,
+                isTyping
+            })
+
+            this.logger.debug(
+                `User ${userId} typing status: ${isTyping} in group ${groupId}`
+            )
+        } catch (error) {
+            this.logger.error('Error handling typing status:', error.message)
+        }
     }
 
     @SubscribeMessage('deleteGroupMessage')
@@ -252,8 +523,22 @@ export class GroupChatGateway
         try {
             const { groupId, messageId, userId } = data
 
-            if (!userId) {
-                client.emit('error', { message: 'User ID is required' })
+            if (!userId || !groupId || !messageId) {
+                client.emit('error', {
+                    message: 'Group ID, Message ID, and User ID are required'
+                })
+                return
+            }
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('error', {
+                    message: 'User is not a member of this group'
+                })
                 return
             }
 
@@ -269,6 +554,9 @@ export class GroupChatGateway
                     messageId,
                     deletedBy: userId
                 })
+                this.logger.log(
+                    `Message ${messageId} deleted by ${userId} in group ${groupId}`
+                )
             } else {
                 client.emit('error', { message: 'Cannot delete this message' })
             }
@@ -292,8 +580,20 @@ export class GroupChatGateway
         try {
             const { groupId, messageId, newContent, userId } = data
 
-            if (!userId) {
-                client.emit('error', { message: 'User ID is required' })
+            if (!userId || !groupId || !messageId || !newContent) {
+                client.emit('error', { message: 'All fields are required' })
+                return
+            }
+
+            // Verify group membership
+            const isMember = await this.groupChatService.verifyGroupMembership(
+                userId,
+                groupId
+            )
+            if (!isMember) {
+                client.emit('error', {
+                    message: 'User is not a member of this group'
+                })
                 return
             }
 
@@ -312,6 +612,9 @@ export class GroupChatGateway
                     editedBy: userId,
                     editedAt: updatedMessage.editedAt
                 })
+                this.logger.log(
+                    `Message ${messageId} edited by ${userId} in group ${groupId}`
+                )
             } else {
                 client.emit('error', { message: 'Cannot edit this message' })
             }
