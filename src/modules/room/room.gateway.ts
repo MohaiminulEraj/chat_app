@@ -1155,7 +1155,14 @@ export class RoomGateway
         if (!validatedUser) {
             client.emit('sitInSeatResponse', {
                 status: 'rejected',
-                message: 'User information not available'
+                message: 'User information not available',
+                user: {
+                    id: data.userId || '',
+                    name: '',
+                    email: '',
+                    sitIndex: data.seatIndex?.toString() || '',
+                    image: ''
+                }
             })
             return
         }
@@ -1185,7 +1192,7 @@ export class RoomGateway
                 }
             }
 
-            // Get current room seats
+            // Get current room seats and room details
             const currentSeats = await this.roomService.getRoomSeats(roomId)
             const targetSeat = currentSeats.find(
                 (seat) => seat.index === data.seatIndex
@@ -1200,26 +1207,70 @@ export class RoomGateway
                 throw new Error('Seat is already occupied')
             }
 
-            // Check if seat is locked - only host can unlock or sit in locked seats
-            if (targetSeat.locked) {
-                const roomDetails =
-                    await this.roomService.getRoomDetails(roomId)
-                const userRoles = await this.roomService.getUserRolesInRoom(
-                    roomId,
-                    userId
-                )
-                const isHost =
-                    roomDetails?.hostId === userId ||
-                    userRoles.includes(RoomRole.OWNER)
+            // Get room details and user roles
+            const roomDetails = await this.roomService.getRoomDetails(roomId)
+            const userRoles = await this.roomService.getUserRolesInRoom(
+                roomId,
+                userId
+            )
+            const isHost =
+                roomDetails?.hostId === userId ||
+                userRoles.includes(RoomRole.OWNER)
 
-                if (!isHost) {
-                    throw new Error(
-                        'Seat is locked. Host needs to unlock it first.'
-                    )
+            // Check if seat is locked
+            if (targetSeat.locked && !isHost) {
+                // Seat is locked and user is not host - add to waiting list
+                this.logger.log(
+                    `⏳ SIT_IN_SEAT: Seat ${data.seatIndex} is locked. Adding user ${userName} (${userId}) to waiting list for room ${roomId}`
+                )
+
+                // Add user to waiting list for this specific seat
+                await this.roomService.addToWaitingList(roomId, userId)
+
+                const userInfo = await this.roomService.findUserById(userId)
+                const waitingResponse = {
+                    status: 'waiting',
+                    message:
+                        'Seat is locked. Added to waiting list for host approval.',
+                    user: {
+                        id: userId,
+                        name: userInfo?.name || userName,
+                        email: userInfo?.email || '',
+                        sitIndex: data.seatIndex.toString(),
+                        image: userInfo?.avatarUrl || ''
+                    }
                 }
+
+                client.emit('sitInSeatResponse', waitingResponse)
+
+                // Notify host about the waiting participant
+                const hostSockets = Array.from(this.connectedUsers.entries())
+                    .filter(
+                        ([_, userInfo]) =>
+                            userInfo.userId === roomDetails?.hostId
+                    )
+                    .map(([socketId]) => socketId)
+
+                hostSockets.forEach((socketId) => {
+                    this.server.to(socketId).emit('participantWaiting', {
+                        roomId,
+                        participantId: userId,
+                        participantName: userInfo?.name || userName,
+                        seatIndex: data.seatIndex,
+                        timestamp: new Date().toISOString()
+                    })
+                })
+
+                this.logger.log(
+                    `⏳ SIT_IN_SEAT: User ${userName} (${userId}) added to waiting list for seat ${data.seatIndex} in room ${roomId}`
+                )
+
+                // Track user activity
+                this.trackUserActivity(userId, 'seatActions')
+                return waitingResponse
             }
 
-            // Seat is available - proceed with sitting
+            // Seat is available and unlocked (or user is host) - proceed with sitting
             const participant = await this.roomService.joinRoomWithSeat(
                 roomId,
                 userId,
@@ -1233,6 +1284,7 @@ export class RoomGateway
             // Success response
             const response = {
                 status: 'accepted',
+                message: `Successfully seated in seat ${data.seatIndex}`,
                 user: {
                     id: userId,
                     name: participant.user?.name || userName,
@@ -1243,6 +1295,32 @@ export class RoomGateway
             }
 
             client.emit('sitInSeatResponse', response)
+
+            // Broadcast seat update to all room participants
+            this.server.to(`room:${roomId}`).emit('seatUpdated', {
+                roomId,
+                seatIndex: data.seatIndex,
+                occupied: true,
+                user: {
+                    id: userId,
+                    name: participant.user?.name || userName,
+                    avatar: participant.user?.avatarUrl || ''
+                },
+                timestamp: new Date().toISOString()
+            })
+
+            // Send joinRoomResponse to the user who just sat down
+            const joinRoomResponseData = {
+                userId: userId,
+                name: participant.user?.name || userName,
+                avatar: participant.user?.avatarUrl || null,
+                seatIndex: data.seatIndex,
+                isSpeaking: false,
+                micOn: !participant.isMuted, // micOn is inverse of isMuted
+                role: 'participant'
+            }
+
+            client.emit('joinRoomResponse', joinRoomResponseData)
 
             this.logger.log(
                 `✅ SIT_IN_SEAT success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
@@ -1259,7 +1337,14 @@ export class RoomGateway
 
             const errorResponse = {
                 status: 'rejected',
-                message: error.message
+                message: error.message,
+                user: {
+                    id: userId,
+                    name: userName,
+                    email: '',
+                    sitIndex: data.seatIndex?.toString() || '',
+                    image: ''
+                }
             }
 
             client.emit('sitInSeatResponse', errorResponse)
