@@ -63,12 +63,20 @@ export class AgoraService {
     }
 
     /**
-     * Get available Agora roles
+     * Get available Agora roles with client-friendly mappings
      */
     getRoles() {
         return {
             PUBLISHER: RtcRole.PUBLISHER, // Can publish and subscribe
-            SUBSCRIBER: RtcRole.SUBSCRIBER // Can only subscribe
+            BROADCASTER: RtcRole.PUBLISHER, // Alias for publisher (broadcaster role)
+            SUBSCRIBER: RtcRole.SUBSCRIBER, // Can only subscribe
+            AUDIENCE: RtcRole.SUBSCRIBER, // Alias for subscriber (audience role)
+
+            // String mappings for client compatibility
+            publisher: RtcRole.PUBLISHER,
+            broadcaster: RtcRole.PUBLISHER,
+            subscriber: RtcRole.SUBSCRIBER,
+            audience: RtcRole.SUBSCRIBER
         }
     }
 }
