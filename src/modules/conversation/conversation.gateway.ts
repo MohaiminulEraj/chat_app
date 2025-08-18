@@ -20,7 +20,6 @@ import { MessageType } from './entities/message.entity'
         methods: ['GET', 'POST'],
         credentials: true
     },
-    namespace: 'chat',
     transports: ['websocket', 'polling']
 })
 export class ConversationGateway
@@ -255,9 +254,25 @@ export class ConversationGateway
 
             // TODO: Send push notifications to offline users
 
-            // Return success response with enhanced message in the new format
-            return enhancedMessage
+            // Emit sendMessageResponse to the sender
+            this.logger.log(
+                `Emitting sendMessageResponse to sender: ${senderId}`
+            )
+            client.emit('sendMessageResponse', {
+                success: true,
+                message: enhancedMessage
+            })
+
+            return { success: true }
         } catch (error) {
+            this.logger.error(`Send message failed: ${error.message}`)
+
+            // Emit error response to the sender
+            client.emit('sendMessageResponse', {
+                success: false,
+                error: error.message
+            })
+
             return { success: false, error: error.message }
         }
     }
