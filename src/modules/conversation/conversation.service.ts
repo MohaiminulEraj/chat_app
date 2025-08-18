@@ -294,9 +294,7 @@ export class ConversationService {
 
     async getMessages(
         conversationId: string,
-        userId: string,
-        limit: number = 50,
-        before?: string
+        userId: string
     ): Promise<Message[]> {
         const conversation = await this.getConversation(conversationId)
 
@@ -317,14 +315,7 @@ export class ConversationService {
             })
             .andWhere('message.isDeleted = false')
             .andWhere('NOT (:userId = ANY(message.deletedFor))', { userId })
-            .orderBy('message.createdAt', 'DESC')
-            .limit(limit)
-
-        if (before) {
-            queryBuilder.andWhere('message.createdAt < :beforeTime', {
-                beforeTime: new Date(before)
-            })
-        }
+            .orderBy('message.createdAt', 'ASC')
 
         return queryBuilder.getMany()
     }

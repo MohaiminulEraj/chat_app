@@ -51,8 +51,7 @@ export class ConversationController {
     @Post('user-conversations')
     @ApiOperation({
         summary: 'Get user conversations without authentication',
-        description:
-            'Get all conversations for a specific user'
+        description: 'Get all conversations for a specific user'
     })
     @ApiBody({
         schema: {
@@ -261,38 +260,20 @@ export class ConversationController {
     @Get(':id/messages')
     @ApiOperation({
         summary: 'Get conversation messages',
-        description: 'Get messages for a specific conversation'
+        description: 'Get all messages for a specific conversation'
     })
     @ApiParam({
         name: 'id',
         description: 'Conversation UUID'
     })
-    @ApiQuery({
-        name: 'limit',
-        required: false,
-        description: 'Number of messages to fetch',
-        example: 50
-    })
-    @ApiQuery({
-        name: 'before',
-        required: false,
-        description: 'Fetch messages before this timestamp'
-    })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: 'List of messages'
+        description: 'List of all messages'
     })
-    async getMessages(
-        @Request() req,
-        @Param('id') conversationId: string,
-        @Query('limit') limit: number = 50,
-        @Query('before') before?: string
-    ) {
+    async getMessages(@Request() req, @Param('id') conversationId: string) {
         const data = await this.conversationService.getMessages(
             conversationId,
-            req.user.uuid,
-            limit,
-            before
+            req.user.uuid
         )
         return {
             statusCode: HttpStatus.OK,
