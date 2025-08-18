@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Conversation Gateway Test (No Auth)</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Conversation Gateway Test (No Authentication)</h1>
+
+        <div
+            id="status"
+            style="margin: 10px; padding: 10px; border: 1px solid #ccc"
+        >
+            Status: Disconnected
+        </div>
+
+        <div style="margin: 10px">
+            <h3>Send Message</h3>
+            <input
+                type="text"
+                id="senderId"
+                placeholder="Sender ID (UUID)"
+                value="user1-uuid"
+                style="width: 200px"
+            />
+            <input
+                type="text"
+                id="recipientId"
+                placeholder="Recipient ID (UUID)"
+                value="user2-uuid"
+                style="width: 200px"
+            />
+            <br /><br />
+            <textarea
+                id="messageContent"
+                placeholder="Message content"
+                style="width: 400px; height: 60px"
+            >
+Hello! This is a test message</textarea
+            >
+            <br /><br />
+            <button onclick="sendMessage()">Send Message</button>
+        </div>
+
+        <div style="margin: 10px">
+            <h3>Get Conversation History</h3>
+            <input
+                type="text"
+                id="historyUserId"
+                placeholder="User ID"
+                value="user1-uuid"
+                style="width: 200px"
+            />
+            <input
+                type="text"
+                id="historyRecipientId"
+                placeholder="Recipient ID"
+                value="user2-uuid"
+                style="width: 200px"
+            />
+            <button onclick="getHistory()">Get History</button>
+        </div>
+
+        <div
+            id="logs"
+            style="
+                margin: 10px;
+                padding: 10px;
+                border: 1px solid #ccc;
+                height: 400px;
+                overflow-y: scroll;
+                background: #f9f9f9;
+            "
+        >
+            <h3>Logs:</h3>
+        </div>
+
+        <script>
+            const socket = io('http://localhost:3001', {
+                transports: ['websocket', 'polling'],
+                autoConnect: true
+            })
+
+            function log(message) {
+                const logs = document.getElementById('logs')
+                const timestamp = new Date().toISOString()
+                logs.innerHTML += `<div>[${timestamp}] ${message}</div>`
+                logs.scrollTop = logs.scrollHeight
+                console.log(`[${timestamp}] ${message}`)
+            }
+
+            function updateStatus(status) {
+                document.getElementById('status').innerHTML =
+                    `Status: ${status}`
+            }
+
+            // Connection events
+            socket.on('connect', () => {
+                updateStatus('Connected')
+                log('✅ Connected to server')
+            })
+
+            socket.on('disconnect', (reason) => {
+                updateStatus('Disconnected')
+                log(`❌ Disconnected: ${reason}`)
+            })
+
+            socket.on('connected', (data) => {
+                log(`🎉 Server confirmed connection: ${JSON.stringify(data)}`)
+            })
+
+            // Message events
+            socket.on('sendMessageResponse', (data) => {
+                log(
+                    `📤 Send Message Response: ${JSON.stringify(data, null, 2)}`
+                )
+                if (data.success) {
+                    log(
+                        `✅ Message sent successfully with ID: ${data.message._id}`
+                    )
+                } else {
+                    log(`❌ Message failed: ${data.error}`)
+                }
+            })
+
+            socket.on('newMessage', (data) => {
+                log(`📥 New Message Received: ${JSON.stringify(data, null, 2)}`)
+            })
+
+            // Error handling
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection error: ${error.message}`)
+            })
+
+            socket.on('error', (error) => {
+                log(`❌ Socket error: ${JSON.stringify(error)}`)
+            })
+
+            function sendMessage() {
+                const senderId = document.getElementById('senderId').value
+                const recipientId = document.getElementById('recipientId').value
+                const content = document.getElementById('messageContent').value
+
+                if (!senderId || !recipientId || !content) {
+                    alert('Please fill in all fields')
+                    return
+                }
+
+                const messageData = {
+                    senderId: senderId,
+                    recipientId: recipientId,
+                    type: 'text',
+                    content: content
+                }
+
+                log(
+                    `📤 Sending message: ${JSON.stringify(messageData, null, 2)}`
+                )
+                socket.emit('sendMessage', messageData)
+            }
+
+            function getHistory() {
+                const userId = document.getElementById('historyUserId').value
+                const recipientId =
+                    document.getElementById('historyRecipientId').value
+
+                if (!userId || !recipientId) {
+                    alert('Please fill in user ID and recipient ID')
+                    return
+                }
+
+                const historyData = {
+                    userId: userId,
+                    recipientId: recipientId,
+                    limit: 10
+                }
+
+                log(
+                    `📜 Getting conversation history: ${JSON.stringify(historyData, null, 2)}`
+                )
+
+                socket.emit(
+                    'getConversationHistory',
+                    historyData,
+                    (response) => {
+                        log(
+                            `📜 Conversation History Response: ${JSON.stringify(response, null, 2)}`
+                        )
+
+                        if (response.success && response.messages) {
+                            log(
+                                `✅ Found ${response.messages.length} messages in conversation`
+                            )
+                            response.messages.forEach((msg, index) => {
+                                log(
+                                    `  Message ${index + 1}: [${msg.senderId}] ${msg.content}`
+                                )
+                            })
+                        } else {
+                            log(
+                                `❌ Failed to get history: ${response.error || 'Unknown error'}`
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Test connection on page load
+            window.onload = () => {
+                log('🚀 Page loaded, testing connection...')
+            }
+        </script>
+    </body>
+</html>
