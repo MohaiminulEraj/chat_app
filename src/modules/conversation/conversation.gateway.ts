@@ -496,8 +496,6 @@ export class ConversationGateway
         data: {
             conversationId?: string
             recipientId?: string
-            limit?: number
-            before?: string
             userId: string
         }
     ) {
@@ -528,9 +526,7 @@ export class ConversationGateway
 
             const messages = await this.conversationService.getMessages(
                 conversationId,
-                userId,
-                data.limit || 50,
-                data.before
+                userId
             )
 
             // Auto-join conversation room when fetching history
@@ -540,7 +536,7 @@ export class ConversationGateway
                 success: true,
                 conversationId,
                 messages,
-                hasMore: messages.length === (data.limit || 50)
+                hasMore: false // No pagination, so no more messages
             }
         } catch (error) {
             return { success: false, error: error.message }
