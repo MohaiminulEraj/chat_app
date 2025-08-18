@@ -149,10 +149,19 @@ export class ConversationGateway
 
         try {
             this.logger.log(`User ${senderId} attempting to send message`)
+            this.logger.log(`Raw data received: ${JSON.stringify(data)}`)
+            this.logger.log(
+                `conversationId type: ${typeof data.conversationId}`
+            )
+            this.logger.log(`conversationId value: "${data.conversationId}"`)
 
             // Get or create conversation
             let conversation
-            if (data.conversationId) {
+            if (
+                data.conversationId &&
+                data.conversationId !== 'undefined' &&
+                data.conversationId !== 'string'
+            ) {
                 this.logger.log(
                     `Using existing conversation: ${data.conversationId}`
                 )
