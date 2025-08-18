@@ -128,7 +128,7 @@ export class ConversationService {
         const savedMessage = await this.messageRepository.save(message)
 
         // Update conversation metadata
-        await this.conversationRepository.update(conversation.uuid, {
+        await this.conversationRepository.update(conversation.id, {
             lastMessageAt: new Date(),
             lastMessagePreview:
                 data.type === MessageType.TEXT
