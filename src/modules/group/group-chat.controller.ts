@@ -15,7 +15,8 @@ import {
     ApiTags,
     ApiOperation,
     ApiResponse,
-    ApiBearerAuth
+    ApiBearerAuth,
+    ApiQuery
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { GroupChatService } from './group-chat.service'
@@ -29,6 +30,24 @@ export class GroupChatController {
 
     @Get(':groupId/messages')
     @ApiOperation({ summary: 'Get group message history' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Page number (default: 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Messages per page (max: 100, default: 50)'
+    })
+    @ApiQuery({
+        name: 'before',
+        required: false,
+        type: String,
+        description: 'Get messages before this message ID'
+    })
     @ApiResponse({
         status: 200,
         description: 'Messages retrieved successfully'
@@ -36,10 +55,14 @@ export class GroupChatController {
     async getGroupMessages(
         @Param('groupId') groupId: string,
         @Request() req: any,
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 50,
+        @Query('page') pageParam: string = '1',
+        @Query('limit') limitParam: string = '50',
         @Query('before') before?: string
     ) {
+        // Convert query parameters to numbers with validation
+        const page = Math.max(parseInt(pageParam) || 1, 1)
+        const limit = Math.min(Math.max(parseInt(limitParam) || 50, 1), 100) // Max 100 messages per request
+
         // Verify user is member of the group
         const isMember = await this.groupChatService.verifyGroupMembership(
             req.user.uuid,

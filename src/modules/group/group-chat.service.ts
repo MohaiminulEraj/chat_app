@@ -79,13 +79,21 @@ export class GroupChatService {
         limit: number = 50,
         before?: string
     ): Promise<GroupMessage[]> {
+        // Ensure parameters are valid numbers
+        const validPage = Math.max(parseInt(String(page)) || 1, 1)
+        const validLimit = Math.min(
+            Math.max(parseInt(String(limit)) || 50, 1),
+            100
+        )
+        const validSkip = (validPage - 1) * validLimit
+
         const queryBuilder = this.groupMessageRepository
             .createQueryBuilder('message')
             .where('message.groupId = :groupId', { groupId })
             .andWhere('message.isDeleted = false')
             .orderBy('message.timestamp', 'DESC')
-            .take(limit)
-            .skip((page - 1) * limit)
+            .take(validLimit)
+            .skip(validSkip)
 
         if (before) {
             // Get messages before a specific message ID
