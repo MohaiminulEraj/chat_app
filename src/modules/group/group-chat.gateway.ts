@@ -294,24 +294,35 @@ export class GroupChatGateway
                 before
             )
 
-            // Format messages for Flutter compatibility
-            const formattedMessages = messages.map((message) => ({
-                _id: message.id, // Flutter expects _id
-                group: message.groupId,
-                sender: {
-                    _id: message.senderId, // Flutter expects _id
-                    name: message.senderName,
-                    role: 'member' // You might want to get the actual role from GroupChatService
-                },
-                content: message.content,
-                avatar: message.senderAvatarUrl || '',
-                createdAt: message.timestamp.toISOString(),
-                updatedAt: (
-                    message.updatedAt || message.timestamp
-                ).toISOString(),
-                __v: 0,
-                type: message.messageType || 'text'
-            }))
+            // Format messages for Flutter compatibility with actual user roles
+            const formattedMessages = await Promise.all(
+                messages.map(async (message) => {
+                    // Get user's actual role from database
+                    const userRole = await this.groupChatService.getUserRole(
+                        groupId,
+                        message.senderId
+                    )
+
+                    return {
+                        _id: message.id, // Flutter expects _id
+                        group: message.groupId,
+                        sender: {
+                            _id: message.senderId, // Flutter expects _id
+                            name: message.senderName,
+                            role: userRole || 'member'
+                        },
+                        content: message.content,
+                        avatar: message.senderAvatarUrl || '',
+                        createdAt: message.timestamp.toISOString(),
+                        updatedAt: (
+                            message.updatedAt || message.timestamp
+                        ).toISOString(),
+                        __v: 0,
+                        type: message.messageType || 'text',
+                        success: true
+                    }
+                })
+            )
 
             client.emit('groupMessageHistory', {
                 groupId,

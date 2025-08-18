@@ -35,10 +35,10 @@ export class GroupChatController {
     })
     async getGroupMessages(
         @Param('groupId') groupId: string,
-        @Request() req: any
-        // @Query('page') page: number = 1,
-        // @Query('limit') limit: number = 50,
-        // @Query('before') before?: string
+        @Request() req: any,
+        @Query('page') page: number = 1,
+        @Query('limit') limit: number = 50,
+        @Query('before') before?: string
     ) {
         // Verify user is member of the group
         const isMember = await this.groupChatService.verifyGroupMembership(
@@ -54,20 +54,50 @@ export class GroupChatController {
         }
 
         const messages = await this.groupChatService.getGroupMessageHistory(
-            groupId
-            // page,
-            // limit,
-            // before
+            groupId,
+            page,
+            limit,
+            before
+        )
+
+        // Format messages to match sendGroupMessageResponse format
+        const formattedMessages = await Promise.all(
+            messages.map(async (message) => {
+                // Get user's actual role from database
+                const userRole = await this.groupChatService.getUserRole(
+                    groupId,
+                    message.senderId
+                )
+
+                return {
+                    _id: message.id, // Flutter expects _id
+                    group: message.groupId,
+                    sender: {
+                        _id: message.senderId, // Flutter expects _id
+                        name: message.senderName,
+                        role: userRole || 'member'
+                    },
+                    content: message.content,
+                    avatar: message.senderAvatarUrl || '',
+                    createdAt: message.timestamp.toISOString(),
+                    updatedAt: (
+                        message.updatedAt || message.timestamp
+                    ).toISOString(),
+                    __v: 0,
+                    type: message.messageType || 'text',
+                    success: true
+                }
+            })
         )
 
         return {
             statusCode: HttpStatus.OK,
             message: 'Messages retrieved successfully',
             data: {
-                messages
-                // page,
-                // limit,
-                // hasMore: messages.length === limit
+                messages: formattedMessages,
+                page,
+                limit,
+                hasMore: messages.length === limit
             }
         }
     }
