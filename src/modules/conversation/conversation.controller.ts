@@ -5,7 +5,9 @@ import {
     Param,
     Query,
     Request,
-    UseGuards
+    UseGuards,
+    Post,
+    Body
 } from '@nestjs/common'
 import {
     ApiBearerAuth,
@@ -13,7 +15,8 @@ import {
     ApiParam,
     ApiQuery,
     ApiResponse,
-    ApiTags
+    ApiTags,
+    ApiBody
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { ConversationService } from './conversation.service'
@@ -42,6 +45,57 @@ export class ConversationController {
             statusCode: HttpStatus.OK,
             message: 'Conversations fetched successfully',
             data
+        }
+    }
+
+    @Post('user-conversations')
+    @ApiOperation({
+        summary: 'Get user conversations without authentication',
+        description:
+            'Get all conversations for a specific user (no auth required)'
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                userId: {
+                    type: 'string',
+                    description: 'User UUID',
+                    example: 'user-uuid-here'
+                }
+            },
+            required: ['userId']
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description:
+            'List of conversations with avatar, name, last message, and last message time'
+    })
+    async getUserConversationsNoAuth(@Body() body: { userId: string }) {
+        if (!body.userId) {
+            return {
+                statusCode: HttpStatus.BAD_REQUEST,
+                message: 'userId is required',
+                data: null
+            }
+        }
+
+        try {
+            const data = await this.conversationService.getUserConversations(
+                body.userId
+            )
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Conversations fetched successfully',
+                data
+            }
+        } catch (error) {
+            return {
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+                message: 'Failed to fetch conversations',
+                error: error.message
+            }
         }
     }
 

@@ -11,6 +11,21 @@ import { UserService } from '../user/user.service'
 import { Conversation, ConversationType } from './entities/conversation.entity'
 import { Message, MessageType, MessageStatus } from './entities/message.entity'
 
+export interface ConversationResponse {
+    id: number
+    uuid: string
+    type: ConversationType
+    participantIds: string[]
+    messageCount: number
+    lastMessageAt: Date
+    lastMessagePreview: string
+    // Enhanced fields for API response
+    avatar: string
+    name: string
+    lastMessage: string
+    lastMessageTime: Date
+}
+
 @Injectable()
 export class ConversationService {
     constructor(
@@ -76,8 +91,10 @@ export class ConversationService {
         return conversation
     }
 
-    async getUserConversations(userId: string): Promise<Conversation[]> {
-        return this.conversationRepository
+    async getUserConversations(
+        userId: string
+    ): Promise<ConversationResponse[]> {
+        const conversations = await this.conversationRepository
             .createQueryBuilder('conversation')
             .where('conversation.participantIds IS NOT NULL')
             .andWhere("conversation.participantIds != ''")
@@ -95,6 +112,71 @@ export class ConversationService {
             )
             .orderBy('conversation.lastMessageAt', 'DESC')
             .getMany()
+
+        // Enhance conversations with participant details
+        const enhancedConversations: ConversationResponse[] = []
+
+        for (const conversation of conversations) {
+            // For direct conversations, get the other participant's details
+            let participantDetails: any = {}
+
+            if (conversation.type === ConversationType.DIRECT) {
+                // Find the other participant (not the current user)
+                const otherParticipantId = conversation.participantIds.find(
+                    (id) => id !== userId
+                )
+
+                if (otherParticipantId) {
+                    try {
+                        const otherUser =
+                            await this.getUserProfile(otherParticipantId)
+                        participantDetails = {
+                            avatar: otherUser.avatarUrl || '',
+                            name:
+                                otherUser.displayName ||
+                                otherUser.name ||
+                                'Unknown User'
+                        }
+                    } catch (error) {
+                        // If user not found, use default values
+                        participantDetails = {
+                            avatar: '',
+                            name: 'Unknown User'
+                        }
+                    }
+                } else {
+                    participantDetails = {
+                        avatar: '',
+                        name: 'Unknown User'
+                    }
+                }
+            } else {
+                // For group conversations, you can customize this logic
+                participantDetails = {
+                    avatar: '',
+                    name: `Group Chat (${conversation.participantIds.length} members)`
+                }
+            }
+
+            const enhancedConversation: ConversationResponse = {
+                id: conversation.id,
+                uuid: conversation.uuid,
+                type: conversation.type,
+                participantIds: conversation.participantIds,
+                messageCount: conversation.messageCount,
+                lastMessageAt: conversation.lastMessageAt,
+                lastMessagePreview: conversation.lastMessagePreview || '',
+                avatar: participantDetails.avatar,
+                name: participantDetails.name,
+                lastMessage:
+                    conversation.lastMessagePreview || 'No messages yet',
+                lastMessageTime: conversation.lastMessageAt
+            }
+
+            enhancedConversations.push(enhancedConversation)
+        }
+
+        return enhancedConversations
     }
 
     async createMessage(data: {
