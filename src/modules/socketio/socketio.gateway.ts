@@ -903,24 +903,43 @@ export class SocketIOGateway
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody()
         data: {
-            groupId: string
-            type: 'text' | 'image' | 'file' | 'voice'
+            // Support both Flutter format and original format
+            group?: string // Flutter format
+            groupId?: string // Original format
+            type?: 'text' | 'image' | 'file' | 'voice' | string
             content?: string
             fileUrl?: string
             metadata?: any
             replyToMessageId?: string
+            // Flutter-specific fields
+            avatar?: string | null
+            sender?: {
+                _id: string
+                name: string
+                role?: string | null
+            }
+            createdAt?: string
+            updatedAt?: string | null
+            __v?: number | null
         }
     ) {
         const startTime = Date.now()
         const messageId = `grp_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
+        // Support both Flutter and original data formats
+        const groupId = data.group || data.groupId
+        const messageType = data.type || 'text'
+        const senderId = data.sender?._id || client.userUuid
+        const senderName = data.sender?.name || client.userName
+        const senderAvatar = data.avatar || client.userAvatarUrl || ''
+
         this.logger.log(`👥 [GROUP_MESSAGE] Sending group message`)
         this.logger.log(`   ├─ Socket ID: ${client.id}`)
         this.logger.log(
-            `   ├─ Sender: ${client.userName || 'Unknown'} (${client.userUuid || 'N/A'})`
+            `   ├─ Sender: ${senderName || 'Unknown'} (${senderId || 'N/A'})`
         )
-        this.logger.log(`   ├─ Group ID: ${data.groupId}`)
-        this.logger.log(`   ├─ Message Type: ${data.type}`)
+        this.logger.log(`   ├─ Group ID: ${groupId}`)
+        this.logger.log(`   ├─ Message Type: ${messageType}`)
         this.logger.log(
             `   ├─ Content Length: ${data.content?.length || 0} chars`
         )
@@ -928,52 +947,37 @@ export class SocketIOGateway
         this.logger.log(`   ├─ Reply To: ${data.replyToMessageId || 'None'}`)
         this.logger.log(`   └─ Message ID: ${messageId}`)
 
-        if (!client.userUuid) {
-            this.logger.error(`❌ [GROUP_MESSAGE] Unauthenticated client`)
-            return { success: false, error: 'User not authenticated' }
+        if (!senderId) {
+            this.logger.error(`❌ [GROUP_MESSAGE] Missing sender ID`)
+            return { success: false, error: 'Sender ID is required' }
         }
 
-        if (!data.groupId) {
+        if (!groupId) {
             this.logger.error(`❌ [GROUP_MESSAGE] Missing group ID`)
             return { success: false, error: 'Group ID is required' }
         }
 
         try {
-            this.logger.log(`🔍 [GROUP_MESSAGE] Verifying group membership`)
-
-            // Verify user is a member of the group
-            const isMember = await this.isUserGroupMember(
-                client.userUuid,
-                data.groupId
-            )
-            if (!isMember) {
-                this.logger.error(
-                    `❌ [GROUP_MESSAGE] Access denied - not a group member`
-                )
-                this.logger.error(`   ├─ User ID: ${client.userUuid}`)
-                this.logger.error(`   └─ Group ID: ${data.groupId}`)
-                return {
-                    success: false,
-                    error: 'You are not a member of this group'
-                }
-            }
+            // Auto-join the group room
+            const roomName = `group:${groupId}`
+            client.join(roomName)
+            this.logger.log(`🔗 [GROUP_MESSAGE] Auto-joined room: ${roomName}`)
 
             this.logger.log(`💾 [GROUP_MESSAGE] Creating message in database`)
 
             // Create group message using the dedicated group chat service
             const message = await this.groupChatService.saveGroupMessage({
-                senderId: client.userUuid,
-                senderName: client.userName,
-                senderAvatarUrl: client.userAvatarUrl || '',
-                groupId: data.groupId,
+                senderId: senderId,
+                senderName: senderName,
+                senderAvatarUrl: senderAvatar,
+                groupId: groupId,
                 content: data.content,
-                messageType: data.type,
+                messageType: messageType,
                 metadata: data.metadata,
                 replyToMessageId: data.replyToMessageId
             })
 
             // Count group members in room
-            const roomName = `group:${data.groupId}`
             const membersCount =
                 this.server.sockets.adapter.rooms.get(roomName)?.size || 0
 
@@ -981,30 +985,39 @@ export class SocketIOGateway
             this.logger.log(`   ├─ Room: ${roomName}`)
             this.logger.log(`   └─ Online Members: ${membersCount}`)
 
-            // Emit to all group members
-            this.server.to(roomName).emit('GroupMessageReceived', {
-                content: message.content,
-                senderId: client.userUuid,
-                senderName: client.userName,
-                senderImage: client.userAvatarUrl || null,
-                createdAt: new Date().toISOString(),
-                groupId: data.groupId,
-                messageType: data.type,
-                messageId: messageId,
-                metadata: data.metadata,
-                replyToMessageId: data.replyToMessageId
-            })
+            // Create Flutter-compatible response
+            const response = {
+                _id: message.id,
+                group: groupId,
+                sender: {
+                    _id: senderId,
+                    name: senderName,
+                    role: data.sender?.role || 'member'
+                },
+                content: data.content,
+                avatar: senderAvatar,
+                createdAt: message.timestamp.toISOString(),
+                updatedAt: (
+                    message.updatedAt || message.timestamp
+                ).toISOString(),
+                __v: 0,
+                type: messageType,
+                success: true
+            }
+
+            // Emit to all group members with Flutter format
+            this.server.to(roomName).emit('sendGroupMessageResponse', response)
 
             const duration = Date.now() - startTime
             this.logger.log(
                 `✅ [GROUP_MESSAGE] Group message sent successfully`
             )
             this.logger.log(`   ├─ Message ID: ${message.id || messageId}`)
-            this.logger.log(`   ├─ Group ID: ${data.groupId}`)
+            this.logger.log(`   ├─ Group ID: ${groupId}`)
             this.logger.log(`   ├─ Members Notified: ${membersCount}`)
             this.logger.log(`   └─ Duration: ${duration}ms`)
 
-            return { success: true, message, groupId: data.groupId }
+            return response
         } catch (error) {
             const duration = Date.now() - startTime
             this.logger.error(`❌ [GROUP_MESSAGE] Group message send failed`)
@@ -1012,7 +1025,15 @@ export class SocketIOGateway
             this.logger.error(`   ├─ Error: ${error.message}`)
             this.logger.error(`   ├─ Duration: ${duration}ms`)
             this.logger.error(`   └─ Stack: ${error.stack}`)
-            return { success: false, error: error.message }
+
+            const errorResponse = {
+                error: 'Failed to send message',
+                message: error.message,
+                success: false
+            }
+
+            client.emit('sendGroupMessageResponse', errorResponse)
+            return errorResponse
         }
     }
 
