@@ -69,9 +69,9 @@ export class GroupChatController {
                     message.senderId
                 )
 
-                return {
+                const response = {
                     _id: message.id, // Flutter expects _id
-                    group: message.groupId,
+                    group: groupId,
                     sender: {
                         _id: message.senderId, // Flutter expects _id
                         name: message.senderName,
@@ -79,7 +79,7 @@ export class GroupChatController {
                     },
                     content: message.content,
                     avatar: message.senderAvatarUrl || '',
-                    createdAt: message.timestamp.toISOString(),
+                    createdAt: message.timestamp.toISOString(), // Ensure ISO string format
                     updatedAt: (
                         message.updatedAt || message.timestamp
                     ).toISOString(),
@@ -87,6 +87,8 @@ export class GroupChatController {
                     type: message.messageType || 'text',
                     success: true
                 }
+
+                return response
             })
         )
 
