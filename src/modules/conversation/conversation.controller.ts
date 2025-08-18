@@ -52,7 +52,7 @@ export class ConversationController {
     @ApiOperation({
         summary: 'Get user conversations without authentication',
         description:
-            'Get all conversations for a specific user (no auth required)'
+            'Get all conversations for a specific user'
     })
     @ApiBody({
         schema: {
@@ -94,6 +94,165 @@ export class ConversationController {
             return {
                 statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
                 message: 'Failed to fetch conversations',
+                error: error.message
+            }
+        }
+    }
+
+    @Post('find-conversation')
+    @ApiOperation({
+        summary: 'Find conversation between two users',
+        description:
+            'Get conversation ID between two specific users if it exists'
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                userId1: {
+                    type: 'string',
+                    description: 'First user UUID',
+                    example: 'user-1-uuid-here'
+                },
+                userId2: {
+                    type: 'string',
+                    description: 'Second user UUID',
+                    example: 'user-2-uuid-here'
+                }
+            },
+            required: ['userId1', 'userId2']
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Conversation ID if exists, null if not found'
+    })
+    async findConversationBetweenUsers(
+        @Body() body: { userId1: string; userId2: string }
+    ) {
+        if (!body.userId1 || !body.userId2) {
+            return {
+                statusCode: HttpStatus.BAD_REQUEST,
+                message: 'Both userId1 and userId2 are required',
+                data: null
+            }
+        }
+
+        if (body.userId1 === body.userId2) {
+            return {
+                statusCode: HttpStatus.BAD_REQUEST,
+                message: 'Cannot create conversation with the same user',
+                data: null
+            }
+        }
+
+        try {
+            const result =
+                await this.conversationService.getConversationIdBetweenUsers(
+                    body.userId1,
+                    body.userId2,
+                    false // Don't create if not exists
+                )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: result.conversationId
+                    ? 'Conversation found successfully'
+                    : 'No conversation exists between these users',
+                data: {
+                    conversationId: result.conversationId,
+                    exists: result.exists,
+                    participants: [body.userId1, body.userId2]
+                }
+            }
+        } catch (error) {
+            return {
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+                message: 'Failed to find conversation',
+                error: error.message
+            }
+        }
+    }
+
+    @Post('get-or-create-conversation')
+    @ApiOperation({
+        summary: 'Get or create conversation between two users',
+        description:
+            'Get existing conversation ID or create new one between two specific users (no auth required)'
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                userId1: {
+                    type: 'string',
+                    description: 'First user UUID',
+                    example: 'user-1-uuid-here'
+                },
+                userId2: {
+                    type: 'string',
+                    description: 'Second user UUID',
+                    example: 'user-2-uuid-here'
+                }
+            },
+            required: ['userId1', 'userId2']
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Conversation ID (existing or newly created)'
+    })
+    async getOrCreateConversationBetweenUsers(
+        @Body() body: { userId1: string; userId2: string }
+    ) {
+        if (!body.userId1 || !body.userId2) {
+            return {
+                statusCode: HttpStatus.BAD_REQUEST,
+                message: 'Both userId1 and userId2 are required',
+                data: null
+            }
+        }
+
+        if (body.userId1 === body.userId2) {
+            return {
+                statusCode: HttpStatus.BAD_REQUEST,
+                message: 'Cannot create conversation with the same user',
+                data: null
+            }
+        }
+
+        try {
+            const result =
+                await this.conversationService.getConversationIdBetweenUsers(
+                    body.userId1,
+                    body.userId2,
+                    true // Create if not exists
+                )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: result.exists
+                    ? 'Existing conversation found'
+                    : 'New conversation created',
+                data: {
+                    conversationId: result.conversationId,
+                    exists: result.exists,
+                    participants: [body.userId1, body.userId2],
+                    conversation: result.conversation
+                        ? {
+                              id: result.conversation.id,
+                              uuid: result.conversation.uuid,
+                              type: result.conversation.type,
+                              messageCount: result.conversation.messageCount,
+                              lastMessageAt: result.conversation.lastMessageAt
+                          }
+                        : null
+                }
+            }
+        } catch (error) {
+            return {
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+                message: 'Failed to get or create conversation',
                 error: error.message
             }
         }

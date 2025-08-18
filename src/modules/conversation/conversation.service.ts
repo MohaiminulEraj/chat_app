@@ -79,6 +79,76 @@ export class ConversationService {
         return conversation
     }
 
+    async findConversationBetweenUsers(
+        userId1: string,
+        userId2: string
+    ): Promise<Conversation | null> {
+        // Sort user IDs to ensure consistent ordering
+        const sortedIds = [userId1, userId2].sort()
+
+        // Check if conversation exists
+        const conversation = await this.conversationRepository
+            .createQueryBuilder('conversation')
+            .where('conversation.type = :type', {
+                type: ConversationType.DIRECT
+            })
+            .andWhere('conversation.participantIds IS NOT NULL')
+            .andWhere(
+                '(conversation.participantIds = :exactMatch OR ' +
+                    'conversation.participantIds = :reverseMatch)',
+                {
+                    exactMatch: sortedIds.join(','),
+                    reverseMatch: [...sortedIds].reverse().join(',')
+                }
+            )
+            .getOne()
+
+        return conversation
+    }
+
+    async getConversationIdBetweenUsers(
+        userId1: string,
+        userId2: string,
+        createIfNotExists: boolean = false
+    ): Promise<{
+        conversationId: string
+        exists: boolean
+        conversation?: Conversation
+    }> {
+        // First try to find existing conversation
+        let conversation = await this.findConversationBetweenUsers(
+            userId1,
+            userId2
+        )
+
+        if (conversation) {
+            return {
+                conversationId: conversation.uuid,
+                exists: true,
+                conversation
+            }
+        }
+
+        // If no conversation exists and createIfNotExists is true, create one
+        if (createIfNotExists) {
+            conversation = await this.getOrCreateDirectConversation(
+                userId1,
+                userId2
+            )
+            return {
+                conversationId: conversation.uuid,
+                exists: false,
+                conversation
+            }
+        }
+
+        // Return null if no conversation exists and we don't want to create one
+        return {
+            conversationId: null,
+            exists: false
+        }
+    }
+
     async getConversation(conversationId: string): Promise<Conversation> {
         const conversation = await this.conversationRepository.findOne({
             where: { uuid: conversationId }
