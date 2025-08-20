@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common'
 import { JwtModule } from '@nestjs/jwt'
-import { MongooseModule } from '@nestjs/mongoose'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module'
 import { UserModule } from '../user/user.module'
@@ -9,17 +8,11 @@ import { GroupChatGateway } from './group-chat.gateway'
 import { GroupChatService } from './group-chat.service'
 import { GroupMember } from './entities/group-member.entity'
 import { Group } from './entities/group.entity'
-import {
-    GroupMessage,
-    GroupMessageSchema
-} from './schemas/group-message.schema'
+import { GroupMessage } from './entities/group-message.entity'
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Group, GroupMember]),
-        MongooseModule.forFeature([
-            { name: GroupMessage.name, schema: GroupMessageSchema }
-        ]),
+        TypeOrmModule.forFeature([Group, GroupMember, GroupMessage]),
         JwtModule.register({
             secret: process.env.JWT_SECRET || 'your-secret-key',
             signOptions: { expiresIn: '1d' }

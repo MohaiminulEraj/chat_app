@@ -1,0 +1,345 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Group Chat Debug Tool</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            .section {
+                margin: 20px 0;
+                padding: 20px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }
+            textarea {
+                width: 100%;
+                min-height: 100px;
+                margin: 5px 0;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                background: #007bff;
+                color: white;
+                border: none;
+                cursor: pointer;
+            }
+            .log {
+                background: #f8f9fa;
+                padding: 10px;
+                margin: 5px 0;
+                border-left: 3px solid #007bff;
+            }
+            .error {
+                border-left-color: #dc3545;
+            }
+            .success {
+                border-left-color: #28a745;
+            }
+            input[type='text'] {
+                width: 300px;
+                padding: 5px;
+                margin: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Group Chat Debug Tool</h1>
+
+            <div class="section">
+                <h3>Connection Settings</h3>
+                <label
+                    >Server URL:
+                    <input
+                        type="text"
+                        id="serverUrl"
+                        value="http://localhost:3000" /></label
+                ><br />
+                <label
+                    >JWT Token:
+                    <input
+                        type="text"
+                        id="jwtToken"
+                        placeholder="Your JWT token" /></label
+                ><br />
+                <label
+                    >User ID:
+                    <input
+                        type="text"
+                        id="userId"
+                        placeholder="Your user UUID" /></label
+                ><br />
+                <label
+                    >Group ID:
+                    <input
+                        type="text"
+                        id="groupId"
+                        placeholder="Group UUID" /></label
+                ><br />
+                <button onclick="connect()">Connect</button>
+                <button onclick="disconnect()">Disconnect</button>
+            </div>
+
+            <div class="section">
+                <h3>Group Actions</h3>
+                <button onclick="joinGroup()">Join Group</button>
+                <button onclick="leaveGroup()">Leave Group</button>
+                <button onclick="getGroupMembers()">Get Group Members</button>
+            </div>
+
+            <div class="section">
+                <h3>Send Message</h3>
+                <textarea
+                    id="messageContent"
+                    placeholder="Type your message here..."
+                ></textarea
+                ><br />
+                <label
+                    >Avatar URL (optional):
+                    <input
+                        type="text"
+                        id="avatarUrl"
+                        placeholder="https://example.com/avatar.jpg" /></label
+                ><br />
+                <label
+                    >Sender Name:
+                    <input
+                        type="text"
+                        id="senderName"
+                        placeholder="Your name" /></label
+                ><br />
+                <button onclick="sendMessage()">Send Message</button>
+            </div>
+
+            <div class="section">
+                <h3>Logs</h3>
+                <button onclick="clearLogs()">Clear Logs</button>
+                <div id="logs"></div>
+            </div>
+        </div>
+
+        <script>
+            let socket = null
+            let isConnected = false
+
+            function log(message, type = 'info') {
+                const logsDiv = document.getElementById('logs')
+                const logDiv = document.createElement('div')
+                logDiv.className = `log ${type}`
+                logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`
+                logsDiv.appendChild(logDiv)
+                logsDiv.scrollTop = logsDiv.scrollHeight
+                console.log(message)
+            }
+
+            function clearLogs() {
+                document.getElementById('logs').innerHTML = ''
+            }
+
+            function connect() {
+                const serverUrl = document.getElementById('serverUrl').value
+                const jwtToken = document.getElementById('jwtToken').value
+
+                if (!jwtToken) {
+                    log('JWT Token is required', 'error')
+                    return
+                }
+
+                try {
+                    socket = io(serverUrl + '/group-chat', {
+                        transports: ['websocket', 'polling'],
+                        path: '/socket.io/'
+                    })
+
+                    socket.on('connect', () => {
+                        isConnected = true
+                        log('Connected to server', 'success')
+
+                        // Authenticate immediately after connection
+                        socket.emit('authenticate', { token: jwtToken })
+                    })
+
+                    socket.on('disconnect', () => {
+                        isConnected = false
+                        log('Disconnected from server', 'error')
+                    })
+
+                    socket.on('authenticated', (data) => {
+                        log(
+                            `Authenticated successfully: ${JSON.stringify(data)}`,
+                            'success'
+                        )
+                    })
+
+                    socket.on('authenticationError', (data) => {
+                        log(
+                            `Authentication failed: ${JSON.stringify(data)}`,
+                            'error'
+                        )
+                    })
+
+                    socket.on('error', (data) => {
+                        log(`Error: ${JSON.stringify(data)}`, 'error')
+                    })
+
+                    socket.on('joinedGroup', (data) => {
+                        log(`Joined group: ${JSON.stringify(data)}`, 'success')
+                    })
+
+                    socket.on('leftGroup', (data) => {
+                        log(`Left group: ${JSON.stringify(data)}`, 'success')
+                    })
+
+                    socket.on('sendGroupMessageResponse', (data) => {
+                        log(
+                            `Message response: ${JSON.stringify(data, null, 2)}`,
+                            'success'
+                        )
+                    })
+
+                    socket.on('newGroupMessage', (data) => {
+                        log(
+                            `New message received: ${JSON.stringify(data, null, 2)}`,
+                            'info'
+                        )
+                    })
+
+                    socket.on('groupMembersList', (data) => {
+                        log(
+                            `Group members: ${JSON.stringify(data, null, 2)}`,
+                            'info'
+                        )
+                    })
+                } catch (error) {
+                    log(`Connection error: ${error.message}`, 'error')
+                }
+            }
+
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect()
+                    socket = null
+                    isConnected = false
+                    log('Disconnected', 'info')
+                }
+            }
+
+            function joinGroup() {
+                if (!socket || !isConnected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                const userId = document.getElementById('userId').value
+
+                if (!groupId) {
+                    log('Group ID is required', 'error')
+                    return
+                }
+
+                const payload = { groupId }
+                if (userId) payload.userId = userId
+
+                socket.emit('joinGroup', payload)
+                log(`Joining group: ${groupId}`, 'info')
+            }
+
+            function leaveGroup() {
+                if (!socket || !isConnected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                const userId = document.getElementById('userId').value
+
+                if (!groupId) {
+                    log('Group ID is required', 'error')
+                    return
+                }
+
+                const payload = { groupId }
+                if (userId) payload.userId = userId
+
+                socket.emit('leaveGroup', payload)
+                log(`Leaving group: ${groupId}`, 'info')
+            }
+
+            function sendMessage() {
+                if (!socket || !isConnected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                const userId = document.getElementById('userId').value
+                const messageContent =
+                    document.getElementById('messageContent').value
+                const avatarUrl = document.getElementById('avatarUrl').value
+                const senderName = document.getElementById('senderName').value
+
+                if (!groupId || !userId || !messageContent || !senderName) {
+                    log(
+                        'Group ID, User ID, Message Content, and Sender Name are required',
+                        'error'
+                    )
+                    return
+                }
+
+                const payload = {
+                    group: groupId,
+                    avatar: avatarUrl || null,
+                    sender: {
+                        _id: userId,
+                        name: senderName,
+                        role: null
+                    },
+                    content: messageContent,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: null,
+                    __v: null,
+                    type: 'text'
+                }
+
+                socket.emit('sendGroupMessage', payload)
+                log(
+                    `Sending message: "${messageContent}" to group ${groupId}`,
+                    'info'
+                )
+
+                // Clear message content after sending
+                document.getElementById('messageContent').value = ''
+            }
+
+            function getGroupMembers() {
+                if (!socket || !isConnected) {
+                    log('Not connected to server', 'error')
+                    return
+                }
+
+                const groupId = document.getElementById('groupId').value
+                const userId = document.getElementById('userId').value
+
+                if (!groupId) {
+                    log('Group ID is required', 'error')
+                    return
+                }
+
+                const payload = { groupId }
+                if (userId) payload.userId = userId
+
+                socket.emit('getGroupMembers', payload)
+                log(`Getting group members for: ${groupId}`, 'info')
+            }
+        </script>
+    </body>
+</html>

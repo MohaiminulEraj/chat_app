@@ -1,4 +1,4 @@
-import { Logger, UseGuards } from '@nestjs/common'
+import { Logger } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import {
     ConnectedSocket,
@@ -10,9 +10,8 @@ import {
     WebSocketServer
 } from '@nestjs/websockets'
 import { Server, Socket } from 'socket.io'
-import { WsJwtGuard } from '../auth/guards/ws-jwt.guard'
 import { ConversationService } from './conversation.service'
-import { MessageType } from './schemas/message.schema'
+import { MessageType } from './entities/message.entity'
 
 @WebSocketGateway({
     cors: {
@@ -20,9 +19,7 @@ import { MessageType } from './schemas/message.schema'
         methods: ['GET', 'POST'],
         credentials: true
     },
-    namespace: 'chat',
-    transports: ['websocket', 'polling'],
-    path: '/socket.io/' // Make sure path is standard
+    transports: ['websocket', 'polling']
 })
 export class ConversationGateway
     implements OnGatewayConnection, OnGatewayDisconnect
@@ -136,14 +133,35 @@ export class ConversationGateway
             replyTo?: string
         }
     ) {
-        const senderId = data.senderId ?? client['user'].uuid
+        // Ensure senderId is provided since no authentication
+        if (!data.senderId) {
+            this.logger.error(
+                `No senderId provided for message from client ${client.id}`
+            )
+            client.emit('sendMessageResponse', {
+                success: false,
+                error: 'senderId is required'
+            })
+            return { success: false, error: 'senderId is required' }
+        }
+
+        const senderId = data.senderId
 
         try {
             this.logger.log(`User ${senderId} attempting to send message`)
+            this.logger.log(`Raw data received: ${JSON.stringify(data)}`)
+            this.logger.log(
+                `conversationId type: ${typeof data.conversationId}`
+            )
+            this.logger.log(`conversationId value: "${data.conversationId}"`)
 
             // Get or create conversation
             let conversation
-            if (data.conversationId) {
+            if (
+                data.conversationId &&
+                data.conversationId !== 'undefined' &&
+                data.conversationId !== 'string'
+            ) {
                 this.logger.log(
                     `Using existing conversation: ${data.conversationId}`
                 )
@@ -168,7 +186,11 @@ export class ConversationGateway
                 )
             }
 
-            // Save message to MongoDB
+            // Get sender's full profile information
+            const senderProfile =
+                await this.conversationService.getUserProfile(senderId)
+
+            // Save message to PostgreSQL
             const message = await this.conversationService.createMessage({
                 conversationId: conversation.uuid,
                 senderId,
@@ -177,6 +199,24 @@ export class ConversationGateway
                 fileUrl: data.fileUrl,
                 replyTo: data.replyTo
             })
+
+            // Create enhanced message with sender profile in specified format
+            const enhancedMessage = {
+                _id: message.id,
+                sender: {
+                    _id: senderId,
+                    name:
+                        senderProfile.displayName ||
+                        senderProfile.name ||
+                        'Unknown User',
+                    role: 'member' // Default role, can be enhanced based on conversation permissions
+                },
+                content: message.content || '',
+                avatar: senderProfile.avatarUrl || '',
+                createdAt: message.createdAt,
+                updatedAt: message.updatedAt,
+                __v: 0
+            }
 
             // Ensure all participants are in the conversation room
             conversation.participantIds.forEach((participantId) => {
@@ -196,7 +236,7 @@ export class ConversationGateway
                 }
             })
 
-            // Emit message to all participants
+            // Emit message to all participants with sender profile
             this.logger.log(
                 `Emitting newMessage to conversation room: conversation:${conversation.uuid}`
             )
@@ -204,10 +244,7 @@ export class ConversationGateway
                 .to(`conversation:${conversation.uuid}`)
                 .emit('newMessage', {
                     conversation: conversation.uuid,
-                    message: {
-                        ...message,
-                        senderName: client['user'].email || 'Unknown User' // Add sender name for better identification
-                    }
+                    message: enhancedMessage
                 })
 
             // Also emit to individual user rooms as fallback
@@ -222,10 +259,7 @@ export class ConversationGateway
                     )
                     this.server.to(`user:${participantId}`).emit('newMessage', {
                         conversation: conversation.uuid,
-                        message: {
-                            ...message,
-                            senderName: client['user'].email || 'Unknown User'
-                        }
+                        message: enhancedMessage
                     })
                 }
             })
@@ -239,13 +273,29 @@ export class ConversationGateway
 
             // TODO: Send push notifications to offline users
 
-            return { success: true, message }
+            // Emit sendMessageResponse to the sender
+            this.logger.log(
+                `Emitting sendMessageResponse to sender: ${senderId}`
+            )
+            client.emit('sendMessageResponse', {
+                success: true,
+                message: enhancedMessage
+            })
+
+            return { success: true }
         } catch (error) {
+            this.logger.error(`Send message failed: ${error.message}`)
+
+            // Emit error response to the sender
+            client.emit('sendMessageResponse', {
+                success: false,
+                error: error.message
+            })
+
             return { success: false, error: error.message }
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('markAsRead')
     async handleMarkAsRead(
         @ConnectedSocket() client: Socket,
@@ -253,9 +303,14 @@ export class ConversationGateway
         data: {
             conversationId: string
             messageIds: string[]
+            userId: string
         }
     ) {
-        const userId = client['user'].uuid
+        if (!data.userId) {
+            return { success: false, error: 'userId is required' }
+        }
+
+        const userId = data.userId
 
         try {
             await this.conversationService.markMessagesAsRead(
@@ -279,7 +334,6 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('typing')
     async handleTyping(
         @ConnectedSocket() client: Socket,
@@ -287,9 +341,14 @@ export class ConversationGateway
         data: {
             conversationId: string
             isTyping: boolean
+            userId: string
         }
     ) {
-        const userId = client['user'].uuid
+        if (!data.userId) {
+            return { success: false, error: 'userId is required' }
+        }
+
+        const userId = data.userId
 
         // Broadcast typing status to other participants
         client.to(`conversation:${data.conversationId}`).emit('userTyping', {
@@ -301,7 +360,6 @@ export class ConversationGateway
         return { success: true }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('deleteMessage')
     async handleDeleteMessage(
         @ConnectedSocket() client: Socket,
@@ -309,9 +367,14 @@ export class ConversationGateway
         data: {
             conversationId: string
             messageId: string
+            userId: string
         }
     ) {
-        const userId = client['user'].uuid
+        if (!data.userId) {
+            return { success: false, error: 'userId is required' }
+        }
+
+        const userId = data.userId
 
         try {
             await this.conversationService.deleteMessage(
@@ -334,7 +397,6 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('editMessage')
     async handleEditMessage(
         @ConnectedSocket() client: Socket,
@@ -343,9 +405,14 @@ export class ConversationGateway
             conversationId: string
             messageId: string
             newContent: string
+            userId: string
         }
     ) {
-        const userId = client['user'].uuid
+        if (!data.userId) {
+            return { success: false, error: 'userId is required' }
+        }
+
+        const userId = data.userId
 
         try {
             const updatedMessage = await this.conversationService.editMessage(
@@ -369,14 +436,17 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('joinConversation')
     async handleJoinConversation(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { conversationId: string }
+        @MessageBody() data: { conversationId: string; userId: string }
     ) {
         try {
-            const userId = client['user'].uuid
+            if (!data.userId) {
+                return { success: false, error: 'userId is required' }
+            }
+
+            const userId = data.userId
 
             // Verify user is participant
             const conversation = await this.conversationService.getConversation(
@@ -397,14 +467,17 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('leaveConversation')
     async handleLeaveConversation(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { conversationId: string }
+        @MessageBody() data: { conversationId: string; userId: string }
     ) {
         try {
-            const userId = client['user'].uuid
+            if (!data.userId) {
+                return { success: false, error: 'userId is required' }
+            }
+
+            const userId = data.userId
             client.leave(`conversation:${data.conversationId}`)
             this.logger.log(
                 `User ${userId} left conversation ${data.conversationId}`
@@ -416,7 +489,6 @@ export class ConversationGateway
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('getConversationHistory')
     async handleGetConversationHistory(
         @ConnectedSocket() client: Socket,
@@ -424,12 +496,15 @@ export class ConversationGateway
         data: {
             conversationId?: string
             recipientId?: string
-            limit?: number
-            before?: string
+            userId: string
         }
     ) {
         try {
-            const userId = client['user'].uuid
+            if (!data.userId) {
+                return { success: false, error: 'userId is required' }
+            }
+
+            const userId = data.userId
             let conversationId = data.conversationId
 
             // If no conversationId but recipientId provided, get or create conversation
@@ -451,9 +526,7 @@ export class ConversationGateway
 
             const messages = await this.conversationService.getMessages(
                 conversationId,
-                userId,
-                data.limit || 50,
-                data.before
+                userId
             )
 
             // Auto-join conversation room when fetching history
@@ -463,18 +536,24 @@ export class ConversationGateway
                 success: true,
                 conversationId,
                 messages,
-                hasMore: messages.length === (data.limit || 50)
+                hasMore: false // No pagination, so no more messages
             }
         } catch (error) {
             return { success: false, error: error.message }
         }
     }
 
-    @UseGuards(WsJwtGuard)
     @SubscribeMessage('getUserConversations')
-    async handleGetUserConversations(@ConnectedSocket() client: Socket) {
+    async handleGetUserConversations(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { userId: string }
+    ) {
         try {
-            const userId = client['user'].uuid
+            if (!data.userId) {
+                return { success: false, error: 'userId is required' }
+            }
+
+            const userId = data.userId
             const conversations =
                 await this.conversationService.getUserConversations(userId)
 

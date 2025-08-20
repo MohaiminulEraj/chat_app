@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common'
 import { JwtModule } from '@nestjs/jwt'
-import { MongooseModule } from '@nestjs/mongoose'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module'
 import { CloudinaryModule } from '../cloudinary/cloudinary.module'
@@ -15,10 +14,7 @@ import { GroupMember } from './entities/group-member.entity'
 import { GroupRole } from './entities/group-role.entity'
 import { GroupSettings } from './entities/group-settings.entity'
 import { Group } from './entities/group.entity'
-import {
-    GroupMessage,
-    GroupMessageSchema
-} from './schemas/group-message.schema'
+import { GroupMessage } from './entities/group-message.entity'
 
 @Module({
     imports: [
@@ -27,10 +23,8 @@ import {
             GroupMember,
             GroupRole,
             GroupSettings,
-            User
-        ]),
-        MongooseModule.forFeature([
-            { name: GroupMessage.name, schema: GroupMessageSchema }
+            User,
+            GroupMessage
         ]),
         JwtModule.register({
             secret: process.env.JWT_SECRET || 'your-secret-key',

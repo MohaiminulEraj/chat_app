@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Find Conversation API Test</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            .input-group {
+                margin-bottom: 15px;
+            }
+            label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+            }
+            input,
+            button {
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }
+            input {
+                width: 300px;
+                margin-right: 10px;
+            }
+            button {
+                background-color: #007bff;
+                color: white;
+                cursor: pointer;
+                margin-right: 10px;
+                margin-bottom: 10px;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            button.secondary {
+                background-color: #28a745;
+            }
+            button.secondary:hover {
+                background-color: #1e7e34;
+            }
+            button.danger {
+                background-color: #dc3545;
+            }
+            button.danger:hover {
+                background-color: #c82333;
+            }
+            .response {
+                margin-top: 20px;
+                padding: 15px;
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                border: 1px solid #e9ecef;
+            }
+            .error {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            .success {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+            .warning {
+                background-color: #fff3cd;
+                color: #856404;
+                border: 1px solid #ffeaa7;
+            }
+            .info {
+                background-color: #e3f2fd;
+                color: #1565c0;
+                border: 1px solid #bbdefb;
+            }
+            .endpoint-info {
+                background: #e3f2fd;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                border-left: 4px solid #2196f3;
+            }
+            pre {
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 5px;
+                overflow-x: auto;
+                font-size: 12px;
+            }
+            .user-inputs {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                align-items: end;
+            }
+            .conversation-result {
+                background: #ffffff;
+                border: 1px solid #ddd;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 8px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+            .conversation-id {
+                font-family: 'Courier New', monospace;
+                background: #f1f3f4;
+                padding: 5px 8px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            .sample-users {
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔍 Find Conversation Between Users API Test</h1>
+
+            <div class="endpoint-info">
+                <h3>📡 Available API Endpoints</h3>
+                <p><strong>1. Find Existing Conversation:</strong></p>
+                <p><code>POST /api/v1/conversations/find-conversation</code></p>
+                <p>Returns conversation ID if exists, null if not found</p>
+
+                <p><strong>2. Get or Create Conversation:</strong></p>
+                <p>
+                    <code
+                        >POST
+                        /api/v1/conversations/get-or-create-conversation</code
+                    >
+                </p>
+                <p>Returns existing conversation ID or creates new one</p>
+
+                <p><strong>✅ No Authentication Required</strong></p>
+            </div>
+
+            <div class="sample-users">
+                <h4>📝 Sample User IDs for Testing:</h4>
+                <p>
+                    <strong>User 1:</strong>
+                    <code>550e8400-e29b-41d4-a716-446655440000</code>
+                </p>
+                <p>
+                    <strong>User 2:</strong>
+                    <code>6ba7b810-9dad-11d1-80b4-00c04fd430c8</code>
+                </p>
+                <p>
+                    <strong>User 3:</strong>
+                    <code>123e4567-e89b-12d3-a456-426614174000</code>
+                </p>
+            </div>
+
+            <div class="user-inputs">
+                <div class="input-group">
+                    <label for="userId1">User 1 ID:</label>
+                    <input
+                        type="text"
+                        id="userId1"
+                        placeholder="Enter first user UUID"
+                        value="550e8400-e29b-41d4-a716-446655440000"
+                    />
+                </div>
+
+                <div class="input-group">
+                    <label for="userId2">User 2 ID:</label>
+                    <input
+                        type="text"
+                        id="userId2"
+                        placeholder="Enter second user UUID"
+                        value="6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                    />
+                </div>
+            </div>
+
+            <div class="input-group">
+                <button onclick="findConversation()">
+                    🔍 Find Existing Conversation
+                </button>
+                <button onclick="getOrCreateConversation()" class="secondary">
+                    🔄 Get or Create Conversation
+                </button>
+                <button onclick="clearResponse()" class="danger">
+                    🗑️ Clear
+                </button>
+            </div>
+
+            <div class="input-group">
+                <h4>Quick Test Combinations:</h4>
+                <button
+                    onclick="setUsers('550e8400-e29b-41d4-a716-446655440000', '6ba7b810-9dad-11d1-80b4-00c04fd430c8')"
+                >
+                    User 1 ↔ User 2
+                </button>
+                <button
+                    onclick="setUsers('550e8400-e29b-41d4-a716-446655440000', '123e4567-e89b-12d3-a456-426614174000')"
+                >
+                    User 1 ↔ User 3
+                </button>
+                <button
+                    onclick="setUsers('6ba7b810-9dad-11d1-80b4-00c04fd430c8', '123e4567-e89b-12d3-a456-426614174000')"
+                >
+                    User 2 ↔ User 3
+                </button>
+            </div>
+
+            <div id="responseContainer"></div>
+        </div>
+
+        <script>
+            function setUsers(user1, user2) {
+                document.getElementById('userId1').value = user1
+                document.getElementById('userId2').value = user2
+            }
+
+            async function findConversation() {
+                const userId1 = document.getElementById('userId1').value.trim()
+                const userId2 = document.getElementById('userId2').value.trim()
+
+                if (!userId1 || !userId2) {
+                    showResponse(
+                        {
+                            statusCode: 400,
+                            message: 'Please enter both User IDs',
+                            data: null
+                        },
+                        'error'
+                    )
+                    return
+                }
+
+                if (userId1 === userId2) {
+                    showResponse(
+                        {
+                            statusCode: 400,
+                            message:
+                                'Cannot create conversation with the same user',
+                            data: null
+                        },
+                        'error'
+                    )
+                    return
+                }
+
+                try {
+                    showResponse(
+                        {
+                            statusCode: 'loading',
+                            message: 'Searching for existing conversation...',
+                            data: null
+                        },
+                        'info'
+                    )
+
+                    const response = await fetch(
+                        'http://localhost:3001/api/v1/conversations/find-conversation',
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                userId1: userId1,
+                                userId2: userId2
+                            })
+                        }
+                    )
+
+                    const result = await response.json()
+                    showResponse(result, response.ok ? 'success' : 'error')
+                } catch (error) {
+                    showResponse(
+                        {
+                            statusCode: 'error',
+                            message: 'Network error: ' + error.message,
+                            data: null
+                        },
+                        'error'
+                    )
+                }
+            }
+
+            async function getOrCreateConversation() {
+                const userId1 = document.getElementById('userId1').value.trim()
+                const userId2 = document.getElementById('userId2').value.trim()
+
+                if (!userId1 || !userId2) {
+                    showResponse(
+                        {
+                            statusCode: 400,
+                            message: 'Please enter both User IDs',
+                            data: null
+                        },
+                        'error'
+                    )
+                    return
+                }
+
+                if (userId1 === userId2) {
+                    showResponse(
+                        {
+                            statusCode: 400,
+                            message:
+                                'Cannot create conversation with the same user',
+                            data: null
+                        },
+                        'error'
+                    )
+                    return
+                }
+
+                try {
+                    showResponse(
+                        {
+                            statusCode: 'loading',
+                            message: 'Getting or creating conversation...',
+                            data: null
+                        },
+                        'info'
+                    )
+
+                    const response = await fetch(
+                        'http://localhost:3001/api/v1/conversations/get-or-create-conversation',
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                userId1: userId1,
+                                userId2: userId2
+                            })
+                        }
+                    )
+
+                    const result = await response.json()
+                    showResponse(result, response.ok ? 'success' : 'error')
+                } catch (error) {
+                    showResponse(
+                        {
+                            statusCode: 'error',
+                            message: 'Network error: ' + error.message,
+                            data: null
+                        },
+                        'error'
+                    )
+                }
+            }
+
+            function showResponse(data, type) {
+                const responseContainer =
+                    document.getElementById('responseContainer')
+
+                let html = `<div class="response ${type}">`
+
+                if (data.statusCode === 'loading') {
+                    html += `<h3>⏳ ${data.message}</h3>`
+                } else if (data.statusCode === 200 && data.data) {
+                    const conversationData = data.data
+                    html += `
+                    <h3>✅ ${data.message}</h3>
+                    <div class="conversation-result">
+                `
+
+                    if (conversationData.conversationId) {
+                        html += `
+                        <p><strong>🆔 Conversation ID:</strong> <span class="conversation-id">${conversationData.conversationId}</span></p>
+                        <p><strong>📊 Status:</strong> ${conversationData.exists ? '📋 Existing conversation found' : '🆕 New conversation created'}</p>
+                        <p><strong>👥 Participants:</strong> ${conversationData.participants.join(' ↔ ')}</p>
+                    `
+
+                        if (conversationData.conversation) {
+                            html += `
+                            <h4>📋 Conversation Details:</h4>
+                            <ul>
+                                <li><strong>Internal ID:</strong> ${conversationData.conversation.id}</li>
+                                <li><strong>Type:</strong> ${conversationData.conversation.type}</li>
+                                <li><strong>Message Count:</strong> ${conversationData.conversation.messageCount}</li>
+                                <li><strong>Last Message:</strong> ${conversationData.conversation.lastMessageAt ? new Date(conversationData.conversation.lastMessageAt).toLocaleString() : 'No messages yet'}</li>
+                            </ul>
+                        `
+                        }
+                    } else {
+                        html += `
+                        <p><strong>❌ No Conversation Found</strong></p>
+                        <p>There is no existing conversation between these users.</p>
+                        <p><strong>💡 Tip:</strong> Use "Get or Create Conversation" to create a new one.</p>
+                    `
+                    }
+
+                    html += `</div>`
+
+                    html += `
+                    <h4>📋 Raw JSON Response:</h4>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `
+                } else {
+                    html += `
+                    <h3>❌ Error Response</h3>
+                    <p><strong>Status:</strong> ${data.statusCode}</p>
+                    <p><strong>Message:</strong> ${data.message}</p>
+                    ${data.error ? `<p><strong>Error:</strong> ${data.error}</p>` : ''}
+                    <h4>📋 Raw JSON Response:</h4>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `
+                }
+
+                html += '</div>'
+                responseContainer.innerHTML = html
+            }
+
+            function clearResponse() {
+                document.getElementById('responseContainer').innerHTML = ''
+            }
+
+            // Show initial instructions
+            document.addEventListener('DOMContentLoaded', function () {
+                showResponse(
+                    {
+                        statusCode: 'info',
+                        message: 'Ready to test conversation lookup API',
+                        data: 'Enter two User IDs and click "Find Existing Conversation" to check if they have chatted before, or "Get or Create Conversation" to get an existing conversation or create a new one.'
+                    },
+                    'info'
+                )
+            })
+        </script>
+    </body>
+</html>

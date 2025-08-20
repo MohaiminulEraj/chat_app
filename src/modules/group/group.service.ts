@@ -650,22 +650,36 @@ export class GroupService {
     }
 
     async getGroupMembers(groupId: string): Promise<GroupMember[]> {
-        return this.memberRepository.find({
+        const members = await this.memberRepository.find({
             where: { groupId },
             relations: ['user', 'role'],
             order: { role: { priority: 'DESC' } }
         })
+
+        // Add userRole information to each member
+        members.forEach((member) => {
+            // Add userRole to member object
+            ;(member as any).userRole = member.role?.name || 'member'
+
+            // Add userRole to user object within member
+            if (member.user) {
+                ;(member.user as any).userRole = member.role?.name || 'member'
+            }
+        })
+
+        return members
     }
 
     async getUserGroups(userId: string): Promise<any[]> {
         const memberships = await this.memberRepository.find({
             where: { userId },
-            relations: ['group', 'group.rooms']
+            relations: ['group', 'group.rooms', 'role']
         })
 
         return memberships.map((m) => ({
             ...m.group,
-            isRoomActive: m.group.rooms && m.group.rooms.length > 0
+            isRoomActive: m.group.rooms && m.group.rooms.length > 0,
+            userRole: m.role?.name || 'member'
         }))
     }
 
@@ -865,6 +879,24 @@ export class GroupService {
                 }
             }
         })
+
+        if (!group) {
+            return null
+        }
+
+        // Add userRole information to each member
+        if (group.members) {
+            group.members.forEach((member) => {
+                // Add userRole to member object
+                ;(member as any).userRole = member.role?.name || 'member'
+
+                // Add userRole to user object within member
+                if (member.user) {
+                    ;(member.user as any).userRole =
+                        member.role?.name || 'member'
+                }
+            })
+        }
 
         return group
     }

@@ -15,7 +15,8 @@ import {
     ApiTags,
     ApiOperation,
     ApiResponse,
-    ApiBearerAuth
+    ApiBearerAuth,
+    ApiQuery
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { GroupChatService } from './group-chat.service'
@@ -29,17 +30,39 @@ export class GroupChatController {
 
     @Get(':groupId/messages')
     @ApiOperation({ summary: 'Get group message history' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Page number (default: 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Messages per page (max: 100, default: 50)'
+    })
+    @ApiQuery({
+        name: 'before',
+        required: false,
+        type: String,
+        description: 'Get messages before this message ID'
+    })
     @ApiResponse({
         status: 200,
         description: 'Messages retrieved successfully'
     })
     async getGroupMessages(
         @Param('groupId') groupId: string,
-        @Request() req: any
-        // @Query('page') page: number = 1,
-        // @Query('limit') limit: number = 50,
-        // @Query('before') before?: string
+        @Request() req: any,
+        @Query('page') pageParam: string = '1',
+        @Query('limit') limitParam: string = '50',
+        @Query('before') before?: string
     ) {
+        // Convert query parameters to numbers with validation
+        const page = Math.max(parseInt(pageParam) || 1, 1)
+        const limit = Math.min(Math.max(parseInt(limitParam) || 50, 1), 100) // Max 100 messages per request
+
         // Verify user is member of the group
         const isMember = await this.groupChatService.verifyGroupMembership(
             req.user.uuid,
@@ -54,20 +77,52 @@ export class GroupChatController {
         }
 
         const messages = await this.groupChatService.getGroupMessageHistory(
-            groupId
-            // page,
-            // limit,
-            // before
+            groupId,
+            page,
+            limit,
+            before
+        )
+
+        // Format messages to match sendGroupMessageResponse format
+        const formattedMessages = await Promise.all(
+            messages.map(async (message) => {
+                // Get user's actual role from database
+                const userRole = await this.groupChatService.getUserRole(
+                    groupId,
+                    message.senderId
+                )
+
+                const response = {
+                    _id: message.id, // Flutter expects _id
+                    group: groupId,
+                    sender: {
+                        _id: message.senderId, // Flutter expects _id
+                        name: message.senderName,
+                        role: userRole || 'member'
+                    },
+                    content: message.content,
+                    avatar: message.senderAvatarUrl || '',
+                    createdAt: message.timestamp.toISOString(), // Ensure ISO string format
+                    updatedAt: (
+                        message.updatedAt || message.timestamp
+                    ).toISOString(),
+                    __v: 0,
+                    type: message.messageType || 'text',
+                    success: true
+                }
+
+                return response
+            })
         )
 
         return {
             statusCode: HttpStatus.OK,
             message: 'Messages retrieved successfully',
             data: {
-                messages
-                // page,
-                // limit,
-                // hasMore: messages.length === limit
+                messages: formattedMessages,
+                page,
+                limit,
+                hasMore: messages.length === limit
             }
         }
     }

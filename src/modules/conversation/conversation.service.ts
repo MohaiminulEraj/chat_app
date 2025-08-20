@@ -3,23 +3,36 @@ import {
     Injectable,
     NotFoundException
 } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Model } from 'mongoose'
 import { Repository } from 'typeorm'
 import { v4 as uuidv4 } from 'uuid'
 import { User } from '../user/entities/user.entity'
 import { UserService } from '../user/user.service'
 import { Conversation, ConversationType } from './entities/conversation.entity'
-import { Message, MessageType } from './schemas/message.schema'
+import { Message, MessageType, MessageStatus } from './entities/message.entity'
+
+export interface ConversationResponse {
+    id: number
+    uuid: string
+    type: ConversationType
+    participantIds: string[]
+    messageCount: number
+    lastMessageAt: Date
+    lastMessagePreview: string
+    // Enhanced fields for API response
+    avatar: string
+    name: string
+    lastMessage: string
+    lastMessageTime: Date
+}
 
 @Injectable()
 export class ConversationService {
     constructor(
         @InjectRepository(Conversation)
         private conversationRepository: Repository<Conversation>,
-        @InjectModel(Message.name)
-        private messageModel: Model<Message>,
+        @InjectRepository(Message)
+        private messageRepository: Repository<Message>,
         @InjectRepository(User)
         private userRepository: Repository<User>,
         private userService: UserService
@@ -66,6 +79,76 @@ export class ConversationService {
         return conversation
     }
 
+    async findConversationBetweenUsers(
+        userId1: string,
+        userId2: string
+    ): Promise<Conversation | null> {
+        // Sort user IDs to ensure consistent ordering
+        const sortedIds = [userId1, userId2].sort()
+
+        // Check if conversation exists
+        const conversation = await this.conversationRepository
+            .createQueryBuilder('conversation')
+            .where('conversation.type = :type', {
+                type: ConversationType.DIRECT
+            })
+            .andWhere('conversation.participantIds IS NOT NULL')
+            .andWhere(
+                '(conversation.participantIds = :exactMatch OR ' +
+                    'conversation.participantIds = :reverseMatch)',
+                {
+                    exactMatch: sortedIds.join(','),
+                    reverseMatch: [...sortedIds].reverse().join(',')
+                }
+            )
+            .getOne()
+
+        return conversation
+    }
+
+    async getConversationIdBetweenUsers(
+        userId1: string,
+        userId2: string,
+        createIfNotExists: boolean = false
+    ): Promise<{
+        conversationId: string
+        exists: boolean
+        conversation?: Conversation
+    }> {
+        // First try to find existing conversation
+        let conversation = await this.findConversationBetweenUsers(
+            userId1,
+            userId2
+        )
+
+        if (conversation) {
+            return {
+                conversationId: conversation.uuid,
+                exists: true,
+                conversation
+            }
+        }
+
+        // If no conversation exists and createIfNotExists is true, create one
+        if (createIfNotExists) {
+            conversation = await this.getOrCreateDirectConversation(
+                userId1,
+                userId2
+            )
+            return {
+                conversationId: conversation.uuid,
+                exists: false,
+                conversation
+            }
+        }
+
+        // Return null if no conversation exists and we don't want to create one
+        return {
+            conversationId: null,
+            exists: false
+        }
+    }
+
     async getConversation(conversationId: string): Promise<Conversation> {
         const conversation = await this.conversationRepository.findOne({
             where: { uuid: conversationId }
@@ -78,8 +161,10 @@ export class ConversationService {
         return conversation
     }
 
-    async getUserConversations(userId: string): Promise<Conversation[]> {
-        return this.conversationRepository
+    async getUserConversations(
+        userId: string
+    ): Promise<ConversationResponse[]> {
+        const conversations = await this.conversationRepository
             .createQueryBuilder('conversation')
             .where('conversation.participantIds IS NOT NULL')
             .andWhere("conversation.participantIds != ''")
@@ -97,6 +182,71 @@ export class ConversationService {
             )
             .orderBy('conversation.lastMessageAt', 'DESC')
             .getMany()
+
+        // Enhance conversations with participant details
+        const enhancedConversations: ConversationResponse[] = []
+
+        for (const conversation of conversations) {
+            // For direct conversations, get the other participant's details
+            let participantDetails: any = {}
+
+            if (conversation.type === ConversationType.DIRECT) {
+                // Find the other participant (not the current user)
+                const otherParticipantId = conversation.participantIds.find(
+                    (id) => id !== userId
+                )
+
+                if (otherParticipantId) {
+                    try {
+                        const otherUser =
+                            await this.getUserProfile(otherParticipantId)
+                        participantDetails = {
+                            avatar: otherUser.avatarUrl || '',
+                            name:
+                                otherUser.displayName ||
+                                otherUser.name ||
+                                'Unknown User'
+                        }
+                    } catch (error) {
+                        // If user not found, use default values
+                        participantDetails = {
+                            avatar: '',
+                            name: 'Unknown User'
+                        }
+                    }
+                } else {
+                    participantDetails = {
+                        avatar: '',
+                        name: 'Unknown User'
+                    }
+                }
+            } else {
+                // For group conversations, you can customize this logic
+                participantDetails = {
+                    avatar: '',
+                    name: `Group Chat (${conversation.participantIds.length} members)`
+                }
+            }
+
+            const enhancedConversation: ConversationResponse = {
+                id: conversation.id,
+                uuid: conversation.uuid,
+                type: conversation.type,
+                participantIds: conversation.participantIds,
+                messageCount: conversation.messageCount,
+                lastMessageAt: conversation.lastMessageAt,
+                lastMessagePreview: conversation.lastMessagePreview || '',
+                avatar: participantDetails.avatar,
+                name: participantDetails.name,
+                lastMessage:
+                    conversation.lastMessagePreview || 'No messages yet',
+                lastMessageTime: conversation.lastMessageAt
+            }
+
+            enhancedConversations.push(enhancedConversation)
+        }
+
+        return enhancedConversations
     }
 
     async createMessage(data: {
@@ -119,18 +269,18 @@ export class ConversationService {
             )
         }
 
-        // Create message in MongoDB
-        const message = new this.messageModel({
+        // Create message in PostgreSQL
+        const message = this.messageRepository.create({
             ...data,
-            status: 'sent',
+            status: MessageStatus.SENT,
             readBy: [data.senderId], // Sender has read their own message
             deliveredTo: [data.senderId]
         })
 
-        const savedMessage = await message.save()
+        const savedMessage = await this.messageRepository.save(message)
 
         // Update conversation metadata
-        await this.conversationRepository.update(conversation.uuid, {
+        await this.conversationRepository.update(conversation.id, {
             lastMessageAt: new Date(),
             lastMessagePreview:
                 data.type === MessageType.TEXT
@@ -144,9 +294,7 @@ export class ConversationService {
 
     async getMessages(
         conversationId: string,
-        userId: string,
-        limit: number = 50,
-        before?: string
+        userId: string
     ): Promise<Message[]> {
         const conversation = await this.getConversation(conversationId)
 
@@ -160,20 +308,16 @@ export class ConversationService {
             )
         }
 
-        const query = this.messageModel
-            .find({
-                conversationId,
-                isDeleted: false
+        const queryBuilder = this.messageRepository
+            .createQueryBuilder('message')
+            .where('message.conversationId = :conversationId', {
+                conversationId
             })
-            .sort({ createdAt: -1 })
-            .limit(limit)
+            .andWhere('message.isDeleted = false')
+            .andWhere('NOT (:userId = ANY(message.deletedFor))', { userId })
+            .orderBy('message.createdAt', 'ASC')
 
-        if (before) {
-            const beforeTime = new Date(before).getTime()
-            query.where('createdAt').lt(beforeTime)
-        }
-
-        return query.exec()
+        return queryBuilder.getMany()
     }
 
     async markMessagesAsRead(
@@ -193,17 +337,18 @@ export class ConversationService {
             )
         }
 
-        await this.messageModel.updateMany(
-            {
-                _id: { $in: messageIds },
-                conversationId,
-                senderId: { $ne: userId }
-            },
-            {
-                $addToSet: { readBy: userId },
-                $set: { status: 'read' }
-            }
-        )
+        await this.messageRepository
+            .createQueryBuilder()
+            .update(Message)
+            .set({
+                readBy: () => `array_append("readBy", '${userId}')`,
+                status: MessageStatus.READ
+            })
+            .where('id IN (:...messageIds)', { messageIds })
+            .andWhere('conversationId = :conversationId', { conversationId })
+            .andWhere('senderId != :userId', { userId })
+            .andWhere('NOT (:userId = ANY("readBy"))', { userId })
+            .execute()
     }
 
     async deleteMessage(
@@ -211,9 +356,11 @@ export class ConversationService {
         messageId: string,
         userId: string
     ): Promise<void> {
-        const message = await this.messageModel.findOne({
-            _id: messageId,
-            conversationId
+        const message = await this.messageRepository.findOne({
+            where: {
+                id: messageId,
+                conversationId
+            }
         })
 
         if (!message) {
@@ -228,7 +375,7 @@ export class ConversationService {
 
         message.isDeleted = true
         message.deletedAt = new Date()
-        await message.save()
+        await this.messageRepository.save(message)
     }
 
     async editMessage(
@@ -237,9 +384,11 @@ export class ConversationService {
         userId: string,
         newContent: string
     ): Promise<Message> {
-        const message = await this.messageModel.findOne({
-            _id: messageId,
-            conversationId
+        const message = await this.messageRepository.findOne({
+            where: {
+                id: messageId,
+                conversationId
+            }
         })
 
         if (!message) {
@@ -258,7 +407,7 @@ export class ConversationService {
         message.isEdited = true
         message.editedAt = new Date()
 
-        return message.save()
+        return this.messageRepository.save(message)
     }
 
     async updateUserStatus(userId: string, status: string): Promise<void> {
@@ -280,5 +429,32 @@ export class ConversationService {
             .where('user.uuid IN (:...ids)', { ids: offlineUserIds })
             .andWhere('user.status != :status', { status: 'online' })
             .getMany()
+    }
+
+    async getUserProfile(userId: string): Promise<User> {
+        const user = await this.userRepository.findOne({
+            where: { uuid: userId, isActive: true },
+            select: [
+                'uuid',
+                'name',
+                'email',
+                'displayName',
+                'avatarUrl',
+                'coverImage',
+                'country',
+                'level',
+                'balance',
+                'frameId',
+                'frameImage',
+                'badge',
+                'bio'
+            ]
+        })
+
+        if (!user) {
+            throw new NotFoundException('User not found')
+        }
+
+        return user
     }
 }

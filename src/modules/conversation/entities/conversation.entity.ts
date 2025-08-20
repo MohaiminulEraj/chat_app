@@ -19,7 +19,7 @@ export class Conversation extends CustomBaseEntity {
     type: ConversationType
 
     @Column()
-    collectionName: string // MongoDB collection name
+    collectionName: string // PostgreSQL table name for additional metadata
 
     @Column('simple-array')
     participantIds: string[] // User UUIDs

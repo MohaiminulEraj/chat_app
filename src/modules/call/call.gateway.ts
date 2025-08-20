@@ -9,7 +9,7 @@ import {
 import { Server, Socket } from 'socket.io'
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard'
 import { ConversationService } from '../conversation/conversation.service'
-import { CallType, MessageType } from '../conversation/schemas/message.schema'
+import { CallType, MessageType } from '../conversation/entities/message.entity'
 
 @WebSocketGateway({
     cors: {
@@ -55,12 +55,12 @@ export class CallGateway {
                 content: `${data.callType} call`
             })
 
-            const callRoom = `call:${callMessage._id}`
+            const callRoom = `call:${callMessage.id}`
             client.join(callRoom)
 
             // Notify recipient
             this.server.to(`user:${data.recipientId}`).emit('incomingCall', {
-                callId: callMessage._id,
+                callId: callMessage.id,
                 callerId,
                 callerName: client['user'].displayName,
                 callType: data.callType,
@@ -69,7 +69,7 @@ export class CallGateway {
 
             return {
                 success: true,
-                callId: callMessage._id,
+                callId: callMessage.id,
                 conversationId: conversation.uuid
             }
         } catch (error) {

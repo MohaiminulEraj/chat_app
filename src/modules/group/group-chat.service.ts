@@ -1,14 +1,9 @@
 import { Injectable } from '@nestjs/common'
-import { InjectConnection, InjectModel } from '@nestjs/mongoose'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Connection, Model } from 'mongoose'
-import { Repository } from 'typeorm'
+import { Repository, Not, Like } from 'typeorm'
 import { GroupMember } from './entities/group-member.entity'
 import { Group } from './entities/group.entity'
-import {
-    GroupMessage,
-    GroupMessageDocument
-} from './schemas/group-message.schema'
+import { GroupMessage } from './entities/group-message.entity'
 
 @Injectable()
 export class GroupChatService {
@@ -19,24 +14,9 @@ export class GroupChatService {
         @InjectRepository(GroupMember)
         private readonly groupMemberRepository: Repository<GroupMember>,
 
-        @InjectModel(GroupMessage.name)
-        private readonly groupMessageModel: Model<GroupMessageDocument>,
-
-        @InjectConnection()
-        private readonly mongoConnection: Connection
+        @InjectRepository(GroupMessage)
+        private readonly groupMessageRepository: Repository<GroupMessage>
     ) {}
-
-    // Get dynamic collection for group messages using group UUID
-    private getGroupMessageCollection(
-        groupId: string
-    ): Model<GroupMessageDocument> {
-        const collectionName = `group_messages_${groupId.replace(/-/g, '_')}`
-        return this.mongoConnection.model<GroupMessageDocument>(
-            'GroupMessage',
-            this.groupMessageModel.schema,
-            collectionName
-        )
-    }
 
     async verifyGroupMembership(
         userId: string,
@@ -60,17 +40,15 @@ export class GroupChatService {
         messageType: string
         metadata?: any
         replyToMessageId?: string
-    }): Promise<GroupMessageDocument> {
-        const MessageModel = this.getGroupMessageCollection(messageData.groupId)
-
+    }): Promise<GroupMessage> {
         let replyToMessage = null
         if (messageData.replyToMessageId) {
-            const originalMessage = await MessageModel.findById(
-                messageData.replyToMessageId
-            )
+            const originalMessage = await this.groupMessageRepository.findOne({
+                where: { id: messageData.replyToMessageId }
+            })
             if (originalMessage) {
                 replyToMessage = {
-                    messageId: originalMessage._id.toString(),
+                    messageId: originalMessage.id,
                     content: originalMessage.content,
                     senderName: originalMessage.senderName,
                     messageType: originalMessage.messageType
@@ -78,47 +56,58 @@ export class GroupChatService {
             }
         }
 
-        const message = new MessageModel({
+        const message = this.groupMessageRepository.create({
             senderId: messageData.senderId,
             senderName: messageData.senderName,
             senderAvatarUrl: messageData.senderAvatarUrl,
             groupId: messageData.groupId,
             content: messageData.content,
-            messageType: messageData.messageType,
+            messageType: messageData.messageType as any,
             metadata: messageData.metadata || {},
             replyToMessage,
-            timestamp: new Date(),
+            replyToMessageId: messageData.replyToMessageId,
             readBy: [messageData.senderId], // Sender automatically reads their own message
             deliveredTo: []
         })
 
-        return await message.save()
+        return await this.groupMessageRepository.save(message)
     }
 
     async getGroupMessageHistory(
-        groupId: string
-        // page: number = 1,
-        // limit: number = 50,
-        // before?: string
-    ): Promise<GroupMessageDocument[]> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
+        groupId: string,
+        page: number = 1,
+        limit: number = 50,
+        before?: string
+    ): Promise<GroupMessage[]> {
+        // Ensure parameters are valid numbers
+        const validPage = Math.max(parseInt(String(page)) || 1, 1)
+        const validLimit = Math.min(
+            Math.max(parseInt(String(limit)) || 50, 1),
+            100
+        )
+        const validSkip = (validPage - 1) * validLimit
 
-        let query: any = { isDeleted: false }
+        const queryBuilder = this.groupMessageRepository
+            .createQueryBuilder('message')
+            .where('message.groupId = :groupId', { groupId })
+            .andWhere('message.isDeleted = false')
+            .orderBy('message.timestamp', 'DESC')
+            .take(validLimit)
+            .skip(validSkip)
 
-        // if (before) {
-        //     const beforeMessage = await MessageModel.findById(before)
-        //     if (beforeMessage) {
-        //         query.timestamp = { $lt: beforeMessage.timestamp }
-        //     }
-        // }
+        if (before) {
+            // Get messages before a specific message ID
+            const beforeMessage = await this.groupMessageRepository.findOne({
+                where: { id: before }
+            })
+            if (beforeMessage) {
+                queryBuilder.andWhere('message.timestamp < :beforeTimestamp', {
+                    beforeTimestamp: beforeMessage.timestamp
+                })
+            }
+        }
 
-        // return await MessageModel.find(query)
-        //     .sort({ timestamp: -1 })
-        //     .limit(limit)
-        //     .skip((page - 1) * limit)
-        //     .exec()
-
-        return await MessageModel.find(query)
+        return await queryBuilder.getMany()
     }
 
     async markMessagesAsRead(
@@ -126,17 +115,16 @@ export class GroupChatService {
         messageIds: string[],
         userId: string
     ): Promise<void> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
-
-        await MessageModel.updateMany(
-            {
-                _id: { $in: messageIds },
-                readBy: { $ne: userId }
-            },
-            {
-                $addToSet: { readBy: userId }
-            }
-        )
+        await this.groupMessageRepository
+            .createQueryBuilder()
+            .update(GroupMessage)
+            .set({
+                readBy: () => `array_append("readBy", '${userId}')`
+            })
+            .where('id IN (:...messageIds)', { messageIds })
+            .andWhere('groupId = :groupId', { groupId })
+            .andWhere('NOT (:userId = ANY("readBy"))', { userId })
+            .execute()
     }
 
     async deleteMessage(
@@ -144,9 +132,10 @@ export class GroupChatService {
         messageId: string,
         userId: string
     ): Promise<boolean> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
+        const message = await this.groupMessageRepository.findOne({
+            where: { id: messageId, groupId }
+        })
 
-        const message = await MessageModel.findById(messageId)
         if (!message) return false
 
         // Check if user is the sender or has admin rights
@@ -167,7 +156,7 @@ export class GroupChatService {
             }
         }
 
-        await MessageModel.findByIdAndUpdate(messageId, {
+        await this.groupMessageRepository.update(messageId, {
             isDeleted: true,
             content: 'This message was deleted',
             metadata: {}
@@ -181,10 +170,11 @@ export class GroupChatService {
         messageId: string,
         newContent: string,
         userId: string
-    ): Promise<GroupMessageDocument | null> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
+    ): Promise<GroupMessage | null> {
+        const message = await this.groupMessageRepository.findOne({
+            where: { id: messageId, groupId }
+        })
 
-        const message = await MessageModel.findById(messageId)
         if (!message || message.senderId !== userId || message.isDeleted) {
             return null
         }
@@ -195,15 +185,11 @@ export class GroupChatService {
             return null
         }
 
-        return await MessageModel.findByIdAndUpdate(
-            messageId,
-            {
-                content: newContent,
-                isEdited: true,
-                editedAt: new Date()
-            },
-            { new: true }
-        )
+        message.content = newContent
+        message.isEdited = true
+        message.editedAt = new Date()
+
+        return await this.groupMessageRepository.save(message)
     }
 
     async getGroupMembers(groupId: string): Promise<any[]> {
@@ -231,6 +217,7 @@ export class GroupChatService {
             email: member.user.email,
             avatarUrl: member.user.avatarUrl,
             role: member.role.name,
+            userRole: member.role.name, // Add userRole for consistency
             joinedAt: member.joinedAt,
             isMuted: member.isMuted
         }))
@@ -243,36 +230,46 @@ export class GroupChatService {
         })
     }
 
+    async getUserRole(groupId: string, userId: string): Promise<string | null> {
+        const member = await this.groupMemberRepository.findOne({
+            where: { groupId, userId },
+            relations: ['role']
+        })
+
+        return member?.role?.name || null
+    }
+
     async getUnreadMessageCount(
         groupId: string,
         userId: string
     ): Promise<number> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
-
-        return await MessageModel.countDocuments({
-            isDeleted: false,
-            senderId: { $ne: userId },
-            readBy: { $ne: userId }
-        })
+        return await this.groupMessageRepository
+            .createQueryBuilder('message')
+            .where('message.groupId = :groupId', { groupId })
+            .andWhere('message.isDeleted = false')
+            .andWhere('message.senderId != :userId', { userId })
+            .andWhere('NOT (:userId = ANY(message.readBy))', { userId })
+            .getCount()
     }
 
     async searchMessages(
         groupId: string,
         searchTerm: string,
         limit: number = 20
-    ): Promise<GroupMessageDocument[]> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
-
-        return await MessageModel.find({
-            isDeleted: false,
-            $or: [
-                { content: { $regex: searchTerm, $options: 'i' } },
-                { senderName: { $regex: searchTerm, $options: 'i' } }
-            ]
-        })
-            .sort({ timestamp: -1 })
+    ): Promise<GroupMessage[]> {
+        return await this.groupMessageRepository
+            .createQueryBuilder('message')
+            .where('message.groupId = :groupId', { groupId })
+            .andWhere('message.isDeleted = false')
+            .andWhere(
+                '(message.content ILIKE :searchTerm OR message.senderName ILIKE :searchTerm)',
+                {
+                    searchTerm: `%${searchTerm}%`
+                }
+            )
+            .orderBy('message.timestamp', 'DESC')
             .limit(limit)
-            .exec()
+            .getMany()
     }
 
     async getMessageStats(groupId: string): Promise<{
@@ -280,24 +277,27 @@ export class GroupChatService {
         totalMembers: number
         activeToday: number
     }> {
-        const MessageModel = this.getGroupMessageCollection(groupId)
-
         const today = new Date()
         today.setHours(0, 0, 0, 0)
 
-        const [totalMessages, totalMembers, activeToday] = await Promise.all([
-            MessageModel.countDocuments({ isDeleted: false }),
+        const [totalMessages, totalMembers, activeSenders] = await Promise.all([
+            this.groupMessageRepository.count({
+                where: { groupId, isDeleted: false }
+            }),
             this.groupMemberRepository.count({ where: { groupId } }),
-            MessageModel.distinct('senderId', {
-                timestamp: { $gte: today },
-                isDeleted: false
-            }).then((senders) => senders.length)
+            this.groupMessageRepository
+                .createQueryBuilder('message')
+                .select('DISTINCT message.senderId')
+                .where('message.groupId = :groupId', { groupId })
+                .andWhere('message.timestamp >= :today', { today })
+                .andWhere('message.isDeleted = false')
+                .getRawMany()
         ])
 
         return {
             totalMessages,
             totalMembers,
-            activeToday
+            activeToday: activeSenders.length
         }
     }
 }
