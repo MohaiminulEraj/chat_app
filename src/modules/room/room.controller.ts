@@ -82,6 +82,12 @@ export class RoomController {
                             type: 'string',
                             example: 'Dosti❤️Tak'
                         },
+                        description: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Chill voice hangout room'
+                        },
+                        level: { type: 'number', example: 0 },
                         hostId: {
                             type: 'string',
                             example: 'u001'
@@ -232,6 +238,12 @@ export class RoomController {
                             type: 'string',
                             example: 'Dosti❤️Tak'
                         },
+                        description: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Chill voice hangout room'
+                        },
+                        level: { type: 'number', example: 3 },
                         hostId: {
                             type: 'string',
                             example: 'u001'
@@ -1172,6 +1184,7 @@ export class RoomController {
                             _id: { type: 'string' },
                             name: { type: 'string' },
                             description: { type: 'string' },
+                            level: { type: 'number', example: 2 },
                             country: { type: 'string' },
                             roomAvatarUrl: { type: 'string', nullable: true },
                             roomOwner: {

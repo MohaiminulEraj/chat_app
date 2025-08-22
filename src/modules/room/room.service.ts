@@ -795,6 +795,8 @@ export class RoomService {
         return {
             roomId: room.uuid,
             roomName: room.name,
+            description: room.description || null,
+            level: (room as any).level ?? 0,
             // Owner information
             ownerId: ownerInfo.uuid,
             ownerName: ownerInfo.name,

@@ -21,6 +21,10 @@ export class Room extends CustomBaseEntity {
     @Column({ nullable: true })
     description?: string
 
+    // Room level (experience/progression). Will be increased later by business logic.
+    @Column({ type: 'int', default: 0, nullable: false })
+    level: number
+
     @Column({
         type: 'enum',
         enum: RoomType,
