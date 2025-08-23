@@ -83,9 +83,10 @@ export class GroupController {
                     type: 'string',
                     example: 'A group for discussing study materials'
                 },
-                tag: {
-                    type: 'string',
-                    example: 'education'
+                tags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['education', 'study', 'learning']
                 },
                 country: {
                     type: 'string',
