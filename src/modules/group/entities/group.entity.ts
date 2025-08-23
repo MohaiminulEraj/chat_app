@@ -14,8 +14,8 @@ export class Group extends CustomBaseEntity {
     @Column({ nullable: true })
     description: string
 
-    @Column({ nullable: true })
-    tag: string
+    @Column({ type: 'simple-array', nullable: true })
+    tags: string[]
 
     @Column({ nullable: true })
     avatarUrl: string
