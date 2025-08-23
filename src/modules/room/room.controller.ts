@@ -246,9 +246,9 @@ export class RoomController {
                 avatarFile
             )
 
-            // Get the room details in the same format as getRoomByGroupId
-            const roomDetails = await this.roomService.getRoomByGroupId(
-                createRoomDto.groupId
+            // Get the room details for the specific room that was just created
+            const roomDetails = await this.roomService.getRoomDetails(
+                roomData.uuid
             )
 
             return {

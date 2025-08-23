@@ -48,6 +48,25 @@ export class RoomService {
         private cloudinaryService: CloudinaryService
     ) {}
 
+    /**
+     * Transform multipart form data to proper types
+     */
+    private transformMultipartData(data: any): any {
+        return {
+            ...data,
+            // Convert string numbers to actual numbers
+            maxSeats: data.maxSeats ? parseInt(data.maxSeats, 10) : undefined,
+            // Convert string booleans to actual booleans
+            isPrivate: data.isPrivate === 'true' || data.isPrivate === true,
+            // Ensure other fields remain as they are
+            groupId: data.groupId,
+            name: data.name,
+            description: data.description,
+            password: data.password,
+            type: data.type
+        }
+    }
+
     async findUserById(userId: string): Promise<User | null> {
         try {
             return await this.userRepository.findOne({
@@ -65,6 +84,25 @@ export class RoomService {
         currentUser?: any,
         avatarFile?: Express.Multer.File
     ): Promise<Room> {
+        // Transform multipart form data to proper types
+        const transformedData = this.transformMultipartData(data)
+
+        // Debug: Log the incoming data to understand multipart form parsing
+        console.log('🔍 CreateRoom Debug Data:', {
+            groupId,
+            originalData: data,
+            transformedData,
+            currentUser: currentUser?.uuid,
+            avatarFile: avatarFile
+                ? {
+                      fieldname: avatarFile.fieldname,
+                      originalname: avatarFile.originalname,
+                      mimetype: avatarFile.mimetype,
+                      size: avatarFile.size
+                  }
+                : null
+        })
+
         // Validate that the group exists
         const group = await this.groupRepository.findOne({
             where: { uuid: groupId }
@@ -75,7 +113,7 @@ export class RoomService {
         }
 
         // Validate that the user exists
-        const userId = currentUser?.uuid || data.ownerId
+        const userId = currentUser?.uuid || transformedData.ownerId
         if (!userId) {
             throw new BadRequestException('Owner ID is required')
         }
@@ -99,11 +137,14 @@ export class RoomService {
             )
         }
 
-        // Validate maxSeats
-        const maxSeats = data.maxSeats || 8
+        // Parse and validate maxSeats (already parsed in transformedData)
+        const maxSeats = transformedData.maxSeats || 8
         if (![6, 8, 10].includes(maxSeats)) {
             throw new BadRequestException('maxSeats must be either 6, 8, or 10')
         }
+
+        // Parse boolean values (already parsed in transformedData)
+        const isPrivate = transformedData.isPrivate
 
         let roomAvatarUrl: string | null = null
 
@@ -166,12 +207,12 @@ export class RoomService {
         }
 
         const room = this.roomRepository.create({
-            ...data,
+            ...transformedData,
             groupId,
             maxSeats,
             ownerId: userId,
-            isLocked: data.isPrivate || false,
-            password: data.isPrivate ? data.password : null,
+            isLocked: isPrivate,
+            password: isPrivate ? transformedData.password : null,
             roomAvatarUrl
         })
 
@@ -870,6 +911,7 @@ export class RoomService {
             participants: participantsList,
             seats: seats,
             maxSeats: room.maxSeats,
+            roomAvatarUrl: room.roomAvatarUrl || null,
             createdAt: room.createdAt
         }
     }
