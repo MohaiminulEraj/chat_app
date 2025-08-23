@@ -49,21 +49,57 @@ export class RoomService {
     ) {}
 
     /**
-     * Transform multipart form data to proper types
+     * Transform multipart form data to proper types with validation
      */
     private transformMultipartData(data: any): any {
+        // Validate required fields
+        if (!data.groupId || !data.name) {
+            throw new BadRequestException(
+                'groupId and name are required fields'
+            )
+        }
+
+        // Validate and transform maxSeats
+        let maxSeats = 8 // default
+        if (data.maxSeats !== undefined && data.maxSeats !== '') {
+            const parsedMaxSeats = parseInt(data.maxSeats, 10)
+            if (isNaN(parsedMaxSeats) || ![6, 8, 10].includes(parsedMaxSeats)) {
+                throw new BadRequestException('maxSeats must be 6, 8, or 10')
+            }
+            maxSeats = parsedMaxSeats
+        }
+
+        // Validate and transform isPrivate
+        let isPrivate = false // default
+        if (data.isPrivate !== undefined && data.isPrivate !== '') {
+            if (data.isPrivate === 'true') {
+                isPrivate = true
+            } else if (data.isPrivate === 'false') {
+                isPrivate = false
+            } else {
+                throw new BadRequestException(
+                    'isPrivate must be "true" or "false"'
+                )
+            }
+        }
+
+        // Validate UUID format for groupId
+        const uuidRegex =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(data.groupId)) {
+            throw new BadRequestException(
+                'Invalid groupId format. Must be a valid UUID'
+            )
+        }
+
         return {
-            ...data,
-            // Convert string numbers to actual numbers
-            maxSeats: data.maxSeats ? parseInt(data.maxSeats, 10) : undefined,
-            // Convert string booleans to actual booleans
-            isPrivate: data.isPrivate === 'true' || data.isPrivate === true,
-            // Ensure other fields remain as they are
-            groupId: data.groupId,
-            name: data.name,
-            description: data.description,
-            password: data.password,
-            type: data.type
+            groupId: data.groupId.trim(),
+            name: data.name.trim(),
+            description: data.description ? data.description.trim() : undefined,
+            maxSeats,
+            isPrivate,
+            password: data.password ? data.password.trim() : undefined,
+            type: data.type ? data.type.trim() : 'voice'
         }
     }
 
@@ -84,172 +120,182 @@ export class RoomService {
         currentUser?: any,
         avatarFile?: Express.Multer.File
     ): Promise<Room> {
-        // Transform multipart form data to proper types
-        const transformedData = this.transformMultipartData(data)
+        try {
+            // Transform multipart form data to proper types
+            const transformedData = this.transformMultipartData(data)
 
-        // Debug: Log the incoming data to understand multipart form parsing
-        console.log('🔍 CreateRoom Debug Data:', {
-            groupId,
-            originalData: data,
-            transformedData,
-            currentUser: currentUser?.uuid,
-            avatarFile: avatarFile
-                ? {
-                      fieldname: avatarFile.fieldname,
-                      originalname: avatarFile.originalname,
-                      mimetype: avatarFile.mimetype,
-                      size: avatarFile.size
-                  }
-                : null
-        })
+            // Debug: Log the incoming data to understand multipart form parsing
+            console.log('🔍 CreateRoom Debug Data:', {
+                groupId,
+                originalData: data,
+                transformedData,
+                currentUser: currentUser?.uuid,
+                avatarFile: avatarFile
+                    ? {
+                          fieldname: avatarFile.fieldname,
+                          originalname: avatarFile.originalname,
+                          mimetype: avatarFile.mimetype,
+                          size: avatarFile.size
+                      }
+                    : null
+            })
 
-        // Validate that the group exists
-        const group = await this.groupRepository.findOne({
-            where: { uuid: groupId }
-        })
+            // Validate that the group exists
+            const group = await this.groupRepository.findOne({
+                where: { uuid: groupId }
+            })
 
-        if (!group) {
-            throw new NotFoundException(`Group with ID ${groupId} not found`)
-        }
+            if (!group) {
+                throw new NotFoundException(
+                    `Group with ID ${groupId} not found`
+                )
+            }
 
-        // Validate that the user exists
-        const userId = currentUser?.uuid || transformedData.ownerId
-        if (!userId) {
-            throw new BadRequestException('Owner ID is required')
-        }
+            // Validate that the user exists
+            const userId = currentUser?.uuid || transformedData.ownerId
+            if (!userId) {
+                throw new BadRequestException('Owner ID is required')
+            }
 
-        const user = await this.userRepository.findOne({
-            where: { uuid: userId, isActive: true }
-        })
+            const user = await this.userRepository.findOne({
+                where: { uuid: userId, isActive: true }
+            })
 
-        if (!user) {
-            throw new NotFoundException(`User with ID ${userId} not found`)
-        }
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`)
+            }
 
-        // Check if user is a member of the group
-        const groupMember = await this.groupMemberRepository.findOne({
-            where: { groupId, userId }
-        })
+            // Check if user is a member of the group
+            const groupMember = await this.groupMemberRepository.findOne({
+                where: { groupId, userId }
+            })
 
-        if (!groupMember) {
-            throw new ForbiddenException(
-                'You must be a member of the group to create a room'
-            )
-        }
+            if (!groupMember) {
+                throw new ForbiddenException(
+                    'You must be a member of the group to create a room'
+                )
+            }
 
-        // Parse and validate maxSeats (already parsed in transformedData)
-        const maxSeats = transformedData.maxSeats || 8
-        if (![6, 8, 10].includes(maxSeats)) {
-            throw new BadRequestException('maxSeats must be either 6, 8, or 10')
-        }
-
-        // Parse boolean values (already parsed in transformedData)
-        const isPrivate = transformedData.isPrivate
-
-        let roomAvatarUrl: string | null = null
-
-        // Handle avatar upload if provided
-        if (avatarFile) {
-            // Validate file type and size
-            const allowedMimeTypes = [
-                'image/jpeg',
-                'image/jpg',
-                'image/png',
-                'image/gif',
-                'image/webp',
-                'image/bmp',
-                'image/tiff',
-                'image/svg+xml',
-                'image/avif',
-                'image/heic',
-                'image/heif',
-                'image/x-icon'
-            ]
-
-            if (!allowedMimeTypes.includes(avatarFile.mimetype)) {
+            // Parse and validate maxSeats (already parsed in transformedData)
+            const maxSeats = transformedData.maxSeats || 8
+            if (![6, 8, 10].includes(maxSeats)) {
                 throw new BadRequestException(
-                    'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+                    'maxSeats must be either 6, 8, or 10'
                 )
             }
 
-            // Check file size (10MB limit)
-            const maxSize = 10 * 1024 * 1024 // 10MB in bytes
-            if (avatarFile.size > maxSize) {
-                throw new BadRequestException(
-                    'File size too large. Maximum size allowed is 10MB'
-                )
+            // Parse boolean values (already parsed in transformedData)
+            const isPrivate = transformedData.isPrivate
+
+            let roomAvatarUrl: string | null = null
+
+            // Handle avatar upload if provided
+            if (avatarFile) {
+                // Validate file type and size
+                const allowedMimeTypes = [
+                    'image/jpeg',
+                    'image/jpg',
+                    'image/png',
+                    'image/gif',
+                    'image/webp',
+                    'image/bmp',
+                    'image/tiff',
+                    'image/svg+xml',
+                    'image/avif',
+                    'image/heic',
+                    'image/heif',
+                    'image/x-icon'
+                ]
+
+                if (!allowedMimeTypes.includes(avatarFile.mimetype)) {
+                    throw new BadRequestException(
+                        'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+                    )
+                }
+
+                // Check file size (10MB limit)
+                const maxSize = 10 * 1024 * 1024 // 10MB in bytes
+                if (avatarFile.size > maxSize) {
+                    throw new BadRequestException(
+                        'File size too large. Maximum size allowed is 10MB'
+                    )
+                }
+
+                try {
+                    // Upload to Cloudinary
+                    const uploadResult =
+                        await this.cloudinaryService.uploadImage(avatarFile, {
+                            folder: 'kitty/rooms/avatars',
+                            public_id: `room-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                            transformation: {
+                                width: 400,
+                                height: 400,
+                                crop: 'fill',
+                                gravity: 'face',
+                                quality: 'auto'
+                            }
+                        })
+
+                    roomAvatarUrl = uploadResult.secure_url
+                } catch (error) {
+                    console.error('Room avatar upload error:', error)
+                    throw new BadRequestException(
+                        `Failed to upload room avatar: ${error.message}`
+                    )
+                }
             }
 
-            try {
-                // Upload to Cloudinary
-                const uploadResult = await this.cloudinaryService.uploadImage(
-                    avatarFile,
-                    {
-                        folder: 'kitty/rooms/avatars',
-                        public_id: `room-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-                        transformation: {
-                            width: 400,
-                            height: 400,
-                            crop: 'fill',
-                            gravity: 'face',
-                            quality: 'auto'
-                        }
-                    }
-                )
+            const room = this.roomRepository.create({
+                ...transformedData,
+                groupId,
+                maxSeats,
+                ownerId: userId,
+                isLocked: isPrivate,
+                password: isPrivate ? transformedData.password : null,
+                roomAvatarUrl
+            })
 
-                roomAvatarUrl = uploadResult.secure_url
-            } catch (error) {
-                console.error('Room avatar upload error:', error)
-                throw new BadRequestException(
-                    `Failed to upload room avatar: ${error.message}`
-                )
+            const savedRoom = await this.roomRepository.save(room)
+            const finalRoom = Array.isArray(savedRoom)
+                ? savedRoom[0]
+                : savedRoom
+
+            // Initialize seats for the room
+            await this.initializeRoomSeats(finalRoom.uuid, maxSeats)
+
+            // If we have a current user, assign them as both owner and host by default
+            if (currentUser?.uuid && finalRoom.uuid) {
+                try {
+                    // Assign owner role
+                    await this.assignRoomRole(
+                        finalRoom.uuid,
+                        currentUser.uuid,
+                        RoomRole.OWNER,
+                        currentUser.uuid
+                    )
+
+                    // Assign host role (group owner is also the host by default)
+                    await this.assignRoomRole(
+                        finalRoom.uuid,
+                        currentUser.uuid,
+                        RoomRole.HOST,
+                        currentUser.uuid
+                    )
+
+                    // Do not auto-occupy any seat for the owner/host
+                    // Host will join as observer and can lock/unlock seats as needed
+                } catch (error) {
+                    console.error('Error assigning default roles:', error)
+                    // Continue without throwing error as room is already created
+                }
             }
+
+            return finalRoom
+        } catch (error) {
+            console.error('❌ CreateRoom Error:', error)
+            // Re-throw the error to be handled by the controller
+            throw error
         }
-
-        const room = this.roomRepository.create({
-            ...transformedData,
-            groupId,
-            maxSeats,
-            ownerId: userId,
-            isLocked: isPrivate,
-            password: isPrivate ? transformedData.password : null,
-            roomAvatarUrl
-        })
-
-        const savedRoom = await this.roomRepository.save(room)
-        const finalRoom = Array.isArray(savedRoom) ? savedRoom[0] : savedRoom
-
-        // Initialize seats for the room
-        await this.initializeRoomSeats(finalRoom.uuid, maxSeats)
-
-        // If we have a current user, assign them as both owner and host by default
-        if (currentUser?.uuid && finalRoom.uuid) {
-            try {
-                // Assign owner role
-                await this.assignRoomRole(
-                    finalRoom.uuid,
-                    currentUser.uuid,
-                    RoomRole.OWNER,
-                    currentUser.uuid
-                )
-
-                // Assign host role (group owner is also the host by default)
-                await this.assignRoomRole(
-                    finalRoom.uuid,
-                    currentUser.uuid,
-                    RoomRole.HOST,
-                    currentUser.uuid
-                )
-
-                // Do not auto-occupy any seat for the owner/host
-                // Host will join as observer and can lock/unlock seats as needed
-            } catch (error) {
-                console.error('Error assigning default roles:', error)
-                // Continue without throwing error as room is already created
-            }
-        }
-
-        return finalRoom
     }
 
     async findOne(roomId: string): Promise<Room> {

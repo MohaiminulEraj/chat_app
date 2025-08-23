@@ -30,6 +30,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AssignRoomRoleDto, TransferOwnershipDto } from './dto/room-role.dto'
 import { CreateCommentDto } from './dto/create-comment.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
+import { CreateRoomMultipartDto } from './dto/create-room-multipart.dto'
 import {
     JoinRoomWithSeatDto,
     ToggleSeatLockDto
@@ -234,7 +235,7 @@ export class RoomController {
     })
     @UseInterceptors(FileInterceptor('avatar'))
     async create(
-        @Body() createRoomDto: CreateRoomDto,
+        @Body() createRoomDto: CreateRoomMultipartDto,
         @Request() req: any,
         @UploadedFile() avatarFile?: Express.Multer.File
     ) {
