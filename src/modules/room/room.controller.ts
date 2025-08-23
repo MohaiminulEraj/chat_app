@@ -57,9 +57,62 @@ export class RoomController {
     @Post()
     @ApiOperation({
         summary: 'Create a new room',
-        description: 'Create a new voice/game room for a group'
+        description:
+            'Create a new voice/game room for a group with optional avatar upload'
     })
-    @ApiBody({ type: CreateRoomDto })
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                groupId: {
+                    type: 'string',
+                    example: '123e4567-e89b-12d3-a456-426614174000',
+                    description: 'The UUID of the group this room belongs to'
+                },
+                name: {
+                    type: 'string',
+                    example: 'Gaming Room #1',
+                    description: 'Name of the room'
+                },
+                description: {
+                    type: 'string',
+                    example: 'A room for playing games together',
+                    description: 'Description of the room'
+                },
+                maxSeats: {
+                    type: 'number',
+                    example: 8,
+                    enum: [6, 8, 10],
+                    description: 'Maximum number of seats in the room'
+                },
+                isPrivate: {
+                    type: 'boolean',
+                    example: false,
+                    description:
+                        'Whether the room is private (requires password)'
+                },
+                password: {
+                    type: 'string',
+                    example: 'mySecretPassword',
+                    description:
+                        'Password for private rooms (required if isPrivate is true)'
+                },
+                type: {
+                    type: 'string',
+                    enum: ['public', 'private', 'group', 'voice'],
+                    example: 'voice',
+                    description: 'The type of the room'
+                },
+                avatar: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Room avatar image file (optional)'
+                }
+            },
+            required: ['groupId', 'name']
+        }
+    })
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: 'Room created successfully',
@@ -147,6 +200,12 @@ export class RoomController {
                             }
                         },
                         maxSeats: { type: 'number', example: 8 },
+                        roomAvatarUrl: {
+                            type: 'string',
+                            nullable: true,
+                            example:
+                                'https://res.cloudinary.com/kitty/image/upload/v1234567890/rooms/room-avatar.jpg'
+                        },
                         createdAt: {
                             type: 'string',
                             format: 'date-time',
@@ -162,6 +221,10 @@ export class RoomController {
         description: 'Invalid group ID or user ID provided'
     })
     @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid file type or size for avatar upload'
+    })
+    @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: 'Group not found or user not found'
     })
@@ -169,12 +232,18 @@ export class RoomController {
         status: HttpStatus.FORBIDDEN,
         description: 'You must be a member of the group to create a room'
     })
-    async create(@Body() createRoomDto: CreateRoomDto, @Request() req: any) {
+    @UseInterceptors(FileInterceptor('avatar'))
+    async create(
+        @Body() createRoomDto: CreateRoomDto,
+        @Request() req: any,
+        @UploadedFile() avatarFile?: Express.Multer.File
+    ) {
         try {
             const roomData = await this.roomService.createRoom(
                 createRoomDto.groupId,
                 createRoomDto,
-                req.user
+                req.user,
+                avatarFile
             )
 
             // Get the room details in the same format as getRoomByGroupId

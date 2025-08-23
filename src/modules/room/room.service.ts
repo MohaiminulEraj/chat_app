@@ -62,7 +62,8 @@ export class RoomService {
     async createRoom(
         groupId: string,
         data: any,
-        currentUser?: any
+        currentUser?: any,
+        avatarFile?: Express.Multer.File
     ): Promise<Room> {
         // Validate that the group exists
         const group = await this.groupRepository.findOne({
@@ -104,13 +105,74 @@ export class RoomService {
             throw new BadRequestException('maxSeats must be either 6, 8, or 10')
         }
 
+        let roomAvatarUrl: string | null = null
+
+        // Handle avatar upload if provided
+        if (avatarFile) {
+            // Validate file type and size
+            const allowedMimeTypes = [
+                'image/jpeg',
+                'image/jpg',
+                'image/png',
+                'image/gif',
+                'image/webp',
+                'image/bmp',
+                'image/tiff',
+                'image/svg+xml',
+                'image/avif',
+                'image/heic',
+                'image/heif',
+                'image/x-icon'
+            ]
+
+            if (!allowedMimeTypes.includes(avatarFile.mimetype)) {
+                throw new BadRequestException(
+                    'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+                )
+            }
+
+            // Check file size (10MB limit)
+            const maxSize = 10 * 1024 * 1024 // 10MB in bytes
+            if (avatarFile.size > maxSize) {
+                throw new BadRequestException(
+                    'File size too large. Maximum size allowed is 10MB'
+                )
+            }
+
+            try {
+                // Upload to Cloudinary
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                    avatarFile,
+                    {
+                        folder: 'kitty/rooms/avatars',
+                        public_id: `room-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                        transformation: {
+                            width: 400,
+                            height: 400,
+                            crop: 'fill',
+                            gravity: 'face',
+                            quality: 'auto'
+                        }
+                    }
+                )
+
+                roomAvatarUrl = uploadResult.secure_url
+            } catch (error) {
+                console.error('Room avatar upload error:', error)
+                throw new BadRequestException(
+                    `Failed to upload room avatar: ${error.message}`
+                )
+            }
+        }
+
         const room = this.roomRepository.create({
             ...data,
             groupId,
             maxSeats,
             ownerId: userId,
             isLocked: data.isPrivate || false,
-            password: data.isPrivate ? data.password : null
+            password: data.isPrivate ? data.password : null,
+            roomAvatarUrl
         })
 
         const savedRoom = await this.roomRepository.save(room)

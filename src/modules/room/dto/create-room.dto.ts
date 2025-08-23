@@ -116,4 +116,13 @@ export class CreateRoomDto {
     @IsString()
     @IsOptional()
     roomAvatarUrl?: string
+
+    @ApiProperty({
+        description: 'Room avatar image file',
+        type: 'string',
+        format: 'binary',
+        required: false
+    })
+    @IsOptional()
+    avatar?: any
 }
