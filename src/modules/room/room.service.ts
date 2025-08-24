@@ -12,6 +12,7 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service'
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
 import { User } from '../user/entities/user.entity'
+import { Gift } from '../gift/entities/gift.entity'
 import { RoomBlockedUser } from './entities/room-blocked-user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
@@ -19,6 +20,16 @@ import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
+import {
+    PKBattle,
+    PKBattleStatus,
+    PKBattleType
+} from './entities/pk-battle.entity'
+import {
+    PKBattleParticipant,
+    PKBattleParticipantStatus
+} from './entities/pk-battle-participant.entity'
+import { PKBattleGift } from './entities/pk-battle-gift.entity'
 
 @Injectable()
 export class RoomService {
@@ -45,6 +56,14 @@ export class RoomService {
         private roomCommentRepository: Repository<RoomComment>,
         @InjectRepository(RoomBlockedUser)
         private roomBlockedUserRepository: Repository<RoomBlockedUser>,
+        @InjectRepository(PKBattle)
+        private pkBattleRepository: Repository<PKBattle>,
+        @InjectRepository(PKBattleParticipant)
+        private pkBattleParticipantRepository: Repository<PKBattleParticipant>,
+        @InjectRepository(PKBattleGift)
+        private pkBattleGiftRepository: Repository<PKBattleGift>,
+        @InjectRepository(Gift)
+        private giftRepository: Repository<Gift>,
         private cloudinaryService: CloudinaryService
     ) {}
 
@@ -1930,5 +1949,588 @@ export class RoomService {
         return rooms.filter(
             (room) => !blockedRoomIdSet.has(room.roomId || room.uuid)
         )
+    }
+
+    // ==================== PK BATTLE MANAGEMENT METHODS ====================
+
+    /**
+     * Create a new PK Battle
+     */
+    async createPKBattle(
+        roomId: string,
+        hostId: string,
+        participantIds: string[],
+        durationMinutes: number,
+        battleType: PKBattleType = PKBattleType.HOST_SELECTED,
+        description?: string,
+        metadata?: any
+    ): Promise<PKBattle> {
+        // Validate room exists and host has permission
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId, isActive: true }
+        })
+
+        if (!room) {
+            throw new NotFoundException(`Room with ID ${roomId} not found`)
+        }
+
+        // Check if user is host/owner/admin
+        const hostRoles = await this.getUserRolesInRoom(roomId, hostId)
+        const canCreateBattle =
+            hostRoles.includes(RoomRole.HOST) ||
+            hostRoles.includes(RoomRole.OWNER) ||
+            hostRoles.includes(RoomRole.ADMIN) ||
+            room.ownerId === hostId
+
+        if (!canCreateBattle) {
+            throw new ForbiddenException(
+                'Only hosts, owners, or admins can create PK battles'
+            )
+        }
+
+        // Validate participants are in the room
+        if (participantIds.length !== 2) {
+            throw new BadRequestException(
+                'Exactly 2 participants are required for a PK battle'
+            )
+        }
+
+        for (const participantId of participantIds) {
+            const isInRoom = await this.isUserInRoom(participantId, roomId)
+            if (!isInRoom) {
+                const user = await this.userRepository.findOne({
+                    where: { uuid: participantId }
+                })
+                throw new BadRequestException(
+                    `User ${user?.name || participantId} is not in the room`
+                )
+            }
+        }
+
+        // Check if there's already an active battle in this room
+        const existingBattle = await this.pkBattleRepository.findOne({
+            where: {
+                roomId,
+                status: PKBattleStatus.ACTIVE,
+                isActive: true
+            }
+        })
+
+        if (existingBattle) {
+            throw new ConflictException(
+                'There is already an active PK battle in this room'
+            )
+        }
+
+        // Create the battle
+        const battle = this.pkBattleRepository.create({
+            roomId,
+            hostId,
+            battleType,
+            duration: durationMinutes * 60, // Convert to seconds
+            status: PKBattleStatus.PENDING,
+            description,
+            metadata
+        })
+
+        const savedBattle = await this.pkBattleRepository.save(battle)
+
+        // Create battle participants
+        for (let i = 0; i < participantIds.length; i++) {
+            const participant = this.pkBattleParticipantRepository.create({
+                battleId: savedBattle.uuid,
+                userId: participantIds[i],
+                position: i + 1,
+                status: PKBattleParticipantStatus.INVITED
+            })
+            await this.pkBattleParticipantRepository.save(participant)
+        }
+
+        // Load the complete battle with participants
+        return await this.pkBattleRepository.findOne({
+            where: { uuid: savedBattle.uuid },
+            relations: ['participants', 'participants.user', 'host', 'room']
+        })
+    }
+
+    /**
+     * Approve or reject a PK Battle
+     */
+    async approvePKBattle(
+        battleId: string,
+        hostId: string,
+        approved: boolean,
+        reason?: string
+    ): Promise<PKBattle> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: ['participants', 'participants.user', 'host']
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        if (battle.hostId !== hostId) {
+            throw new ForbiddenException(
+                'Only the battle host can approve or reject battles'
+            )
+        }
+
+        if (battle.status !== PKBattleStatus.PENDING) {
+            throw new BadRequestException('Battle is not in pending status')
+        }
+
+        if (approved) {
+            battle.status = PKBattleStatus.APPROVED
+        } else {
+            battle.status = PKBattleStatus.CANCELLED
+            battle.metadata = {
+                ...battle.metadata,
+                rejectionReason: reason,
+                rejectedAt: new Date()
+            }
+        }
+
+        return await this.pkBattleRepository.save(battle)
+    }
+
+    /**
+     * Start a PK Battle
+     */
+    async startPKBattle(battleId: string, hostId: string): Promise<PKBattle> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: ['participants', 'participants.user']
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        if (battle.hostId !== hostId) {
+            throw new ForbiddenException(
+                'Only the battle host can start battles'
+            )
+        }
+
+        if (battle.status !== PKBattleStatus.APPROVED) {
+            throw new BadRequestException(
+                'Battle must be approved before starting'
+            )
+        }
+
+        // Check if all participants have accepted
+        const acceptedParticipants = battle.participants.filter(
+            (p) => p.status === PKBattleParticipantStatus.ACCEPTED
+        )
+
+        if (acceptedParticipants.length !== 2) {
+            throw new BadRequestException(
+                'All participants must accept the battle before it can start'
+            )
+        }
+
+        // Start the battle
+        const now = new Date()
+        battle.status = PKBattleStatus.ACTIVE
+        battle.startTime = now
+        battle.endTime = new Date(now.getTime() + battle.duration * 1000)
+
+        // Update participant statuses
+        for (const participant of battle.participants) {
+            participant.status = PKBattleParticipantStatus.ACTIVE
+            participant.joinedAt = now
+            await this.pkBattleParticipantRepository.save(participant)
+        }
+
+        const savedBattle = await this.pkBattleRepository.save(battle)
+
+        // Schedule battle end (you might want to use a job queue like Bull for this)
+        setTimeout(async () => {
+            await this.endPKBattle(battleId)
+        }, battle.duration * 1000)
+
+        return savedBattle
+    }
+
+    /**
+     * Handle participant response to PK Battle invitation
+     */
+    async respondToPKBattle(
+        battleId: string,
+        userId: string,
+        accepted: boolean
+    ): Promise<PKBattleParticipant> {
+        const participant = await this.pkBattleParticipantRepository.findOne({
+            where: {
+                battleId,
+                userId,
+                status: PKBattleParticipantStatus.INVITED
+            },
+            relations: ['battle']
+        })
+
+        if (!participant) {
+            throw new NotFoundException(
+                'PK Battle invitation not found or already responded'
+            )
+        }
+
+        if (participant.battle.status !== PKBattleStatus.PENDING) {
+            throw new BadRequestException(
+                'Cannot respond to a battle that is not pending'
+            )
+        }
+
+        participant.status = accepted
+            ? PKBattleParticipantStatus.ACCEPTED
+            : PKBattleParticipantStatus.DECLINED
+
+        return await this.pkBattleParticipantRepository.save(participant)
+    }
+
+    /**
+     * Send a gift to a participant in a PK Battle
+     */
+    async sendPKBattleGift(
+        battleId: string,
+        giftId: string,
+        senderId: string,
+        receiverId: string,
+        quantity: number = 1,
+        message?: string
+    ): Promise<PKBattleGift> {
+        // Validate battle exists and is active
+        const battle = await this.pkBattleRepository.findOne({
+            where: {
+                uuid: battleId,
+                status: PKBattleStatus.ACTIVE,
+                isActive: true
+            },
+            relations: ['participants']
+        })
+
+        if (!battle) {
+            throw new NotFoundException('Active PK Battle not found')
+        }
+
+        // Check if battle has ended
+        if (battle.endTime && new Date() > battle.endTime) {
+            throw new BadRequestException('PK Battle has ended')
+        }
+
+        // Validate receiver is a participant
+        const participant = battle.participants.find(
+            (p) => p.userId === receiverId
+        )
+        if (!participant) {
+            throw new BadRequestException(
+                'Receiver is not a participant in this battle'
+            )
+        }
+
+        // Validate gift exists
+        const gift = await this.giftRepository.findOne({
+            where: { uuid: giftId, isActive: true }
+        })
+
+        if (!gift) {
+            throw new NotFoundException(`Gift with ID ${giftId} not found`)
+        }
+
+        // Validate sender is in the room (but not necessarily a participant)
+        const senderInRoom = await this.isUserInRoom(senderId, battle.roomId)
+        if (!senderInRoom) {
+            throw new ForbiddenException(
+                'You must be in the room to send gifts'
+            )
+        }
+
+        // Create the battle gift record
+        const totalValue = gift.price * quantity
+        const battleGift = this.pkBattleGiftRepository.create({
+            battleId,
+            giftId,
+            senderId,
+            receiverId,
+            giftValue: gift.price,
+            quantity,
+            message,
+            sentAt: new Date(),
+            metadata: {
+                giftName: gift.name,
+                giftImageUrl: gift.imageUrl
+            }
+        })
+
+        const savedGift = await this.pkBattleGiftRepository.save(battleGift)
+
+        // Update participant's gift stats
+        participant.totalGiftsReceived += totalValue
+        participant.giftCount += quantity
+        await this.pkBattleParticipantRepository.save(participant)
+
+        // Update battle total gifts value
+        battle.totalGiftsValue += totalValue
+        await this.pkBattleRepository.save(battle)
+
+        // Load complete gift data for response
+        return await this.pkBattleGiftRepository.findOne({
+            where: { uuid: savedGift.uuid },
+            relations: ['gift', 'sender', 'receiver', 'battle']
+        })
+    }
+
+    /**
+     * Get PK Battle details with current stats
+     */
+    async getPKBattleDetails(battleId: string): Promise<any> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: [
+                'participants',
+                'participants.user',
+                'host',
+                'room',
+                'gifts',
+                'gifts.gift',
+                'gifts.sender'
+            ]
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        // Calculate remaining time
+        const now = new Date()
+        let remainingTime = 0
+        if (battle.status === PKBattleStatus.ACTIVE && battle.endTime) {
+            remainingTime = Math.max(
+                0,
+                Math.floor((battle.endTime.getTime() - now.getTime()) / 1000)
+            )
+        }
+
+        // Sort participants by gifts received (for leaderboard)
+        const participantsWithStats = battle.participants
+            .map((participant) => ({
+                userId: participant.userId,
+                position: participant.position,
+                name: participant.user.name,
+                avatar: participant.user.avatarUrl,
+                totalGiftsReceived: participant.totalGiftsReceived,
+                giftCount: participant.giftCount,
+                status: participant.status
+            }))
+            .sort((a, b) => b.totalGiftsReceived - a.totalGiftsReceived)
+
+        // Get recent gifts
+        const recentGifts = battle.gifts
+            .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
+            .slice(0, 20)
+            .map((gift) => ({
+                id: gift.uuid,
+                giftName: gift.gift.name,
+                giftImageUrl: gift.gift.imageUrl,
+                senderName: gift.sender.name,
+                receiverId: gift.receiverId,
+                quantity: gift.quantity,
+                value: gift.giftValue * gift.quantity,
+                message: gift.message,
+                sentAt: gift.sentAt
+            }))
+
+        return {
+            battleId: battle.uuid,
+            roomId: battle.roomId,
+            hostId: battle.hostId,
+            hostName: battle.host.name,
+            battleType: battle.battleType,
+            status: battle.status,
+            duration: battle.duration,
+            startTime: battle.startTime,
+            endTime: battle.endTime,
+            remainingTime,
+            description: battle.description,
+            totalGiftsValue: battle.totalGiftsValue,
+            participants: participantsWithStats,
+            recentGifts,
+            winner: battle.winnerId
+                ? {
+                      userId: battle.winnerId,
+                      name: participantsWithStats.find(
+                          (p) => p.userId === battle.winnerId
+                      )?.name
+                  }
+                : null,
+            createdAt: battle.createdAt
+        }
+    }
+
+    /**
+     * End a PK Battle (either manually or automatically)
+     */
+    async endPKBattle(battleId: string, hostId?: string): Promise<PKBattle> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: ['participants', 'participants.user']
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        // If hostId is provided, verify permission
+        if (hostId && battle.hostId !== hostId) {
+            throw new ForbiddenException(
+                'Only the battle host can manually end battles'
+            )
+        }
+
+        if (battle.status !== PKBattleStatus.ACTIVE) {
+            throw new BadRequestException('Battle is not active')
+        }
+
+        // Determine winner (participant with most gifts received)
+        const sortedParticipants = battle.participants.sort(
+            (a, b) => b.totalGiftsReceived - a.totalGiftsReceived
+        )
+
+        let winnerId: string | null = null
+        if (
+            sortedParticipants.length >= 2 &&
+            sortedParticipants[0].totalGiftsReceived >
+                sortedParticipants[1].totalGiftsReceived
+        ) {
+            winnerId = sortedParticipants[0].userId
+        }
+
+        // Update battle status
+        battle.status = PKBattleStatus.COMPLETED
+        battle.winnerId = winnerId
+        battle.endTime = new Date()
+
+        // Update participant statuses
+        for (const participant of battle.participants) {
+            participant.status = PKBattleParticipantStatus.COMPLETED
+            await this.pkBattleParticipantRepository.save(participant)
+        }
+
+        return await this.pkBattleRepository.save(battle)
+    }
+
+    /**
+     * Cancel a PK Battle
+     */
+    async cancelPKBattle(
+        battleId: string,
+        hostId: string,
+        reason?: string
+    ): Promise<PKBattle> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true }
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        if (battle.hostId !== hostId) {
+            throw new ForbiddenException(
+                'Only the battle host can cancel battles'
+            )
+        }
+
+        if (
+            ![
+                PKBattleStatus.PENDING,
+                PKBattleStatus.APPROVED,
+                PKBattleStatus.ACTIVE
+            ].includes(battle.status)
+        ) {
+            throw new BadRequestException(
+                'Cannot cancel a completed or already cancelled battle'
+            )
+        }
+
+        battle.status = PKBattleStatus.CANCELLED
+        battle.metadata = {
+            ...battle.metadata,
+            cancellationReason: reason,
+            cancelledAt: new Date()
+        }
+
+        return await this.pkBattleRepository.save(battle)
+    }
+
+    /**
+     * Get active PK Battle in a room
+     */
+    async getActivePKBattle(roomId: string): Promise<any | null> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: {
+                roomId,
+                status: PKBattleStatus.ACTIVE,
+                isActive: true
+            },
+            relations: ['participants', 'participants.user', 'host']
+        })
+
+        if (!battle) {
+            return null
+        }
+
+        return await this.getPKBattleDetails(battle.uuid)
+    }
+
+    /**
+     * Get PK Battle history for a room
+     */
+    async getRoomPKBattleHistory(
+        roomId: string,
+        limit: number = 10,
+        offset: number = 0
+    ): Promise<any[]> {
+        const battles = await this.pkBattleRepository.find({
+            where: { roomId, isActive: true },
+            relations: ['participants', 'participants.user', 'host', 'winner'],
+            order: { createdAt: 'DESC' },
+            take: limit,
+            skip: offset
+        })
+
+        return battles.map((battle) => ({
+            battleId: battle.uuid,
+            battleType: battle.battleType,
+            status: battle.status,
+            hostName: battle.host.name,
+            participants: battle.participants.map((p) => ({
+                name: p.user.name,
+                avatar: p.user.avatarUrl,
+                totalGiftsReceived: p.totalGiftsReceived
+            })),
+            winner: battle.winner
+                ? {
+                      name: battle.winner.name,
+                      avatar: battle.winner.avatarUrl
+                  }
+                : null,
+            totalGiftsValue: battle.totalGiftsValue,
+            duration: battle.duration,
+            createdAt: battle.createdAt,
+            endTime: battle.endTime
+        }))
     }
 }

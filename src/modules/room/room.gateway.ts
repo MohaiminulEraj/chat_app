@@ -4274,4 +4274,443 @@ export class RoomGateway
             }
         }
     }
+
+    // ==================== PK BATTLE WEBSOCKET EVENTS ====================
+
+    @SubscribeMessage('createPKBattle')
+    async handleCreatePKBattle(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            participantIds: string[]
+            durationMinutes: number
+            battleType?: string
+            description?: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+            const userName = (client as any).userName
+
+            this.logger.log(
+                `📤 CREATE_PK_BATTLE request: User ${userName} (${userId}) creating battle in room ${data.roomId}`
+            )
+
+            // Validate user is connected
+            if (!userId) {
+                client.emit('createPKBattleResponse', {
+                    status: 'error',
+                    message: 'User not authenticated'
+                })
+                return
+            }
+
+            const battle = await this.roomService.createPKBattle(
+                data.roomId,
+                userId,
+                data.participantIds,
+                data.durationMinutes,
+                (data.battleType as any) || 'host_selected',
+                data.description
+            )
+
+            // Emit to all users in the room
+            this.server.to(`room_${data.roomId}`).emit('pkBattleCreated', {
+                battleId: battle.uuid,
+                roomId: data.roomId,
+                hostId: userId,
+                hostName: userName,
+                status: battle.status,
+                duration: battle.duration,
+                participants:
+                    battle.participants?.map((p) => ({
+                        userId: p.userId,
+                        name: p.user?.name,
+                        position: p.position,
+                        status: p.status
+                    })) || [],
+                createdAt: battle.createdAt
+            })
+
+            // Send success response to creator
+            client.emit('createPKBattleResponse', {
+                status: 'success',
+                message: 'PK Battle created successfully',
+                battleId: battle.uuid
+            })
+
+            this.logger.log(
+                `✅ CREATE_PK_BATTLE success: Battle ${battle.uuid} created by ${userName} (${userId})`
+            )
+        } catch (error) {
+            this.logger.error(`❌ CREATE_PK_BATTLE failed: ${error.message}`)
+
+            client.emit('createPKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('respondToPKBattle')
+    async handleRespondToPKBattle(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+            accepted: boolean
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+            const userName = (client as any).userName
+
+            this.logger.log(
+                `📤 RESPOND_PK_BATTLE request: User ${userName} (${userId}) ${data.accepted ? 'accepting' : 'declining'} battle ${data.battleId}`
+            )
+
+            const participant = await this.roomService.respondToPKBattle(
+                data.battleId,
+                userId,
+                data.accepted
+            )
+
+            // Get battle details to emit to room
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            // Emit to all users in the room
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleParticipantResponse', {
+                    battleId: data.battleId,
+                    userId,
+                    userName,
+                    accepted: data.accepted,
+                    status: participant.status,
+                    allParticipantsReady: battleDetails.participants.every(
+                        (p) => p.status === 'accepted'
+                    )
+                })
+
+            client.emit('respondToPKBattleResponse', {
+                status: 'success',
+                message: `Battle invitation ${data.accepted ? 'accepted' : 'declined'}`,
+                battleId: data.battleId
+            })
+
+            this.logger.log(
+                `✅ RESPOND_PK_BATTLE success: User ${userName} (${userId}) ${data.accepted ? 'accepted' : 'declined'} battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(`❌ RESPOND_PK_BATTLE failed: ${error.message}`)
+
+            client.emit('respondToPKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('startPKBattle')
+    async handleStartPKBattle(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+            const userName = (client as any).userName
+
+            this.logger.log(
+                `📤 START_PK_BATTLE request: User ${userName} (${userId}) starting battle ${data.battleId}`
+            )
+
+            const battle = await this.roomService.startPKBattle(
+                data.battleId,
+                userId
+            )
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            // Emit to all users in the room
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleStarted', {
+                    battleId: battle.uuid,
+                    status: battle.status,
+                    startTime: battle.startTime,
+                    endTime: battle.endTime,
+                    remainingTime: battleDetails.remainingTime,
+                    participants: battleDetails.participants
+                })
+
+            client.emit('startPKBattleResponse', {
+                status: 'success',
+                message: 'PK Battle started successfully',
+                battleId: battle.uuid,
+                remainingTime: battleDetails.remainingTime
+            })
+
+            this.logger.log(
+                `✅ START_PK_BATTLE success: Battle ${battle.uuid} started by ${userName} (${userId})`
+            )
+        } catch (error) {
+            this.logger.error(`❌ START_PK_BATTLE failed: ${error.message}`)
+
+            client.emit('startPKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('sendPKBattleGift')
+    async handleSendPKBattleGift(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+            giftId: string
+            receiverId: string
+            quantity?: number
+            message?: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+            const userName = (client as any).userName
+
+            this.logger.log(
+                `📤 SEND_PK_BATTLE_GIFT request: User ${userName} (${userId}) sending gift to ${data.receiverId} in battle ${data.battleId}`
+            )
+
+            const battleGift = await this.roomService.sendPKBattleGift(
+                data.battleId,
+                data.giftId,
+                userId,
+                data.receiverId,
+                data.quantity || 1,
+                data.message
+            )
+
+            // Get updated battle stats
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            // Emit real-time gift to all users in the room
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleGiftReceived', {
+                    battleId: data.battleId,
+                    gift: {
+                        id: battleGift.uuid,
+                        giftName: battleGift.gift.name,
+                        giftImageUrl: battleGift.gift.imageUrl,
+                        senderId: userId,
+                        senderName: userName,
+                        receiverId: data.receiverId,
+                        receiverName: battleGift.receiver.name,
+                        quantity: battleGift.quantity,
+                        value: battleGift.giftValue * battleGift.quantity,
+                        message: battleGift.message,
+                        sentAt: battleGift.sentAt
+                    },
+                    // Updated participant stats
+                    participants: battleDetails.participants,
+                    totalGiftsValue: battleDetails.totalGiftsValue
+                })
+
+            // Send success response to sender
+            client.emit('sendPKBattleGiftResponse', {
+                status: 'success',
+                message: 'Gift sent successfully',
+                giftId: battleGift.uuid,
+                totalValue: battleGift.giftValue * battleGift.quantity
+            })
+
+            this.logger.log(
+                `✅ SEND_PK_BATTLE_GIFT success: Gift sent from ${userName} (${userId}) to ${data.receiverId} in battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(`❌ SEND_PK_BATTLE_GIFT failed: ${error.message}`)
+
+            client.emit('sendPKBattleGiftResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getPKBattleStats')
+    async handleGetPKBattleStats(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_PK_BATTLE_STATS request: User ${userId} requesting stats for battle ${data.battleId}`
+            )
+
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            client.emit('pkBattleStatsResponse', {
+                status: 'success',
+                data: battleDetails
+            })
+
+            this.logger.log(
+                `✅ GET_PK_BATTLE_STATS success: Stats sent for battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(`❌ GET_PK_BATTLE_STATS failed: ${error.message}`)
+
+            client.emit('pkBattleStatsResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('cancelPKBattle')
+    async handleCancelPKBattle(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+            reason?: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+            const userName = (client as any).userName
+
+            this.logger.log(
+                `📤 CANCEL_PK_BATTLE request: User ${userName} (${userId}) cancelling battle ${data.battleId}`
+            )
+
+            const battle = await this.roomService.cancelPKBattle(
+                data.battleId,
+                userId,
+                data.reason
+            )
+
+            // Get battle details to get room ID
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            // Emit to all users in the room
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleCancelled', {
+                    battleId: data.battleId,
+                    reason: data.reason,
+                    cancelledBy: userName,
+                    cancelledAt: new Date()
+                })
+
+            client.emit('cancelPKBattleResponse', {
+                status: 'success',
+                message: 'PK Battle cancelled successfully',
+                battleId: data.battleId
+            })
+
+            this.logger.log(
+                `✅ CANCEL_PK_BATTLE success: Battle ${data.battleId} cancelled by ${userName} (${userId})`
+            )
+        } catch (error) {
+            this.logger.error(`❌ CANCEL_PK_BATTLE failed: ${error.message}`)
+
+            client.emit('cancelPKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getActivePKBattle')
+    async handleGetActivePKBattle(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_ACTIVE_PK_BATTLE request: User ${userId} requesting active battle for room ${data.roomId}`
+            )
+
+            const activeBattle = await this.roomService.getActivePKBattle(
+                data.roomId
+            )
+
+            client.emit('activePKBattleResponse', {
+                status: 'success',
+                data: activeBattle
+            })
+
+            this.logger.log(
+                `✅ GET_ACTIVE_PK_BATTLE success: ${activeBattle ? 'Found' : 'No'} active battle in room ${data.roomId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_ACTIVE_PK_BATTLE failed: ${error.message}`
+            )
+
+            client.emit('activePKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    /**
+     * Auto-end PK Battle when time expires (called by service)
+     */
+    async emitPKBattleEnded(
+        battleId: string,
+        winnerId?: string,
+        winnerName?: string
+    ) {
+        try {
+            const battleDetails =
+                await this.roomService.getPKBattleDetails(battleId)
+
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleEnded', {
+                    battleId,
+                    winnerId,
+                    winnerName,
+                    finalStats: battleDetails.participants,
+                    totalGiftsValue: battleDetails.totalGiftsValue,
+                    endedAt: new Date()
+                })
+
+            this.logger.log(
+                `✅ PK_BATTLE_ENDED emitted: Battle ${battleId} ended, winner: ${winnerName || 'Draw'}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ PK_BATTLE_ENDED emit failed: ${error.message}`
+            )
+        }
+    }
 }

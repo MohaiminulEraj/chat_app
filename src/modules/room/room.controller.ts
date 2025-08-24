@@ -32,6 +32,15 @@ import { CreateCommentDto } from './dto/create-comment.dto'
 import { CreateRoomDto } from './dto/create-room.dto'
 import { CreateRoomMultipartDto } from './dto/create-room-multipart.dto'
 import {
+    CreatePKBattleDto,
+    ApprovePKBattleDto,
+    StartPKBattleDto,
+    SendPKBattleGiftDto,
+    PKBattleParticipantResponseDto,
+    GetPKBattleStatsDto,
+    CancelPKBattleDto
+} from './dto/pk-battle.dto'
+import {
     JoinRoomWithSeatDto,
     ToggleSeatLockDto
 } from './dto/seat-management.dto'
@@ -1513,6 +1522,563 @@ export class RoomController {
                     message: error.message || 'Failed to toggle seat lock'
                 },
                 HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
+    // ==================== PK BATTLE ENDPOINTS ====================
+
+    @Post('pk-battles')
+    @ApiOperation({
+        summary: 'Create a new PK Battle',
+        description:
+            'Host creates a PK Battle between two participants with specified duration'
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'PK Battle created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 201 },
+                message: {
+                    type: 'string',
+                    example: 'PK Battle created successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        battleId: {
+                            type: 'string',
+                            example: 'b82bef5b-443e-5e7a-c80c-227f4773h8h0'
+                        },
+                        roomId: {
+                            type: 'string',
+                            example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+                        },
+                        hostId: { type: 'string', example: 'host-uuid' },
+                        battleType: {
+                            type: 'string',
+                            example: 'host_selected'
+                        },
+                        status: { type: 'string', example: 'pending' },
+                        duration: { type: 'number', example: 300 },
+                        participants: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    userId: { type: 'string' },
+                                    name: { type: 'string' },
+                                    position: { type: 'number' },
+                                    status: {
+                                        type: 'string',
+                                        example: 'invited'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Invalid request data'
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Insufficient permissions'
+    })
+    @ApiResponse({
+        status: HttpStatus.CONFLICT,
+        description: 'Active battle already exists'
+    })
+    async createPKBattle(
+        @Body() createBattleDto: CreatePKBattleDto,
+        @Request() req: any
+    ) {
+        try {
+            const battle = await this.roomService.createPKBattle(
+                createBattleDto.roomId,
+                req.user.uuid,
+                createBattleDto.participantIds,
+                createBattleDto.durationMinutes,
+                createBattleDto.battleType,
+                createBattleDto.description,
+                createBattleDto.metadata
+            )
+
+            return {
+                statusCode: HttpStatus.CREATED,
+                message: 'PK Battle created successfully',
+                data: {
+                    battleId: battle.uuid,
+                    roomId: battle.roomId,
+                    hostId: battle.hostId,
+                    battleType: battle.battleType,
+                    status: battle.status,
+                    duration: battle.duration,
+                    description: battle.description,
+                    participants:
+                        battle.participants?.map((p) => ({
+                            userId: p.userId,
+                            name: p.user?.name,
+                            position: p.position,
+                            status: p.status
+                        })) || [],
+                    createdAt: battle.createdAt
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to create PK battle'
+            )
+        }
+    }
+
+    @Post('pk-battles/:battleId/approve')
+    @ApiOperation({
+        summary: 'Approve or reject a PK Battle',
+        description: 'Host approves or rejects a pending PK Battle'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'PK Battle approval status updated',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'PK Battle approved successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        battleId: { type: 'string' },
+                        status: { type: 'string', example: 'approved' },
+                        updatedAt: { type: 'string', format: 'date-time' }
+                    }
+                }
+            }
+        }
+    })
+    async approvePKBattle(
+        @Param('battleId') battleId: string,
+        @Body() approveDto: ApprovePKBattleDto,
+        @Request() req: any
+    ) {
+        try {
+            const battle = await this.roomService.approvePKBattle(
+                battleId,
+                req.user.uuid,
+                approveDto.approved,
+                approveDto.reason
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: `PK Battle ${approveDto.approved ? 'approved' : 'rejected'} successfully`,
+                data: {
+                    battleId: battle.uuid,
+                    status: battle.status,
+                    updatedAt: battle.updatedAt
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to update battle approval'
+            )
+        }
+    }
+
+    @Post('pk-battles/:battleId/start')
+    @ApiOperation({
+        summary: 'Start a PK Battle',
+        description: 'Host starts an approved PK Battle'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'PK Battle started successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'PK Battle started successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        battleId: { type: 'string' },
+                        status: { type: 'string', example: 'active' },
+                        startTime: { type: 'string', format: 'date-time' },
+                        endTime: { type: 'string', format: 'date-time' },
+                        remainingTime: { type: 'number', example: 300 }
+                    }
+                }
+            }
+        }
+    })
+    async startPKBattle(
+        @Param('battleId') battleId: string,
+        @Request() req: any
+    ) {
+        try {
+            const battle = await this.roomService.startPKBattle(
+                battleId,
+                req.user.uuid
+            )
+
+            const remainingTime = battle.endTime
+                ? Math.max(
+                      0,
+                      Math.floor(
+                          (battle.endTime.getTime() - new Date().getTime()) /
+                              1000
+                      )
+                  )
+                : 0
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'PK Battle started successfully',
+                data: {
+                    battleId: battle.uuid,
+                    status: battle.status,
+                    startTime: battle.startTime,
+                    endTime: battle.endTime,
+                    remainingTime
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to start PK battle'
+            )
+        }
+    }
+
+    @Post('pk-battles/:battleId/respond')
+    @ApiOperation({
+        summary: 'Respond to PK Battle invitation',
+        description: 'Participant accepts or declines a PK Battle invitation'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Response recorded successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Battle invitation accepted'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        battleId: { type: 'string' },
+                        userId: { type: 'string' },
+                        status: { type: 'string', example: 'accepted' }
+                    }
+                }
+            }
+        }
+    })
+    async respondToPKBattle(
+        @Param('battleId') battleId: string,
+        @Body() responseDto: PKBattleParticipantResponseDto,
+        @Request() req: any
+    ) {
+        try {
+            const participant = await this.roomService.respondToPKBattle(
+                battleId,
+                req.user.uuid,
+                responseDto.accepted
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: `Battle invitation ${responseDto.accepted ? 'accepted' : 'declined'}`,
+                data: {
+                    battleId: participant.battleId,
+                    userId: participant.userId,
+                    status: participant.status
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to respond to battle invitation'
+            )
+        }
+    }
+
+    @Post('pk-battles/:battleId/gifts')
+    @ApiOperation({
+        summary: 'Send gift to PK Battle participant',
+        description:
+            'Send a gift to a specific participant during an active PK Battle'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'Gift sent successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 201 },
+                message: { type: 'string', example: 'Gift sent successfully' },
+                data: {
+                    type: 'object',
+                    properties: {
+                        giftId: { type: 'string' },
+                        battleId: { type: 'string' },
+                        senderName: { type: 'string' },
+                        receiverName: { type: 'string' },
+                        giftName: { type: 'string' },
+                        quantity: { type: 'number' },
+                        totalValue: { type: 'number' },
+                        message: { type: 'string' },
+                        sentAt: { type: 'string', format: 'date-time' }
+                    }
+                }
+            }
+        }
+    })
+    async sendPKBattleGift(
+        @Param('battleId') battleId: string,
+        @Body() giftDto: SendPKBattleGiftDto,
+        @Request() req: any
+    ) {
+        try {
+            const battleGift = await this.roomService.sendPKBattleGift(
+                battleId,
+                giftDto.giftId,
+                req.user.uuid,
+                giftDto.receiverId,
+                giftDto.quantity || 1,
+                giftDto.message
+            )
+
+            // Emit WebSocket event for real-time updates
+            this.roomGateway.server
+                .to(`room_${battleGift.battle.roomId}`)
+                .emit('pkBattleGiftSent', {
+                    battleId: battleGift.battleId,
+                    gift: {
+                        id: battleGift.uuid,
+                        giftName: battleGift.gift.name,
+                        giftImageUrl: battleGift.gift.imageUrl,
+                        senderName: battleGift.sender.name,
+                        receiverId: battleGift.receiverId,
+                        receiverName: battleGift.receiver.name,
+                        quantity: battleGift.quantity,
+                        value: battleGift.giftValue * battleGift.quantity,
+                        message: battleGift.message,
+                        sentAt: battleGift.sentAt
+                    }
+                })
+
+            return {
+                statusCode: HttpStatus.CREATED,
+                message: 'Gift sent successfully',
+                data: {
+                    giftId: battleGift.uuid,
+                    battleId: battleGift.battleId,
+                    senderName: battleGift.sender.name,
+                    receiverName: battleGift.receiver.name,
+                    giftName: battleGift.gift.name,
+                    quantity: battleGift.quantity,
+                    totalValue: battleGift.giftValue * battleGift.quantity,
+                    message: battleGift.message,
+                    sentAt: battleGift.sentAt
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to send gift'
+            )
+        }
+    }
+
+    @Get('pk-battles/:battleId')
+    @ApiOperation({
+        summary: 'Get PK Battle details',
+        description:
+            'Get detailed information about a PK Battle including current stats'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'PK Battle details retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'PK Battle details retrieved successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        battleId: { type: 'string' },
+                        roomId: { type: 'string' },
+                        hostName: { type: 'string' },
+                        status: { type: 'string' },
+                        remainingTime: { type: 'number' },
+                        participants: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    userId: { type: 'string' },
+                                    name: { type: 'string' },
+                                    totalGiftsReceived: { type: 'number' },
+                                    giftCount: { type: 'number' }
+                                }
+                            }
+                        },
+                        recentGifts: { type: 'array' },
+                        winner: { type: 'object', nullable: true }
+                    }
+                }
+            }
+        }
+    })
+    async getPKBattleDetails(@Param('battleId') battleId: string) {
+        try {
+            const battle = await this.roomService.getPKBattleDetails(battleId)
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'PK Battle details retrieved successfully',
+                data: battle
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to get battle details'
+            )
+        }
+    }
+
+    @Post('pk-battles/:battleId/cancel')
+    @ApiOperation({
+        summary: 'Cancel a PK Battle',
+        description: 'Host cancels a PK Battle'
+    })
+    @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'PK Battle cancelled successfully'
+    })
+    async cancelPKBattle(
+        @Param('battleId') battleId: string,
+        @Body() cancelDto: CancelPKBattleDto,
+        @Request() req: any
+    ) {
+        try {
+            const battle = await this.roomService.cancelPKBattle(
+                battleId,
+                req.user.uuid,
+                cancelDto.reason
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'PK Battle cancelled successfully',
+                data: {
+                    battleId: battle.uuid,
+                    status: battle.status
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to cancel battle'
+            )
+        }
+    }
+
+    @Get(':roomId/pk-battles/active')
+    @ApiOperation({
+        summary: 'Get active PK Battle in room',
+        description: 'Get the currently active PK Battle in a specific room'
+    })
+    @ApiParam({ name: 'roomId', description: 'Room UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Active PK Battle retrieved successfully'
+    })
+    async getActivePKBattle(@Param('roomId') roomId: string) {
+        try {
+            const battle = await this.roomService.getActivePKBattle(roomId)
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: battle
+                    ? 'Active PK Battle found'
+                    : 'No active PK Battle',
+                data: battle
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to get active battle'
+            )
+        }
+    }
+
+    @Get(':roomId/pk-battles/history')
+    @ApiOperation({
+        summary: 'Get PK Battle history for room',
+        description: 'Get historical PK Battles for a specific room'
+    })
+    @ApiParam({ name: 'roomId', description: 'Room UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'PK Battle history retrieved successfully'
+    })
+    async getRoomPKBattleHistory(
+        @Param('roomId') roomId: string,
+        @Query('limit') limit: number = 10,
+        @Query('offset') offset: number = 0
+    ) {
+        try {
+            const battles = await this.roomService.getRoomPKBattleHistory(
+                roomId,
+                limit,
+                offset
+            )
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'PK Battle history retrieved successfully',
+                data: {
+                    battles,
+                    pagination: {
+                        limit,
+                        offset,
+                        count: battles.length
+                    }
+                }
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to get battle history'
             )
         }
     }

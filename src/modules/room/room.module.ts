@@ -13,6 +13,10 @@ import { RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
+import { PKBattle } from './entities/pk-battle.entity'
+import { PKBattleParticipant } from './entities/pk-battle-participant.entity'
+import { PKBattleGift } from './entities/pk-battle-gift.entity'
+import { Gift } from '../gift/entities/gift.entity'
 import { RoomController } from './room.controller'
 import { RoomGateway } from './room.gateway' // Main gateway now uses root namespace
 import { RoomService } from './room.service'
@@ -27,9 +31,13 @@ import { RoomService } from './room.service'
             RoomSeat,
             RoomComment,
             RoomBlockedUser,
+            PKBattle,
+            PKBattleParticipant,
+            PKBattleGift,
             GroupMember,
             Group,
-            User
+            User,
+            Gift
         ]),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
         CloudinaryModule, // Add CloudinaryModule for image upload functionality
