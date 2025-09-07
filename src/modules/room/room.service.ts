@@ -427,6 +427,37 @@ export class RoomService {
             `✅ Created participant: User ${userId} joined room ${roomId} at seat ${assignedSeat} (stored as ${assignedSeat + 1})`
         )
 
+        // If user sits in seat 0, they become the host
+        if (assignedSeat === 0) {
+            try {
+                // First, remove HOST role from current host (if any)
+                const currentHostAssignments =
+                    await this.roomRoleRepository.find({
+                        where: { roomId, role: RoomRole.HOST, isActive: true }
+                    })
+
+                for (const assignment of currentHostAssignments) {
+                    await this.removeRoomRole(
+                        roomId,
+                        assignment.userId,
+                        RoomRole.HOST,
+                        userId
+                    )
+                }
+
+                // Assign HOST role to the new user
+                await this.assignRoomRole(roomId, userId, RoomRole.HOST, userId)
+
+                this.logger.log(
+                    `👑 User ${userId} became host by sitting in seat 0 in room ${roomId}`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to assign host role to user ${userId} in seat 0 of room ${roomId}: ${error.message}`
+                )
+            }
+        }
+
         return savedParticipant
     }
 
@@ -462,8 +493,45 @@ export class RoomService {
             `🚪 Removing participant ${userId} from room ${roomId} (seat ${participant.seatNumber})`
         )
 
+        // If leaving seat 0 (host seat), need to transfer host role
+        const wasHostSeat = participant.seatNumber === 1 // seat 0 is stored as seatNumber 1
+
         // Remove participant from this specific room only
         await this.participantRepository.remove(participant)
+
+        // If the leaving user was in seat 0 (host seat), find next person to be host
+        if (wasHostSeat) {
+            try {
+                // Remove host role from leaving user
+                await this.removeRoomRole(roomId, userId, RoomRole.HOST, userId)
+
+                // Find someone to be the new host (prefer lowest seat number)
+                const remainingParticipants =
+                    await this.participantRepository.find({
+                        where: { roomId: roomId as string },
+                        relations: ['user'],
+                        order: { seatNumber: 'ASC' }
+                    })
+
+                if (remainingParticipants.length > 0) {
+                    const newHostId = remainingParticipants[0].userId
+                    await this.assignRoomRole(
+                        roomId,
+                        newHostId,
+                        RoomRole.HOST,
+                        userId
+                    )
+
+                    this.logger.log(
+                        `👑 Host role transferred from ${userId} to ${newHostId} after leaving seat 0`
+                    )
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to transfer host role after leaving seat 0: ${error.message}`
+                )
+            }
+        }
 
         // Check waiting list and promote first user for this specific room only
         await this.promoteFromWaitingList(roomId)
@@ -530,7 +598,7 @@ export class RoomService {
         seatIndex: number,
         kickedBy: string
     ): Promise<{ userId: string; userName: string }> {
-        // Check if the user performing the kick has permission (host/owner/admin)
+        // Check if the user performing the kick has permission
         const userRoles = await this.getUserRolesInRoom(roomId, kickedBy)
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId }
@@ -538,14 +606,15 @@ export class RoomService {
 
         const isOwner =
             userRoles.includes(RoomRole.OWNER) || room?.ownerId === kickedBy
-        const canKick =
-            isOwner ||
-            userRoles.includes(RoomRole.HOST) ||
-            userRoles.includes(RoomRole.ADMIN)
+        const isAdmin = userRoles.includes(RoomRole.ADMIN)
+        const isHost = userRoles.includes(RoomRole.HOST)
+
+        // Admins can kick anyone (including hosts), hosts can kick regular users, owners can kick anyone
+        const canKick = isOwner || isAdmin || isHost
 
         if (!canKick) {
             throw new ForbiddenException(
-                'Only room owner, host, or admin can kick users'
+                'Only room owner, admin, or host can kick users'
             )
         }
 
@@ -611,8 +680,50 @@ export class RoomService {
             userName: participant.user.name
         }
 
+        // If kicking from seat 0, need to transfer host role
+        const wasHost = seatIndex === 0
+
         // Remove the participant (same as leaving the room)
         await this.participantRepository.remove(participant)
+
+        // If the kicked user was in seat 0 (host seat), find next person to be host
+        if (wasHost) {
+            try {
+                // Remove host role from kicked user
+                await this.removeRoomRole(
+                    roomId,
+                    participant.userId,
+                    RoomRole.HOST,
+                    kickedBy
+                )
+
+                // Find someone to be the new host (prefer seat 1, then any seated user)
+                const remainingParticipants =
+                    await this.participantRepository.find({
+                        where: { roomId: roomId as string },
+                        relations: ['user'],
+                        order: { seatNumber: 'ASC' }
+                    })
+
+                if (remainingParticipants.length > 0) {
+                    const newHostId = remainingParticipants[0].userId
+                    await this.assignRoomRole(
+                        roomId,
+                        newHostId,
+                        RoomRole.HOST,
+                        kickedBy
+                    )
+
+                    this.logger.log(
+                        `👑 Host role transferred from ${participant.userId} to ${newHostId} after kick from seat 0`
+                    )
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to transfer host role after kicking from seat 0: ${error.message}`
+                )
+            }
+        }
 
         // Check waiting list and promote first user
         await this.promoteFromWaitingList(roomId)
@@ -1988,21 +2099,33 @@ export class RoomService {
             )
         }
 
-        // Validate participants are in the room
+        // Validate participants
         if (participantIds.length !== 2) {
             throw new BadRequestException(
                 'Exactly 2 participants are required for a PK battle'
             )
         }
 
+        // With the new seat management system, we allow:
+        // 1. Users who are seated in the room (participants)
+        // 2. The host (who can also be seated now)
         for (const participantId of participantIds) {
+            // Check if user is seated in the room OR is the host
             const isInRoom = await this.isUserInRoom(participantId, roomId)
-            if (!isInRoom) {
+            const userRoles = await this.getUserRolesInRoom(
+                roomId,
+                participantId
+            )
+            const isHost =
+                userRoles.includes(RoomRole.HOST) ||
+                userRoles.includes(RoomRole.OWNER)
+
+            if (!isInRoom && !isHost) {
                 const user = await this.userRepository.findOne({
                     where: { uuid: participantId }
                 })
                 throw new BadRequestException(
-                    `User ${user?.name || participantId} is not in the room`
+                    `User ${user?.name || participantId} must be seated in the room or be the host to participate in PK battle`
                 )
             }
         }
