@@ -2510,18 +2510,50 @@ export class RoomService {
             )
         }
 
-        // Sort participants by gifts received (for leaderboard)
+        // Calculate total gifts value first
+        const totalGiftsValue = battle.participants.reduce(
+            (sum, p) => sum + p.totalGiftsReceived,
+            0
+        )
+
+        // Sort participants by gifts received (for leaderboard) and add individual percentages
         const participantsWithStats = battle.participants
-            .map((participant) => ({
-                userId: participant.userId,
-                position: participant.position,
-                name: participant.user.name,
-                avatar: participant.user.avatarUrl,
-                totalGiftsReceived: participant.totalGiftsReceived,
-                giftCount: participant.giftCount,
-                status: participant.status
-            }))
+            .map((participant) => {
+                const individualPercentage =
+                    totalGiftsValue > 0
+                        ? Math.round(
+                              (participant.totalGiftsReceived /
+                                  totalGiftsValue) *
+                                  100
+                          )
+                        : 0
+
+                return {
+                    userId: participant.userId,
+                    position: participant.position,
+                    name: participant.user.name,
+                    avatar: participant.user.avatarUrl,
+                    totalGiftsReceived: participant.totalGiftsReceived,
+                    giftCount: participant.giftCount,
+                    status: participant.status,
+                    percentage: individualPercentage // Individual participant percentage
+                }
+            })
             .sort((a, b) => b.totalGiftsReceived - a.totalGiftsReceived)
+
+        // Calculate progress percentages for two participants (left/right display)
+        let leftProgress = 0
+        let rightProgress = 0
+
+        if (totalGiftsValue > 0 && participantsWithStats.length >= 2) {
+            const leftValue = participantsWithStats[0]?.totalGiftsReceived || 0
+            const rightValue = participantsWithStats[1]?.totalGiftsReceived || 0
+            leftProgress = Math.round((leftValue / totalGiftsValue) * 100)
+            rightProgress = Math.round((rightValue / totalGiftsValue) * 100)
+        } else if (participantsWithStats.length >= 2) {
+            leftProgress = 50
+            rightProgress = 50
+        }
 
         // Get recent gifts
         const recentGifts = battle.gifts
@@ -2531,6 +2563,7 @@ export class RoomService {
                 id: gift.uuid,
                 giftName: gift.gift.name,
                 giftImageUrl: gift.gift.imageUrl,
+                senderId: gift.senderId,
                 senderName: gift.sender.name,
                 receiverId: gift.receiverId,
                 quantity: gift.quantity,
@@ -2554,6 +2587,20 @@ export class RoomService {
             totalGiftsValue: battle.totalGiftsValue,
             participants: participantsWithStats,
             recentGifts,
+            // Progress percentages for left/right participants
+            progress: {
+                leftProgress,
+                rightProgress,
+                leftParticipant: participantsWithStats[0] || null,
+                rightParticipant: participantsWithStats[1] || null,
+                // Individual participant percentages for all participants
+                participantPercentages: participantsWithStats.map((p) => ({
+                    userId: p.userId,
+                    name: p.name,
+                    percentage: p.percentage,
+                    position: p.position
+                }))
+            },
             winner: battle.winnerId
                 ? {
                       userId: battle.winnerId,
@@ -2563,6 +2610,82 @@ export class RoomService {
                   }
                 : null,
             createdAt: battle.createdAt
+        }
+    }
+
+    /**
+     * Get highest gift sender in a PK Battle
+     */
+    async getPKBattleHighestSender(battleId: string): Promise<any> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: ['gifts', 'gifts.sender']
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        // Group gifts by sender and calculate total value sent
+        const senderTotals = new Map<
+            string,
+            {
+                senderId: string
+                senderName: string
+                senderAvatar: string | null
+                totalValue: number
+                giftCount: number
+            }
+        >()
+
+        for (const gift of battle.gifts) {
+            const senderId = gift.senderId
+            const totalValue = gift.giftValue * gift.quantity
+
+            if (senderTotals.has(senderId)) {
+                const existing = senderTotals.get(senderId)!
+                existing.totalValue += totalValue
+                existing.giftCount += gift.quantity
+            } else {
+                senderTotals.set(senderId, {
+                    senderId: senderId,
+                    senderName: gift.sender.name,
+                    senderAvatar: gift.sender.avatarUrl || null,
+                    totalValue: totalValue,
+                    giftCount: gift.quantity
+                })
+            }
+        }
+
+        // Find highest sender
+        let highestSender = null
+        let maxValue = 0
+
+        for (const senderData of senderTotals.values()) {
+            if (senderData.totalValue > maxValue) {
+                maxValue = senderData.totalValue
+                highestSender = senderData
+            }
+        }
+
+        return {
+            battleId: battle.uuid,
+            roomId: battle.roomId,
+            highestGroupSender: highestSender
+                ? {
+                      senderId: highestSender.senderId,
+                      name: highestSender.senderName,
+                      avatar: highestSender.senderAvatar,
+                      totalValue: highestSender.totalValue,
+                      giftCount: highestSender.giftCount
+                  }
+                : null,
+            totalSenders: senderTotals.size,
+            allSenders: Array.from(senderTotals.values()).sort(
+                (a, b) => b.totalValue - a.totalValue
+            )
         }
     }
 

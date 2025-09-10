@@ -4543,6 +4543,41 @@ export class RoomGateway
                     totalGiftsValue: battleDetails.totalGiftsValue
                 })
 
+            // Emit real-time progress update
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleProgressUpdate', {
+                    battleId: data.battleId,
+                    progress: battleDetails.progress,
+                    participants: battleDetails.participants.map((p) => ({
+                        userId: p.userId,
+                        name: p.name,
+                        totalGiftsReceived: p.totalGiftsReceived,
+                        giftCount: p.giftCount
+                    })),
+                    totalGiftsValue: battleDetails.totalGiftsValue,
+                    updatedAt: new Date()
+                })
+
+            // Get and emit highest sender update
+            try {
+                const highestSenderData =
+                    await this.roomService.getPKBattleHighestSender(
+                        data.battleId
+                    )
+                this.server
+                    .to(`room_${battleDetails.roomId}`)
+                    .emit('pkBattleHighestSender', {
+                        battleId: data.battleId,
+                        ...highestSenderData,
+                        updatedAt: new Date()
+                    })
+            } catch (error) {
+                this.logger.warn(
+                    `Failed to get highest sender for battle ${data.battleId}: ${error.message}`
+                )
+            }
+
             // Send success response to sender
             client.emit('sendPKBattleGiftResponse', {
                 status: 'success',
@@ -4691,6 +4726,94 @@ export class RoomGateway
             )
 
             client.emit('activePKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getPKBattleProgress')
+    async handleGetPKBattleProgress(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_PK_BATTLE_PROGRESS request: User ${userId} requesting progress for battle ${data.battleId}`
+            )
+
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            client.emit('pkBattleProgressResponse', {
+                status: 'success',
+                battleId: data.battleId,
+                progress: battleDetails.progress,
+                participants: battleDetails.participants.map((p) => ({
+                    userId: p.userId,
+                    name: p.name,
+                    avatar: p.avatar,
+                    totalGiftsReceived: p.totalGiftsReceived,
+                    giftCount: p.giftCount,
+                    position: p.position
+                })),
+                totalGiftsValue: battleDetails.totalGiftsValue,
+                remainingTime: battleDetails.remainingTime
+            })
+
+            this.logger.log(
+                `✅ GET_PK_BATTLE_PROGRESS success: Progress sent for battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_PK_BATTLE_PROGRESS failed: ${error.message}`
+            )
+
+            client.emit('pkBattleProgressResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getPKBattleHighestSender')
+    async handleGetPKBattleHighestSender(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_PK_BATTLE_HIGHEST_SENDER request: User ${userId} requesting highest sender for battle ${data.battleId}`
+            )
+
+            const highestSenderData =
+                await this.roomService.getPKBattleHighestSender(data.battleId)
+
+            client.emit('pkBattleHighestSenderResponse', {
+                status: 'success',
+                ...highestSenderData
+            })
+
+            this.logger.log(
+                `✅ GET_PK_BATTLE_HIGHEST_SENDER success: Highest sender data sent for battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_PK_BATTLE_HIGHEST_SENDER failed: ${error.message}`
+            )
+
+            client.emit('pkBattleHighestSenderResponse', {
                 status: 'error',
                 message: error.message
             })
