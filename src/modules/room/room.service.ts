@@ -2146,14 +2146,25 @@ export class RoomService {
         }
 
         // Create the battle
+        const now = new Date()
         const battle = this.pkBattleRepository.create({
             roomId,
             hostId,
             battleType,
             duration: durationMinutes * 60, // Convert to seconds
-            status: PKBattleStatus.PENDING,
+            status:
+                battleType === PKBattleType.HOST_SELECTED
+                    ? PKBattleStatus.ACTIVE
+                    : PKBattleStatus.PENDING,
             description,
-            metadata
+            metadata,
+            // If HOST_SELECTED, start immediately
+            startTime:
+                battleType === PKBattleType.HOST_SELECTED ? now : undefined,
+            endTime:
+                battleType === PKBattleType.HOST_SELECTED
+                    ? new Date(now.getTime() + durationMinutes * 60 * 1000)
+                    : undefined
         })
 
         const savedBattle = await this.pkBattleRepository.save(battle)
@@ -2164,9 +2175,36 @@ export class RoomService {
                 battleId: savedBattle.uuid,
                 userId: participantIds[i],
                 position: i + 1,
-                status: PKBattleParticipantStatus.INVITED
+                // If HOST_SELECTED, participants are automatically active
+                status:
+                    battleType === PKBattleType.HOST_SELECTED
+                        ? PKBattleParticipantStatus.ACTIVE
+                        : PKBattleParticipantStatus.INVITED,
+                // Set joinedAt for HOST_SELECTED battles
+                joinedAt:
+                    battleType === PKBattleType.HOST_SELECTED ? now : undefined
             })
             await this.pkBattleParticipantRepository.save(participant)
+        }
+
+        // If HOST_SELECTED, schedule automatic battle end
+        if (battleType === PKBattleType.HOST_SELECTED) {
+            setTimeout(
+                async () => {
+                    try {
+                        await this.endPKBattle(savedBattle.uuid)
+                    } catch (error) {
+                        this.logger.error(
+                            `Failed to auto-end PK battle ${savedBattle.uuid}: ${error.message}`
+                        )
+                    }
+                },
+                durationMinutes * 60 * 1000
+            )
+
+            this.logger.log(
+                `🚀 HOST_SELECTED PK Battle ${savedBattle.uuid} started immediately and will auto-end in ${durationMinutes} minutes`
+            )
         }
 
         // Load the complete battle with participants
@@ -2241,13 +2279,25 @@ export class RoomService {
             )
         }
 
+        // HOST_SELECTED battles are already active, no need to start
+        if (battle.battleType === PKBattleType.HOST_SELECTED) {
+            if (battle.status === PKBattleStatus.ACTIVE) {
+                return battle // Already active, return as is
+            } else {
+                throw new BadRequestException(
+                    'HOST_SELECTED battles start automatically and cannot be manually started'
+                )
+            }
+        }
+
+        // For other battle types, require approval first
         if (battle.status !== PKBattleStatus.APPROVED) {
             throw new BadRequestException(
                 'Battle must be approved before starting'
             )
         }
 
-        // Check if all participants have accepted
+        // Check if all participants have accepted (only for non-HOST_SELECTED battles)
         const acceptedParticipants = battle.participants.filter(
             (p) => p.status === PKBattleParticipantStatus.ACCEPTED
         )
@@ -2273,9 +2323,15 @@ export class RoomService {
 
         const savedBattle = await this.pkBattleRepository.save(battle)
 
-        // Schedule battle end (you might want to use a job queue like Bull for this)
+        // Schedule battle end
         setTimeout(async () => {
-            await this.endPKBattle(battleId)
+            try {
+                await this.endPKBattle(battleId)
+            } catch (error) {
+                this.logger.error(
+                    `Failed to auto-end PK battle ${battleId}: ${error.message}`
+                )
+            }
         }, battle.duration * 1000)
 
         return savedBattle
@@ -2292,21 +2348,33 @@ export class RoomService {
         const participant = await this.pkBattleParticipantRepository.findOne({
             where: {
                 battleId,
-                userId,
-                status: PKBattleParticipantStatus.INVITED
+                userId
             },
             relations: ['battle']
         })
 
         if (!participant) {
-            throw new NotFoundException(
-                'PK Battle invitation not found or already responded'
+            throw new NotFoundException('PK Battle participant not found')
+        }
+
+        // HOST_SELECTED battles start automatically, no response needed
+        if (participant.battle.battleType === PKBattleType.HOST_SELECTED) {
+            throw new BadRequestException(
+                'HOST_SELECTED battles do not require participant approval - they start automatically'
             )
         }
 
+        // For other battle types, check if battle is still pending
         if (participant.battle.status !== PKBattleStatus.PENDING) {
             throw new BadRequestException(
                 'Cannot respond to a battle that is not pending'
+            )
+        }
+
+        // Check if already responded
+        if (participant.status !== PKBattleParticipantStatus.INVITED) {
+            throw new BadRequestException(
+                'Already responded to this battle invitation'
             )
         }
 

@@ -4308,15 +4308,46 @@ export class RoomGateway
                 hostName: userName,
                 status: battle.status,
                 duration: battle.duration,
+                battleType: battle.battleType,
+                startTime: battle.startTime,
+                endTime: battle.endTime,
                 participants:
                     battle.participants?.map((p) => ({
                         userId: p.userId,
                         name: p.user?.name,
                         position: p.position,
-                        status: p.status
+                        status: p.status,
+                        joinedAt: p.joinedAt
                     })) || [],
-                createdAt: battle.createdAt
+                createdAt: battle.createdAt,
+                isAutoStarted:
+                    battle.battleType === 'host_selected' &&
+                    battle.status === 'active'
             })
+
+            // If battle is HOST_SELECTED and started immediately, emit additional battle started event
+            if (
+                battle.battleType === 'host_selected' &&
+                battle.status === 'active'
+            ) {
+                this.server.to(`room_${data.roomId}`).emit('pkBattleStarted', {
+                    battleId: battle.uuid,
+                    roomId: data.roomId,
+                    startTime: battle.startTime,
+                    endTime: battle.endTime,
+                    status: 'active',
+                    participants:
+                        battle.participants?.map((p) => ({
+                            userId: p.userId,
+                            name: p.user?.name,
+                            position: p.position,
+                            status: p.status,
+                            totalGifts: 0,
+                            giftValue: 0
+                        })) || [],
+                    message: 'PK Battle started automatically (Host Selected)'
+                })
+            }
 
             // Send success response to creator
             client.emit('createPKBattleResponse', {
