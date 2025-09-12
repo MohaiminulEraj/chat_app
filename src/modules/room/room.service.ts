@@ -2847,4 +2847,272 @@ export class RoomService {
             endTime: battle.endTime
         }))
     }
+
+    // ==================== ROOM PROFILE METHODS ====================
+
+    /**
+     * Get detailed user profile in room context
+     * Shows role, privileges, intimacy connections when user is tapped in room
+     */
+    async getUserProfileInRoom(
+        roomId: string,
+        userId: string,
+        currentUserId?: string
+    ): Promise<any> {
+        this.logger.log(
+            `👤 GET_USER_PROFILE_IN_ROOM: Getting profile for user ${userId} in room ${roomId}`
+        )
+
+        // For now, return dummy data for frontend implementation
+        // TODO: Implement actual data fetching in future iterations
+
+        const dummyProfile = {
+            userId: userId,
+            name: 'Alice Johnson',
+            displayName: 'AliceGamer',
+            role: 'host', // This should come from room roles
+            location: 'New York, USA',
+            followersCount: 1250,
+            profile: {
+                avatarUrl:
+                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_avatar.jpg',
+                coverPhoto:
+                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_cover.jpg',
+                bio: 'Gaming enthusiast and community leader. Love connecting with people through interactive experiences.',
+                level: 25,
+                badge: [
+                    'VIP',
+                    'Top Gifter',
+                    'Host Master',
+                    'Community Champion'
+                ]
+            },
+            privileges: {
+                giftWall: {
+                    count: 847,
+                    totalValue: 15420.5,
+                    recentGifts: [
+                        {
+                            giftId: 'gift-001',
+                            name: 'Golden Rose',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_rose.png',
+                            value: 250.0,
+                            senderName: 'Bob Wilson',
+                            receivedAt: '2025-09-12T10:30:00Z'
+                        },
+                        {
+                            giftId: 'gift-002',
+                            name: 'Diamond Crown',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/diamond_crown.png',
+                            value: 500.0,
+                            senderName: 'Charlie Brown',
+                            receivedAt: '2025-09-12T09:15:00Z'
+                        },
+                        {
+                            giftId: 'gift-003',
+                            name: 'Magic Wand',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/magic_wand.png',
+                            value: 150.0,
+                            senderName: 'Diana Prince',
+                            receivedAt: '2025-09-12T08:45:00Z'
+                        },
+                        {
+                            giftId: 'gift-004',
+                            name: 'Sparkle Heart',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_heart.png',
+                            value: 75.0,
+                            senderName: 'Eve Anderson',
+                            receivedAt: '2025-09-11T22:20:00Z'
+                        },
+                        {
+                            giftId: 'gift-005',
+                            name: 'Rainbow Butterfly',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/rainbow_butterfly.png',
+                            value: 120.0,
+                            senderName: 'Frank Miller',
+                            receivedAt: '2025-09-11T20:10:00Z'
+                        }
+                    ]
+                },
+                decoration: {
+                    count: 23,
+                    totalSpent: 3450.75,
+                    activeDecorations: [
+                        {
+                            decorationId: 'deco-001',
+                            name: 'Golden Frame',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_frame.png',
+                            type: 'frame',
+                            isActive: true,
+                            purchasedAt: '2025-09-10T14:30:00Z',
+                            price: 299.99
+                        },
+                        {
+                            decorationId: 'deco-002',
+                            name: 'Sparkle Effect',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_effect.gif',
+                            type: 'effect',
+                            isActive: true,
+                            purchasedAt: '2025-09-08T16:45:00Z',
+                            price: 199.99
+                        },
+                        {
+                            decorationId: 'deco-003',
+                            name: 'VIP Badge',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/vip_badge.png',
+                            type: 'badge',
+                            isActive: true,
+                            purchasedAt: '2025-09-05T11:20:00Z',
+                            price: 149.99
+                        },
+                        {
+                            decorationId: 'deco-004',
+                            name: 'Royal Crown Frame',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/royal_crown_frame.png',
+                            type: 'frame',
+                            isActive: false,
+                            purchasedAt: '2025-09-03T09:15:00Z',
+                            price: 399.99
+                        }
+                    ]
+                }
+            },
+            intimacy: {
+                totalConnections: 156,
+                intimacyScore: 8.7, // Overall intimacy score out of 10
+                topConnections: [
+                    {
+                        userId: 'user-int-001',
+                        name: 'Bob Wilson',
+                        displayName: 'BobTheBuilder',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/bob_avatar.jpg',
+                        intimacyLevel: 95,
+                        connectionType: 'gift_exchange',
+                        giftExchangeCount: 127,
+                        totalGiftValue: 2340.5,
+                        mutualGifts: 89,
+                        lastInteraction: '2025-09-12T11:45:00Z',
+                        relationshipDuration: '3 months',
+                        connectionStrength: 'Very Strong'
+                    },
+                    {
+                        userId: 'user-int-002',
+                        name: 'Charlie Brown',
+                        displayName: 'CharlieG',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/charlie_avatar.jpg',
+                        intimacyLevel: 87,
+                        connectionType: 'frequent_interaction',
+                        giftExchangeCount: 78,
+                        totalGiftValue: 1890.25,
+                        mutualGifts: 34,
+                        lastInteraction: '2025-09-12T10:20:00Z',
+                        relationshipDuration: '2 months',
+                        connectionStrength: 'Strong'
+                    },
+                    {
+                        userId: 'user-int-003',
+                        name: 'Diana Prince',
+                        displayName: 'WonderDiana',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/diana_avatar.jpg',
+                        intimacyLevel: 72,
+                        connectionType: 'mutual_friend',
+                        giftExchangeCount: 45,
+                        totalGiftValue: 890.75,
+                        mutualGifts: 23,
+                        lastInteraction: '2025-09-11T18:30:00Z',
+                        relationshipDuration: '1.5 months',
+                        connectionStrength: 'Good'
+                    },
+                    {
+                        userId: 'user-int-004',
+                        name: 'Eve Anderson',
+                        displayName: 'EveTheGreat',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/eve_avatar.jpg',
+                        intimacyLevel: 68,
+                        connectionType: 'gift_exchange',
+                        giftExchangeCount: 56,
+                        totalGiftValue: 1120.0,
+                        mutualGifts: 28,
+                        lastInteraction: '2025-09-11T16:45:00Z',
+                        relationshipDuration: '1 month',
+                        connectionStrength: 'Good'
+                    },
+                    {
+                        userId: 'user-int-005',
+                        name: 'Frank Miller',
+                        displayName: 'FrankTheTank',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/frank_avatar.jpg',
+                        intimacyLevel: 61,
+                        connectionType: 'frequent_interaction',
+                        giftExchangeCount: 32,
+                        totalGiftValue: 645.5,
+                        mutualGifts: 16,
+                        lastInteraction: '2025-09-11T14:20:00Z',
+                        relationshipDuration: '3 weeks',
+                        connectionStrength: 'Moderate'
+                    }
+                ]
+            },
+            roomContext: {
+                joinedAt: '2025-09-12T08:00:00Z',
+                timeInRoom: '3 hours 45 minutes',
+                seatNumber: 1,
+                isHost: true,
+                contributions: {
+                    commentsCount: 47,
+                    giftsGivenInRoom: 12,
+                    giftsReceivedInRoom: 28
+                },
+                roomInteractions: [
+                    {
+                        type: 'comment',
+                        content: "Welcome everyone to today's session!",
+                        timestamp: '2025-09-12T11:30:00Z'
+                    },
+                    {
+                        type: 'gift_received',
+                        from: 'Bob Wilson',
+                        giftName: 'Golden Rose',
+                        timestamp: '2025-09-12T10:30:00Z'
+                    }
+                ]
+            },
+            stats: {
+                totalRoomsJoined: 342,
+                totalTimeInRooms: '287 hours',
+                favoriteRoomType: 'Gaming',
+                hostingExperience: '15 months',
+                communityRating: 4.8,
+                totalGiftsReceived: 2847,
+                totalGiftsSent: 1923,
+                achievements: [
+                    'Top Host of the Month',
+                    'Community Builder',
+                    'Gift Master',
+                    'Social Butterfly',
+                    'Room Legend'
+                ]
+            }
+        }
+
+        this.logger.log(
+            `✅ GET_USER_PROFILE_IN_ROOM: Successfully generated dummy profile for user ${userId}`
+        )
+
+        return dummyProfile
+    }
 }
