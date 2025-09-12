@@ -723,49 +723,18 @@ export class RoomGateway
                 this.connectedUsers.set(client.id, userInfo)
             }
 
-            // Determine if the user is the host; hosts should not occupy a seat on join
+            // All users join as observers initially - they must explicitly sit in a seat
             const roomDetails = await this.roomService.getRoomDetails(
                 data.roomID
             )
 
-            const isHost = roomDetails?.hostId === userId
-
             let participant: any = null
-            let joinedAsObserver = false
+            let joinedAsObserver = true
 
-            if (isHost) {
-                // Host joins as observer; do not occupy any seat
-                joinedAsObserver = true
-                this.logger.log(
-                    `👑 ROOM_ID: Host ${userName} (${userId}) joined room ${data.roomID} as observer (no seat assigned)`
-                )
-            } else {
-                try {
-                    participant = await this.roomService.joinRoom(
-                        data.roomID,
-                        userId,
-                        undefined,
-                        undefined
-                    )
-                } catch (e: any) {
-                    const msg: string = e?.message || ''
-                    if (msg.includes('No available seats')) {
-                        joinedAsObserver = true
-                        try {
-                            await this.roomService.addToWaitingList(
-                                data.roomID,
-                                userId
-                            )
-                        } catch (wlErr: any) {
-                            this.logger.warn(
-                                `⚠️ Failed to add ${userId} to waiting list for room ${data.roomID}: ${wlErr?.message}`
-                            )
-                        }
-                    } else {
-                        throw e
-                    }
-                }
-            }
+            // No automatic seat assignment - users must tap on a seat to sit
+            this.logger.log(
+                `�️ ROOM_ID: User ${userName} (${userId}) joined room ${data.roomID} as observer (must tap seat to sit)`
+            )
 
             // Update tracking
             if (userInfo) {
@@ -812,9 +781,7 @@ export class RoomGateway
             } else if (joinedAsObserver) {
                 // Emit observer join update
                 this.server.to(`room:${data.roomID}`).emit('roomJoinUpdate', {
-                    action: isHost
-                        ? 'host_joined_as_observer'
-                        : 'observer_joined',
+                    action: 'observer_joined',
                     roomId: data.roomID,
                     userId: userId,
                     userName: userName,
@@ -853,9 +820,7 @@ export class RoomGateway
                       seatIndex: null,
                       seats: updatedSeats,
                       roomUserCount: newCount,
-                      message: isHost
-                          ? 'Host joined as observer (no seat assigned).'
-                          : 'Room is full or seats locked. Joined as observer and added to waiting list.'
+                      message: 'Joined as observer. Tap on a seat to sit down.'
                   }
         } catch (error) {
             this.logger.error(
@@ -970,13 +935,6 @@ export class RoomGateway
                 return null
             }
 
-            // Check if user is the host - hosts should never receive joinRoomResponse
-            const isHost = roomDetails.hostId === userId
-
-            this.logger.debug(
-                `🔍 JOIN_ROOM: User ${userId} host status: ${isHost ? 'HOST' : 'REGULAR_USER'}`
-            )
-
             // Get current participant data for this user
             const participants =
                 await this.roomService.getRoomParticipants(roomId)
@@ -992,27 +950,24 @@ export class RoomGateway
                 `🔍 JOIN_ROOM: User ${userId} participant status: ${currentUserParticipant ? 'SEATED' : 'OBSERVER'}`
             )
 
-            // Format participant data if user is seated AND not the host
-            const participantData =
-                currentUserParticipant && !isHost
-                    ? {
-                          userId: currentUserParticipant.userId, // Ensure this matches the requesting user
-                          name:
-                              currentUserParticipant.user?.name ||
-                              currentUserParticipant.user?.email ||
-                              userName,
-                          avatar:
-                              currentUserParticipant.user?.avatarUrl || null,
-                          seatIndex: currentUserParticipant.seatNumber - 1, // Convert to 0-based
-                          isSpeaking:
-                              currentUserParticipant.isSpeaking || false,
-                          micOn: !currentUserParticipant.isMuted, // micOn is inverse of isMuted
-                          role: 'participant' // All seated users are participants
-                      }
-                    : null // User is observer or host
+            // Format participant data if user is seated
+            const participantData = currentUserParticipant
+                ? {
+                      userId: currentUserParticipant.userId,
+                      name:
+                          currentUserParticipant.user?.name ||
+                          currentUserParticipant.user?.email ||
+                          userName,
+                      avatar: currentUserParticipant.user?.avatarUrl || null,
+                      seatIndex: currentUserParticipant.seatNumber - 1,
+                      isSpeaking: currentUserParticipant.isSpeaking || false,
+                      micOn: !currentUserParticipant.isMuted,
+                      role: 'participant'
+                  }
+                : null
 
-            // Only emit joinRoomResponse when user is actually seated AND not the host
-            if (participantData && !isHost) {
+            // Only emit joinRoomResponse when user is actually seated
+            if (participantData) {
                 this.logger.log(
                     `📤 JOIN_ROOM: Emitting joinRoomResponse to socket ${client.id} with participant: ${participantData.name} (${participantData.userId})`
                 )
@@ -1020,10 +975,6 @@ export class RoomGateway
                     `📤 JOIN_ROOM: Response data: ${JSON.stringify(participantData)}`
                 )
                 client.emit('joinRoomResponse', participantData)
-            } else if (isHost) {
-                this.logger.log(
-                    `👑 JOIN_ROOM: User ${userName} (${userId}) is host - no joinRoomResponse emitted`
-                )
             } else {
                 this.logger.log(
                     `ℹ️ JOIN_ROOM: User ${userName} (${userId}) joined as observer - no joinRoomResponse emitted`
@@ -1031,7 +982,7 @@ export class RoomGateway
             }
 
             this.logger.log(
-                `✅ JOIN_ROOM complete: User ${userName} (${userId}) joined room ${roomId} as ${isHost ? 'host' : participantData ? 'participant' : 'observer'}`
+                `✅ JOIN_ROOM complete: User ${userName} (${userId}) joined room ${roomId} as ${participantData ? 'participant' : 'observer'}`
             )
 
             // Now do the additional room data operations asynchronously
@@ -1213,12 +1164,12 @@ export class RoomGateway
                 roomId,
                 userId
             )
-            const isHost =
-                roomDetails?.hostId === userId ||
+            const isAdmin =
+                userRoles.includes(RoomRole.ADMIN) ||
                 userRoles.includes(RoomRole.OWNER)
 
-            // Check if seat is locked
-            if (targetSeat.locked && !isHost) {
+            // Check if seat is locked (only admins can override locked seats)
+            if (targetSeat.locked && !isAdmin) {
                 // Seat is locked and user is not host - add to waiting list
                 this.logger.log(
                     `⏳ SIT_IN_SEAT: Seat ${data.seatIndex} is locked. Adding user ${userName} (${userId}) to waiting list for room ${roomId}`
@@ -1270,13 +1221,47 @@ export class RoomGateway
                 return waitingResponse
             }
 
-            // Seat is available and unlocked (or user is host) - proceed with sitting
+            // Seat is available and unlocked (or user is admin) - proceed with sitting
             const participant = await this.roomService.joinRoomWithSeat(
                 roomId,
                 userId,
                 data.seatIndex,
                 data.password
             )
+
+            // If user sits in seat 0 (index 0), they become the host
+            if (data.seatIndex === 0) {
+                try {
+                    const currentHostId = roomDetails?.hostId
+
+                    // Only transfer ownership if the user is not already the host
+                    if (currentHostId !== userId) {
+                        await this.roomService.transferRoomOwnership(
+                            roomId,
+                            userId,
+                            currentHostId || roomDetails?.ownerId || userId
+                        )
+
+                        this.logger.log(
+                            `👑 SIT_IN_SEAT: User ${userName} (${userId}) became host by sitting in seat 0 in room ${roomId}`
+                        )
+
+                        // Broadcast host change to all room participants
+                        this.server.to(`room:${roomId}`).emit('hostChanged', {
+                            roomId,
+                            newHostId: userId,
+                            newHostName: participant.user?.name || userName,
+                            previousHostId: currentHostId,
+                            timestamp: new Date().toISOString(),
+                            reason: 'seat_0_assignment'
+                        })
+                    }
+                } catch (error) {
+                    this.logger.warn(
+                        `⚠️ SIT_IN_SEAT: Failed to transfer host role to ${userName} (${userId}) for seat 0 in room ${roomId}: ${error.message}`
+                    )
+                }
+            }
 
             // Update seat state in memory
             await this.updateRoomSeatsState(roomId)
@@ -4323,15 +4308,46 @@ export class RoomGateway
                 hostName: userName,
                 status: battle.status,
                 duration: battle.duration,
+                battleType: battle.battleType,
+                startTime: battle.startTime,
+                endTime: battle.endTime,
                 participants:
                     battle.participants?.map((p) => ({
                         userId: p.userId,
                         name: p.user?.name,
                         position: p.position,
-                        status: p.status
+                        status: p.status,
+                        joinedAt: p.joinedAt
                     })) || [],
-                createdAt: battle.createdAt
+                createdAt: battle.createdAt,
+                isAutoStarted:
+                    battle.battleType === 'host_selected' &&
+                    battle.status === 'active'
             })
+
+            // If battle is HOST_SELECTED and started immediately, emit additional battle started event
+            if (
+                battle.battleType === 'host_selected' &&
+                battle.status === 'active'
+            ) {
+                this.server.to(`room_${data.roomId}`).emit('pkBattleStarted', {
+                    battleId: battle.uuid,
+                    roomId: data.roomId,
+                    startTime: battle.startTime,
+                    endTime: battle.endTime,
+                    status: 'active',
+                    participants:
+                        battle.participants?.map((p) => ({
+                            userId: p.userId,
+                            name: p.user?.name,
+                            position: p.position,
+                            status: p.status,
+                            totalGifts: 0,
+                            giftValue: 0
+                        })) || [],
+                    message: 'PK Battle started automatically (Host Selected)'
+                })
+            }
 
             // Send success response to creator
             client.emit('createPKBattleResponse', {
@@ -4527,6 +4543,41 @@ export class RoomGateway
                     totalGiftsValue: battleDetails.totalGiftsValue
                 })
 
+            // Emit real-time progress update
+            this.server
+                .to(`room_${battleDetails.roomId}`)
+                .emit('pkBattleProgressUpdate', {
+                    battleId: data.battleId,
+                    progress: battleDetails.progress,
+                    participants: battleDetails.participants.map((p) => ({
+                        userId: p.userId,
+                        name: p.name,
+                        totalGiftsReceived: p.totalGiftsReceived,
+                        giftCount: p.giftCount
+                    })),
+                    totalGiftsValue: battleDetails.totalGiftsValue,
+                    updatedAt: new Date()
+                })
+
+            // Get and emit highest sender update
+            try {
+                const highestSenderData =
+                    await this.roomService.getPKBattleHighestSender(
+                        data.battleId
+                    )
+                this.server
+                    .to(`room_${battleDetails.roomId}`)
+                    .emit('pkBattleHighestSender', {
+                        battleId: data.battleId,
+                        ...highestSenderData,
+                        updatedAt: new Date()
+                    })
+            } catch (error) {
+                this.logger.warn(
+                    `Failed to get highest sender for battle ${data.battleId}: ${error.message}`
+                )
+            }
+
             // Send success response to sender
             client.emit('sendPKBattleGiftResponse', {
                 status: 'success',
@@ -4675,6 +4726,94 @@ export class RoomGateway
             )
 
             client.emit('activePKBattleResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getPKBattleProgress')
+    async handleGetPKBattleProgress(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_PK_BATTLE_PROGRESS request: User ${userId} requesting progress for battle ${data.battleId}`
+            )
+
+            const battleDetails = await this.roomService.getPKBattleDetails(
+                data.battleId
+            )
+
+            client.emit('pkBattleProgressResponse', {
+                status: 'success',
+                battleId: data.battleId,
+                progress: battleDetails.progress,
+                participants: battleDetails.participants.map((p) => ({
+                    userId: p.userId,
+                    name: p.name,
+                    avatar: p.avatar,
+                    totalGiftsReceived: p.totalGiftsReceived,
+                    giftCount: p.giftCount,
+                    position: p.position
+                })),
+                totalGiftsValue: battleDetails.totalGiftsValue,
+                remainingTime: battleDetails.remainingTime
+            })
+
+            this.logger.log(
+                `✅ GET_PK_BATTLE_PROGRESS success: Progress sent for battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_PK_BATTLE_PROGRESS failed: ${error.message}`
+            )
+
+            client.emit('pkBattleProgressResponse', {
+                status: 'error',
+                message: error.message
+            })
+        }
+    }
+
+    @SubscribeMessage('getPKBattleHighestSender')
+    async handleGetPKBattleHighestSender(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            battleId: string
+        }
+    ) {
+        try {
+            const userId = (client as any).userId
+
+            this.logger.log(
+                `📤 GET_PK_BATTLE_HIGHEST_SENDER request: User ${userId} requesting highest sender for battle ${data.battleId}`
+            )
+
+            const highestSenderData =
+                await this.roomService.getPKBattleHighestSender(data.battleId)
+
+            client.emit('pkBattleHighestSenderResponse', {
+                status: 'success',
+                ...highestSenderData
+            })
+
+            this.logger.log(
+                `✅ GET_PK_BATTLE_HIGHEST_SENDER success: Highest sender data sent for battle ${data.battleId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_PK_BATTLE_HIGHEST_SENDER failed: ${error.message}`
+            )
+
+            client.emit('pkBattleHighestSenderResponse', {
                 status: 'error',
                 message: error.message
             })

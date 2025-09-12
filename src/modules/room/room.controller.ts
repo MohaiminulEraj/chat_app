@@ -2082,4 +2082,220 @@ export class RoomController {
             )
         }
     }
+
+    // ==================== ROOM PROFILE API ====================
+
+    @Get(':roomId/user-profile/:userId')
+    @ApiOperation({
+        summary: 'Get user profile in room context',
+        description:
+            'Get detailed user profile when tapped in a room - shows role, privileges, intimacy connections, etc.'
+    })
+    @ApiParam({
+        name: 'roomId',
+        description: 'Room UUID',
+        example: '123e4567-e89b-12d3-a456-426614174000'
+    })
+    @ApiParam({
+        name: 'userId',
+        description: 'User UUID to get profile for',
+        example: '456e7890-e89b-12d3-a456-426614174001'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'User profile in room context retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'User profile retrieved successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        userId: {
+                            type: 'string',
+                            example: '456e7890-e89b-12d3-a456-426614174001'
+                        },
+                        name: { type: 'string', example: 'Alice Johnson' },
+                        displayName: { type: 'string', example: 'AliceGamer' },
+                        role: {
+                            type: 'string',
+                            example: 'host',
+                            enum: [
+                                'owner',
+                                'host',
+                                'admin',
+                                'speaker',
+                                'listener'
+                            ]
+                        },
+                        location: { type: 'string', example: 'New York, USA' },
+                        followersCount: { type: 'number', example: 1250 },
+                        profile: {
+                            type: 'object',
+                            properties: {
+                                avatarUrl: {
+                                    type: 'string',
+                                    example:
+                                        'https://cloudinary.com/avatar123.jpg'
+                                },
+                                coverPhoto: {
+                                    type: 'string',
+                                    example:
+                                        'https://cloudinary.com/cover456.jpg'
+                                },
+                                bio: {
+                                    type: 'string',
+                                    example:
+                                        'Gaming enthusiast and community leader'
+                                },
+                                level: { type: 'number', example: 25 },
+                                badge: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    example: [
+                                        'VIP',
+                                        'Top Gifter',
+                                        'Host Master'
+                                    ]
+                                }
+                            }
+                        },
+                        privileges: {
+                            type: 'object',
+                            properties: {
+                                giftWall: {
+                                    type: 'object',
+                                    properties: {
+                                        count: { type: 'number', example: 847 },
+                                        totalValue: {
+                                            type: 'number',
+                                            example: 15420.5
+                                        },
+                                        recentGifts: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    giftId: { type: 'string' },
+                                                    name: { type: 'string' },
+                                                    imageUrl: {
+                                                        type: 'string'
+                                                    },
+                                                    value: { type: 'number' },
+                                                    senderName: {
+                                                        type: 'string'
+                                                    },
+                                                    receivedAt: {
+                                                        type: 'string'
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                decoration: {
+                                    type: 'object',
+                                    properties: {
+                                        count: { type: 'number', example: 23 },
+                                        activeDecorations: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    decorationId: {
+                                                        type: 'string'
+                                                    },
+                                                    name: { type: 'string' },
+                                                    imageUrl: {
+                                                        type: 'string'
+                                                    },
+                                                    type: {
+                                                        type: 'string',
+                                                        enum: [
+                                                            'frame',
+                                                            'effect',
+                                                            'badge'
+                                                        ]
+                                                    },
+                                                    isActive: {
+                                                        type: 'boolean'
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        intimacy: {
+                            type: 'object',
+                            properties: {
+                                totalConnections: {
+                                    type: 'number',
+                                    example: 156
+                                },
+                                topConnections: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            userId: { type: 'string' },
+                                            name: { type: 'string' },
+                                            avatarUrl: { type: 'string' },
+                                            intimacyLevel: {
+                                                type: 'number',
+                                                example: 85
+                                            },
+                                            connectionType: {
+                                                type: 'string',
+                                                enum: [
+                                                    'gift_exchange',
+                                                    'frequent_interaction',
+                                                    'mutual_friend'
+                                                ]
+                                            },
+                                            giftExchangeCount: {
+                                                type: 'number'
+                                            },
+                                            lastInteraction: { type: 'string' }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getUserProfileInRoom(
+        @Param('roomId') roomId: string,
+        @Param('userId') userId: string,
+        @Request() req: any
+    ) {
+        try {
+            const currentUserId = req.user?.uuid || req.user?.id
+
+            const profileData = await this.roomService.getUserProfileInRoom(
+                roomId,
+                userId,
+                currentUserId
+            )
+
+            return {
+                success: true,
+                message: 'User profile retrieved successfully',
+                data: profileData
+            }
+        } catch (error) {
+            if (error.status) throw error
+            throw new BadRequestException(
+                error.message || 'Failed to get user profile in room'
+            )
+        }
+    }
 }

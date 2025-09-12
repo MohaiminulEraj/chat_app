@@ -427,6 +427,37 @@ export class RoomService {
             `✅ Created participant: User ${userId} joined room ${roomId} at seat ${assignedSeat} (stored as ${assignedSeat + 1})`
         )
 
+        // If user sits in seat 0, they become the host
+        if (assignedSeat === 0) {
+            try {
+                // First, remove HOST role from current host (if any)
+                const currentHostAssignments =
+                    await this.roomRoleRepository.find({
+                        where: { roomId, role: RoomRole.HOST, isActive: true }
+                    })
+
+                for (const assignment of currentHostAssignments) {
+                    await this.removeRoomRole(
+                        roomId,
+                        assignment.userId,
+                        RoomRole.HOST,
+                        userId
+                    )
+                }
+
+                // Assign HOST role to the new user
+                await this.assignRoomRole(roomId, userId, RoomRole.HOST, userId)
+
+                this.logger.log(
+                    `👑 User ${userId} became host by sitting in seat 0 in room ${roomId}`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to assign host role to user ${userId} in seat 0 of room ${roomId}: ${error.message}`
+                )
+            }
+        }
+
         return savedParticipant
     }
 
@@ -462,8 +493,45 @@ export class RoomService {
             `🚪 Removing participant ${userId} from room ${roomId} (seat ${participant.seatNumber})`
         )
 
+        // If leaving seat 0 (host seat), need to transfer host role
+        const wasHostSeat = participant.seatNumber === 1 // seat 0 is stored as seatNumber 1
+
         // Remove participant from this specific room only
         await this.participantRepository.remove(participant)
+
+        // If the leaving user was in seat 0 (host seat), find next person to be host
+        if (wasHostSeat) {
+            try {
+                // Remove host role from leaving user
+                await this.removeRoomRole(roomId, userId, RoomRole.HOST, userId)
+
+                // Find someone to be the new host (prefer lowest seat number)
+                const remainingParticipants =
+                    await this.participantRepository.find({
+                        where: { roomId: roomId as string },
+                        relations: ['user'],
+                        order: { seatNumber: 'ASC' }
+                    })
+
+                if (remainingParticipants.length > 0) {
+                    const newHostId = remainingParticipants[0].userId
+                    await this.assignRoomRole(
+                        roomId,
+                        newHostId,
+                        RoomRole.HOST,
+                        userId
+                    )
+
+                    this.logger.log(
+                        `👑 Host role transferred from ${userId} to ${newHostId} after leaving seat 0`
+                    )
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to transfer host role after leaving seat 0: ${error.message}`
+                )
+            }
+        }
 
         // Check waiting list and promote first user for this specific room only
         await this.promoteFromWaitingList(roomId)
@@ -530,7 +598,7 @@ export class RoomService {
         seatIndex: number,
         kickedBy: string
     ): Promise<{ userId: string; userName: string }> {
-        // Check if the user performing the kick has permission (host/owner/admin)
+        // Check if the user performing the kick has permission
         const userRoles = await this.getUserRolesInRoom(roomId, kickedBy)
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId }
@@ -538,14 +606,15 @@ export class RoomService {
 
         const isOwner =
             userRoles.includes(RoomRole.OWNER) || room?.ownerId === kickedBy
-        const canKick =
-            isOwner ||
-            userRoles.includes(RoomRole.HOST) ||
-            userRoles.includes(RoomRole.ADMIN)
+        const isAdmin = userRoles.includes(RoomRole.ADMIN)
+        const isHost = userRoles.includes(RoomRole.HOST)
+
+        // Admins can kick anyone (including hosts), hosts can kick regular users, owners can kick anyone
+        const canKick = isOwner || isAdmin || isHost
 
         if (!canKick) {
             throw new ForbiddenException(
-                'Only room owner, host, or admin can kick users'
+                'Only room owner, admin, or host can kick users'
             )
         }
 
@@ -611,8 +680,50 @@ export class RoomService {
             userName: participant.user.name
         }
 
+        // If kicking from seat 0, need to transfer host role
+        const wasHost = seatIndex === 0
+
         // Remove the participant (same as leaving the room)
         await this.participantRepository.remove(participant)
+
+        // If the kicked user was in seat 0 (host seat), find next person to be host
+        if (wasHost) {
+            try {
+                // Remove host role from kicked user
+                await this.removeRoomRole(
+                    roomId,
+                    participant.userId,
+                    RoomRole.HOST,
+                    kickedBy
+                )
+
+                // Find someone to be the new host (prefer seat 1, then any seated user)
+                const remainingParticipants =
+                    await this.participantRepository.find({
+                        where: { roomId: roomId as string },
+                        relations: ['user'],
+                        order: { seatNumber: 'ASC' }
+                    })
+
+                if (remainingParticipants.length > 0) {
+                    const newHostId = remainingParticipants[0].userId
+                    await this.assignRoomRole(
+                        roomId,
+                        newHostId,
+                        RoomRole.HOST,
+                        kickedBy
+                    )
+
+                    this.logger.log(
+                        `👑 Host role transferred from ${participant.userId} to ${newHostId} after kick from seat 0`
+                    )
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to transfer host role after kicking from seat 0: ${error.message}`
+                )
+            }
+        }
 
         // Check waiting list and promote first user
         await this.promoteFromWaitingList(roomId)
@@ -1988,21 +2099,33 @@ export class RoomService {
             )
         }
 
-        // Validate participants are in the room
+        // Validate participants
         if (participantIds.length !== 2) {
             throw new BadRequestException(
                 'Exactly 2 participants are required for a PK battle'
             )
         }
 
+        // With the new seat management system, we allow:
+        // 1. Users who are seated in the room (participants)
+        // 2. The host (who can also be seated now)
         for (const participantId of participantIds) {
+            // Check if user is seated in the room OR is the host
             const isInRoom = await this.isUserInRoom(participantId, roomId)
-            if (!isInRoom) {
+            const userRoles = await this.getUserRolesInRoom(
+                roomId,
+                participantId
+            )
+            const isHost =
+                userRoles.includes(RoomRole.HOST) ||
+                userRoles.includes(RoomRole.OWNER)
+
+            if (!isInRoom && !isHost) {
                 const user = await this.userRepository.findOne({
                     where: { uuid: participantId }
                 })
                 throw new BadRequestException(
-                    `User ${user?.name || participantId} is not in the room`
+                    `User ${user?.name || participantId} must be seated in the room or be the host to participate in PK battle`
                 )
             }
         }
@@ -2023,14 +2146,25 @@ export class RoomService {
         }
 
         // Create the battle
+        const now = new Date()
         const battle = this.pkBattleRepository.create({
             roomId,
             hostId,
             battleType,
             duration: durationMinutes * 60, // Convert to seconds
-            status: PKBattleStatus.PENDING,
+            status:
+                battleType === PKBattleType.HOST_SELECTED
+                    ? PKBattleStatus.ACTIVE
+                    : PKBattleStatus.PENDING,
             description,
-            metadata
+            metadata,
+            // If HOST_SELECTED, start immediately
+            startTime:
+                battleType === PKBattleType.HOST_SELECTED ? now : undefined,
+            endTime:
+                battleType === PKBattleType.HOST_SELECTED
+                    ? new Date(now.getTime() + durationMinutes * 60 * 1000)
+                    : undefined
         })
 
         const savedBattle = await this.pkBattleRepository.save(battle)
@@ -2041,9 +2175,36 @@ export class RoomService {
                 battleId: savedBattle.uuid,
                 userId: participantIds[i],
                 position: i + 1,
-                status: PKBattleParticipantStatus.INVITED
+                // If HOST_SELECTED, participants are automatically active
+                status:
+                    battleType === PKBattleType.HOST_SELECTED
+                        ? PKBattleParticipantStatus.ACTIVE
+                        : PKBattleParticipantStatus.INVITED,
+                // Set joinedAt for HOST_SELECTED battles
+                joinedAt:
+                    battleType === PKBattleType.HOST_SELECTED ? now : undefined
             })
             await this.pkBattleParticipantRepository.save(participant)
+        }
+
+        // If HOST_SELECTED, schedule automatic battle end
+        if (battleType === PKBattleType.HOST_SELECTED) {
+            setTimeout(
+                async () => {
+                    try {
+                        await this.endPKBattle(savedBattle.uuid)
+                    } catch (error) {
+                        this.logger.error(
+                            `Failed to auto-end PK battle ${savedBattle.uuid}: ${error.message}`
+                        )
+                    }
+                },
+                durationMinutes * 60 * 1000
+            )
+
+            this.logger.log(
+                `🚀 HOST_SELECTED PK Battle ${savedBattle.uuid} started immediately and will auto-end in ${durationMinutes} minutes`
+            )
         }
 
         // Load the complete battle with participants
@@ -2118,13 +2279,25 @@ export class RoomService {
             )
         }
 
+        // HOST_SELECTED battles are already active, no need to start
+        if (battle.battleType === PKBattleType.HOST_SELECTED) {
+            if (battle.status === PKBattleStatus.ACTIVE) {
+                return battle // Already active, return as is
+            } else {
+                throw new BadRequestException(
+                    'HOST_SELECTED battles start automatically and cannot be manually started'
+                )
+            }
+        }
+
+        // For other battle types, require approval first
         if (battle.status !== PKBattleStatus.APPROVED) {
             throw new BadRequestException(
                 'Battle must be approved before starting'
             )
         }
 
-        // Check if all participants have accepted
+        // Check if all participants have accepted (only for non-HOST_SELECTED battles)
         const acceptedParticipants = battle.participants.filter(
             (p) => p.status === PKBattleParticipantStatus.ACCEPTED
         )
@@ -2150,9 +2323,15 @@ export class RoomService {
 
         const savedBattle = await this.pkBattleRepository.save(battle)
 
-        // Schedule battle end (you might want to use a job queue like Bull for this)
+        // Schedule battle end
         setTimeout(async () => {
-            await this.endPKBattle(battleId)
+            try {
+                await this.endPKBattle(battleId)
+            } catch (error) {
+                this.logger.error(
+                    `Failed to auto-end PK battle ${battleId}: ${error.message}`
+                )
+            }
         }, battle.duration * 1000)
 
         return savedBattle
@@ -2169,21 +2348,33 @@ export class RoomService {
         const participant = await this.pkBattleParticipantRepository.findOne({
             where: {
                 battleId,
-                userId,
-                status: PKBattleParticipantStatus.INVITED
+                userId
             },
             relations: ['battle']
         })
 
         if (!participant) {
-            throw new NotFoundException(
-                'PK Battle invitation not found or already responded'
+            throw new NotFoundException('PK Battle participant not found')
+        }
+
+        // HOST_SELECTED battles start automatically, no response needed
+        if (participant.battle.battleType === PKBattleType.HOST_SELECTED) {
+            throw new BadRequestException(
+                'HOST_SELECTED battles do not require participant approval - they start automatically'
             )
         }
 
+        // For other battle types, check if battle is still pending
         if (participant.battle.status !== PKBattleStatus.PENDING) {
             throw new BadRequestException(
                 'Cannot respond to a battle that is not pending'
+            )
+        }
+
+        // Check if already responded
+        if (participant.status !== PKBattleParticipantStatus.INVITED) {
+            throw new BadRequestException(
+                'Already responded to this battle invitation'
             )
         }
 
@@ -2319,18 +2510,50 @@ export class RoomService {
             )
         }
 
-        // Sort participants by gifts received (for leaderboard)
+        // Calculate total gifts value first
+        const totalGiftsValue = battle.participants.reduce(
+            (sum, p) => sum + p.totalGiftsReceived,
+            0
+        )
+
+        // Sort participants by gifts received (for leaderboard) and add individual percentages
         const participantsWithStats = battle.participants
-            .map((participant) => ({
-                userId: participant.userId,
-                position: participant.position,
-                name: participant.user.name,
-                avatar: participant.user.avatarUrl,
-                totalGiftsReceived: participant.totalGiftsReceived,
-                giftCount: participant.giftCount,
-                status: participant.status
-            }))
+            .map((participant) => {
+                const individualPercentage =
+                    totalGiftsValue > 0
+                        ? Math.round(
+                              (participant.totalGiftsReceived /
+                                  totalGiftsValue) *
+                                  100
+                          )
+                        : 0
+
+                return {
+                    userId: participant.userId,
+                    position: participant.position,
+                    name: participant.user.name,
+                    avatar: participant.user.avatarUrl,
+                    totalGiftsReceived: participant.totalGiftsReceived,
+                    giftCount: participant.giftCount,
+                    status: participant.status,
+                    percentage: individualPercentage // Individual participant percentage
+                }
+            })
             .sort((a, b) => b.totalGiftsReceived - a.totalGiftsReceived)
+
+        // Calculate progress percentages for two participants (left/right display)
+        let leftProgress = 0
+        let rightProgress = 0
+
+        if (totalGiftsValue > 0 && participantsWithStats.length >= 2) {
+            const leftValue = participantsWithStats[0]?.totalGiftsReceived || 0
+            const rightValue = participantsWithStats[1]?.totalGiftsReceived || 0
+            leftProgress = Math.round((leftValue / totalGiftsValue) * 100)
+            rightProgress = Math.round((rightValue / totalGiftsValue) * 100)
+        } else if (participantsWithStats.length >= 2) {
+            leftProgress = 50
+            rightProgress = 50
+        }
 
         // Get recent gifts
         const recentGifts = battle.gifts
@@ -2340,6 +2563,7 @@ export class RoomService {
                 id: gift.uuid,
                 giftName: gift.gift.name,
                 giftImageUrl: gift.gift.imageUrl,
+                senderId: gift.senderId,
                 senderName: gift.sender.name,
                 receiverId: gift.receiverId,
                 quantity: gift.quantity,
@@ -2363,6 +2587,20 @@ export class RoomService {
             totalGiftsValue: battle.totalGiftsValue,
             participants: participantsWithStats,
             recentGifts,
+            // Progress percentages for left/right participants
+            progress: {
+                leftProgress,
+                rightProgress,
+                leftParticipant: participantsWithStats[0] || null,
+                rightParticipant: participantsWithStats[1] || null,
+                // Individual participant percentages for all participants
+                participantPercentages: participantsWithStats.map((p) => ({
+                    userId: p.userId,
+                    name: p.name,
+                    percentage: p.percentage,
+                    position: p.position
+                }))
+            },
             winner: battle.winnerId
                 ? {
                       userId: battle.winnerId,
@@ -2372,6 +2610,82 @@ export class RoomService {
                   }
                 : null,
             createdAt: battle.createdAt
+        }
+    }
+
+    /**
+     * Get highest gift sender in a PK Battle
+     */
+    async getPKBattleHighestSender(battleId: string): Promise<any> {
+        const battle = await this.pkBattleRepository.findOne({
+            where: { uuid: battleId, isActive: true },
+            relations: ['gifts', 'gifts.sender']
+        })
+
+        if (!battle) {
+            throw new NotFoundException(
+                `PK Battle with ID ${battleId} not found`
+            )
+        }
+
+        // Group gifts by sender and calculate total value sent
+        const senderTotals = new Map<
+            string,
+            {
+                senderId: string
+                senderName: string
+                senderAvatar: string | null
+                totalValue: number
+                giftCount: number
+            }
+        >()
+
+        for (const gift of battle.gifts) {
+            const senderId = gift.senderId
+            const totalValue = gift.giftValue * gift.quantity
+
+            if (senderTotals.has(senderId)) {
+                const existing = senderTotals.get(senderId)!
+                existing.totalValue += totalValue
+                existing.giftCount += gift.quantity
+            } else {
+                senderTotals.set(senderId, {
+                    senderId: senderId,
+                    senderName: gift.sender.name,
+                    senderAvatar: gift.sender.avatarUrl || null,
+                    totalValue: totalValue,
+                    giftCount: gift.quantity
+                })
+            }
+        }
+
+        // Find highest sender
+        let highestSender = null
+        let maxValue = 0
+
+        for (const senderData of senderTotals.values()) {
+            if (senderData.totalValue > maxValue) {
+                maxValue = senderData.totalValue
+                highestSender = senderData
+            }
+        }
+
+        return {
+            battleId: battle.uuid,
+            roomId: battle.roomId,
+            highestGroupSender: highestSender
+                ? {
+                      senderId: highestSender.senderId,
+                      name: highestSender.senderName,
+                      avatar: highestSender.senderAvatar,
+                      totalValue: highestSender.totalValue,
+                      giftCount: highestSender.giftCount
+                  }
+                : null,
+            totalSenders: senderTotals.size,
+            allSenders: Array.from(senderTotals.values()).sort(
+                (a, b) => b.totalValue - a.totalValue
+            )
         }
     }
 
@@ -2532,5 +2846,276 @@ export class RoomService {
             createdAt: battle.createdAt,
             endTime: battle.endTime
         }))
+    }
+
+    // ==================== ROOM PROFILE METHODS ====================
+
+    /**
+     * Get detailed user profile in room context
+     * Shows role, privileges, intimacy connections when user is tapped in room
+     */
+    async getUserProfileInRoom(
+        roomId: string,
+        userId: string,
+        currentUserId?: string
+    ): Promise<any> {
+        this.logger.log(
+            `👤 GET_USER_PROFILE_IN_ROOM: Getting profile for user ${userId} in room ${roomId}`
+        )
+
+        // For now, return dummy data for frontend implementation
+        // TODO: Implement actual data fetching in future iterations
+
+        const dummyProfile = {
+            userId: userId,
+            name: 'Alice Johnson',
+            displayName: 'AliceGamer',
+            role: 'host', // This should come from room roles
+            location: 'New York, USA',
+            followersCount: 1250,
+            profile: {
+                avatarUrl:
+                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_avatar.jpg',
+                coverPhoto:
+                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_cover.jpg',
+                bio: 'Gaming enthusiast and community leader. Love connecting with people through interactive experiences.',
+                level: 25,
+                badge: [
+                    'VIP',
+                    'Top Gifter',
+                    'Host Master',
+                    'Community Champion'
+                ],
+                // Currency balances (formatted as numbers)
+                binsBalance: 2750.5,
+                diamondBalance: 185.25
+            },
+            privileges: {
+                giftWall: {
+                    count: 847,
+                    totalValue: 15420.5,
+                    recentGifts: [
+                        {
+                            giftId: 'gift-001',
+                            name: 'Golden Rose',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_rose.png',
+                            value: 250.0,
+                            senderName: 'Bob Wilson',
+                            receivedAt: '2025-09-12T10:30:00Z'
+                        },
+                        {
+                            giftId: 'gift-002',
+                            name: 'Diamond Crown',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/diamond_crown.png',
+                            value: 500.0,
+                            senderName: 'Charlie Brown',
+                            receivedAt: '2025-09-12T09:15:00Z'
+                        },
+                        {
+                            giftId: 'gift-003',
+                            name: 'Magic Wand',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/magic_wand.png',
+                            value: 150.0,
+                            senderName: 'Diana Prince',
+                            receivedAt: '2025-09-12T08:45:00Z'
+                        },
+                        {
+                            giftId: 'gift-004',
+                            name: 'Sparkle Heart',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_heart.png',
+                            value: 75.0,
+                            senderName: 'Eve Anderson',
+                            receivedAt: '2025-09-11T22:20:00Z'
+                        },
+                        {
+                            giftId: 'gift-005',
+                            name: 'Rainbow Butterfly',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/rainbow_butterfly.png',
+                            value: 120.0,
+                            senderName: 'Frank Miller',
+                            receivedAt: '2025-09-11T20:10:00Z'
+                        }
+                    ]
+                },
+                decoration: {
+                    count: 23,
+                    totalSpent: 3450.75,
+                    activeDecorations: [
+                        {
+                            decorationId: 'deco-001',
+                            name: 'Golden Frame',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_frame.png',
+                            type: 'frame',
+                            isActive: true,
+                            purchasedAt: '2025-09-10T14:30:00Z',
+                            price: 299.99
+                        },
+                        {
+                            decorationId: 'deco-002',
+                            name: 'Sparkle Effect',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_effect.gif',
+                            type: 'effect',
+                            isActive: true,
+                            purchasedAt: '2025-09-08T16:45:00Z',
+                            price: 199.99
+                        },
+                        {
+                            decorationId: 'deco-003',
+                            name: 'VIP Badge',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/vip_badge.png',
+                            type: 'badge',
+                            isActive: true,
+                            purchasedAt: '2025-09-05T11:20:00Z',
+                            price: 149.99
+                        },
+                        {
+                            decorationId: 'deco-004',
+                            name: 'Royal Crown Frame',
+                            imageUrl:
+                                'https://res.cloudinary.com/demo/image/upload/v1640123456/royal_crown_frame.png',
+                            type: 'frame',
+                            isActive: false,
+                            purchasedAt: '2025-09-03T09:15:00Z',
+                            price: 399.99
+                        }
+                    ]
+                }
+            },
+            intimacy: {
+                totalConnections: 156,
+                intimacyScore: 8.7, // Overall intimacy score out of 10
+                topConnections: [
+                    {
+                        userId: 'user-int-001',
+                        name: 'Bob Wilson',
+                        displayName: 'BobTheBuilder',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/bob_avatar.jpg',
+                        intimacyLevel: 95,
+                        connectionType: 'gift_exchange',
+                        giftExchangeCount: 127,
+                        totalGiftValue: 2340.5,
+                        mutualGifts: 89,
+                        lastInteraction: '2025-09-12T11:45:00Z',
+                        relationshipDuration: '3 months',
+                        connectionStrength: 'Very Strong'
+                    },
+                    {
+                        userId: 'user-int-002',
+                        name: 'Charlie Brown',
+                        displayName: 'CharlieG',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/charlie_avatar.jpg',
+                        intimacyLevel: 87,
+                        connectionType: 'frequent_interaction',
+                        giftExchangeCount: 78,
+                        totalGiftValue: 1890.25,
+                        mutualGifts: 34,
+                        lastInteraction: '2025-09-12T10:20:00Z',
+                        relationshipDuration: '2 months',
+                        connectionStrength: 'Strong'
+                    },
+                    {
+                        userId: 'user-int-003',
+                        name: 'Diana Prince',
+                        displayName: 'WonderDiana',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/diana_avatar.jpg',
+                        intimacyLevel: 72,
+                        connectionType: 'mutual_friend',
+                        giftExchangeCount: 45,
+                        totalGiftValue: 890.75,
+                        mutualGifts: 23,
+                        lastInteraction: '2025-09-11T18:30:00Z',
+                        relationshipDuration: '1.5 months',
+                        connectionStrength: 'Good'
+                    },
+                    {
+                        userId: 'user-int-004',
+                        name: 'Eve Anderson',
+                        displayName: 'EveTheGreat',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/eve_avatar.jpg',
+                        intimacyLevel: 68,
+                        connectionType: 'gift_exchange',
+                        giftExchangeCount: 56,
+                        totalGiftValue: 1120.0,
+                        mutualGifts: 28,
+                        lastInteraction: '2025-09-11T16:45:00Z',
+                        relationshipDuration: '1 month',
+                        connectionStrength: 'Good'
+                    },
+                    {
+                        userId: 'user-int-005',
+                        name: 'Frank Miller',
+                        displayName: 'FrankTheTank',
+                        avatarUrl:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/frank_avatar.jpg',
+                        intimacyLevel: 61,
+                        connectionType: 'frequent_interaction',
+                        giftExchangeCount: 32,
+                        totalGiftValue: 645.5,
+                        mutualGifts: 16,
+                        lastInteraction: '2025-09-11T14:20:00Z',
+                        relationshipDuration: '3 weeks',
+                        connectionStrength: 'Moderate'
+                    }
+                ]
+            },
+            roomContext: {
+                joinedAt: '2025-09-12T08:00:00Z',
+                timeInRoom: '3 hours 45 minutes',
+                seatNumber: 1,
+                isHost: true,
+                contributions: {
+                    commentsCount: 47,
+                    giftsGivenInRoom: 12,
+                    giftsReceivedInRoom: 28
+                },
+                roomInteractions: [
+                    {
+                        type: 'comment',
+                        content: "Welcome everyone to today's session!",
+                        timestamp: '2025-09-12T11:30:00Z'
+                    },
+                    {
+                        type: 'gift_received',
+                        from: 'Bob Wilson',
+                        giftName: 'Golden Rose',
+                        timestamp: '2025-09-12T10:30:00Z'
+                    }
+                ]
+            },
+            stats: {
+                totalRoomsJoined: 342,
+                totalTimeInRooms: '287 hours',
+                favoriteRoomType: 'Gaming',
+                hostingExperience: '15 months',
+                communityRating: 4.8,
+                totalGiftsReceived: 2847,
+                totalGiftsSent: 1923,
+                achievements: [
+                    'Top Host of the Month',
+                    'Community Builder',
+                    'Gift Master',
+                    'Social Butterfly',
+                    'Room Legend'
+                ]
+            }
+        }
+
+        this.logger.log(
+            `✅ GET_USER_PROFILE_IN_ROOM: Successfully generated dummy profile for user ${userId}`
+        )
+
+        return dummyProfile
     }
 }

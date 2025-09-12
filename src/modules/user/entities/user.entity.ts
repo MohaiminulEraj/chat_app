@@ -77,8 +77,12 @@ export class User extends CustomBaseEntity {
     @Column({ type: 'int', default: 0 })
     level: number
 
-    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-    balance: number
+    // Currency system - Two types of currency
+    @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+    binsBalance: number
+
+    @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+    diamondBalance: number
 
     @Column({ nullable: true })
     frameId: string
