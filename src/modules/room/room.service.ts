@@ -2885,7 +2885,10 @@ export class RoomService {
                     'Top Gifter',
                     'Host Master',
                     'Community Champion'
-                ]
+                ],
+                // Currency balances (formatted as numbers)
+                binsBalance: 2750.5,
+                diamondBalance: 185.25
             },
             privileges: {
                 giftWall: {

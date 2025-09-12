@@ -15,7 +15,8 @@ export interface UserAchievementData {
     image: string
     coverImage: string
     level: number
-    balance: number
+    binsBalance: number
+    diamondBalance: number
     frameId: string | null
     frameImage: string | null
     badge: string[]

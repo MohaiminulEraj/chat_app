@@ -60,7 +60,7 @@ export class UserService {
     }
 
     async findByEmail(email: string): Promise<User | undefined> {
-        return this.userRepository.findOne({
+        const user = await this.userRepository.findOne({
             where: { email },
             select: [
                 'id',
@@ -71,9 +71,23 @@ export class UserService {
                 'name',
                 'phoneNumber',
                 'isEmailVerified',
-                'isPhoneVerified'
+                'isPhoneVerified',
+                'binsBalance',
+                'diamondBalance'
             ]
         })
+
+        if (user) {
+            // Format currency values as numbers
+            if (user.binsBalance) {
+                user.binsBalance = parseFloat(user.binsBalance.toString())
+            }
+            if (user.diamondBalance) {
+                user.diamondBalance = parseFloat(user.diamondBalance.toString())
+            }
+        }
+
+        return user
     }
 
     async findOne(id: string): Promise<User> {
@@ -81,6 +95,15 @@ export class UserService {
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`)
         }
+
+        // Format currency values as numbers
+        if (user.binsBalance) {
+            user.binsBalance = parseFloat(user.binsBalance.toString())
+        }
+        if (user.diamondBalance) {
+            user.diamondBalance = parseFloat(user.diamondBalance.toString())
+        }
+
         return user
     }
 
@@ -101,8 +124,19 @@ export class UserService {
     async findAll(): Promise<User[]> {
         // Instead of using select with potentially incorrect property names,
         // fetch all users and let TypeORM handle the property mapping
-        return this.userRepository.find({
+        const users = await this.userRepository.find({
             where: { isActive: true }
+        })
+
+        // Format currency values as numbers for all users
+        return users.map((user) => {
+            if (user.binsBalance) {
+                user.binsBalance = parseFloat(user.binsBalance.toString())
+            }
+            if (user.diamondBalance) {
+                user.diamondBalance = parseFloat(user.diamondBalance.toString())
+            }
+            return user
         })
     }
 
@@ -269,7 +303,8 @@ export class UserService {
                 'coverImage',
                 'country',
                 'level',
-                'balance',
+                'binsBalance',
+                'diamondBalance',
                 'frameId',
                 'frameImage',
                 'badge',
@@ -319,7 +354,8 @@ export class UserService {
             image: user.avatarUrl || '',
             coverImage: user.coverImage || '',
             level: user.level || 0,
-            balance: user.balance || 0,
+            binsBalance: parseFloat(user.binsBalance?.toString()) || 0,
+            diamondBalance: parseFloat(user.diamondBalance?.toString()) || 0,
             frameId: user.frameId || null,
             frameImage: user.frameImage || null,
             badge: user.badge || [],
@@ -340,7 +376,8 @@ export class UserService {
             entryEffects?: AchievementItem[]
             frames?: AchievementItem[]
             level?: number
-            balance?: number
+            binsBalance?: number
+            diamondBalance?: number
             frameId?: string
             frameImage?: string
             badge?: string[]
@@ -451,8 +488,11 @@ export class UserService {
         if (achievementUpdates.level !== undefined) {
             user.level = achievementUpdates.level
         }
-        if (achievementUpdates.balance !== undefined) {
-            user.balance = achievementUpdates.balance
+        if (achievementUpdates.binsBalance !== undefined) {
+            user.binsBalance = achievementUpdates.binsBalance
+        }
+        if (achievementUpdates.diamondBalance !== undefined) {
+            user.diamondBalance = achievementUpdates.diamondBalance
         }
         if (achievementUpdates.frameId !== undefined) {
             user.frameId = achievementUpdates.frameId
