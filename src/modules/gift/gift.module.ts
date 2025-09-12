@@ -5,6 +5,7 @@ import { RoomParticipant } from '../room/entities/room-participant.entity'
 import { User } from '../user/entities/user.entity'
 import { GiftTransaction } from './entities/gift-transaction.entity'
 import { Gift } from './entities/gift.entity'
+import { GiftCategory } from './entities/gift-category.entity'
 import { GiftController } from './gift.controller'
 // import { GiftGateway } from './gift.gateway' // Temporarily disabled to fix WebSocket conflicts
 import { GiftService } from './gift.service'
@@ -13,6 +14,7 @@ import { GiftService } from './gift.service'
     imports: [
         TypeOrmModule.forFeature([
             Gift,
+            GiftCategory,
             GiftTransaction,
             User,
             RoomParticipant
