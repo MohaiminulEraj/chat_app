@@ -2083,18 +2083,13 @@ export class RoomController {
         }
     }
 
-    // ==================== ROOM PROFILE API ====================
+    // ==================== USER PROFILE API ====================
 
-    @Get(':roomId/user-profile/:userId')
+    @Get('user-profile/:userId')
     @ApiOperation({
-        summary: 'Get user profile in room context',
+        summary: 'Get user profile',
         description:
-            'Get detailed user profile when tapped in a room - shows role, privileges, intimacy connections, etc.'
-    })
-    @ApiParam({
-        name: 'roomId',
-        description: 'Room UUID',
-        example: '123e4567-e89b-12d3-a456-426614174000'
+            'Get detailed user profile when tapped - shows role, privileges, intimacy connections, etc.'
     })
     @ApiParam({
         name: 'userId',
@@ -2272,16 +2267,11 @@ export class RoomController {
             }
         }
     })
-    async getUserProfileInRoom(
-        @Param('roomId') roomId: string,
-        @Param('userId') userId: string,
-        @Request() req: any
-    ) {
+    async getUserProfile(@Param('userId') userId: string, @Request() req: any) {
         try {
             const currentUserId = req.user?.uuid || req.user?.id
 
-            const profileData = await this.roomService.getUserProfileInRoom(
-                roomId,
+            const profileData = await this.roomService.getUserProfile(
                 userId,
                 currentUserId
             )
@@ -2294,7 +2284,7 @@ export class RoomController {
         } catch (error) {
             if (error.status) throw error
             throw new BadRequestException(
-                error.message || 'Failed to get user profile in room'
+                error.message || 'Failed to get user profile'
             )
         }
     }
