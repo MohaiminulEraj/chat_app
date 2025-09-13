@@ -3817,11 +3817,15 @@ export class RoomGateway
 
         if (!validatedUser) {
             const errorResponse = {
+                success: false,
                 status: 'error',
                 message:
                     'User information not available for seat lock operation',
+                roomId: data.roomId,
                 seatIndex: data.seatIndex,
-                isLocked: false
+                isLocked: false,
+                action: 'error',
+                timestamp: new Date().toISOString()
             }
 
             client.emit('toggleSeatLockResponse', errorResponse)
@@ -3875,8 +3879,9 @@ export class RoomGateway
                 } in room ${data.roomId} by ${userName} (${userId})`
             )
 
-            // Emit single response with all necessary data
+            // Emit comprehensive response with all necessary data
             const successResponse = {
+                success: true,
                 status: 'success',
                 roomId: data.roomId,
                 seatIndex: data.seatIndex,
@@ -3887,10 +3892,36 @@ export class RoomGateway
                     userId: userId,
                     userName: userName
                 },
+                action: data.isLocked ? 'locked' : 'unlocked',
                 timestamp: new Date().toISOString()
             }
 
+            // Emit response to the requester
             client.emit('toggleSeatLockResponse', successResponse)
+
+            // Broadcast seat lock update to all room participants for real-time sync
+            const roomSocketName = `room:${data.roomId}`
+            this.server.to(roomSocketName).emit('seatLockUpdated', {
+                roomId: data.roomId,
+                seatIndex: data.seatIndex,
+                isLocked: data.isLocked,
+                lockedBy: {
+                    userId: userId,
+                    userName: userName
+                },
+                seats: updatedSeats,
+                timestamp: new Date().toISOString()
+            })
+
+            // Also emit updated room state to all participants
+            this.server.to(roomSocketName).emit('roomSeatsUpdated', {
+                roomId: data.roomId,
+                seats: updatedSeats,
+                action: 'seat_lock_toggled',
+                seatIndex: data.seatIndex,
+                isLocked: data.isLocked,
+                timestamp: new Date().toISOString()
+            })
 
             // Track user activity
             this.trackUserActivity(userId, 'seatActions')
@@ -3904,13 +3935,17 @@ export class RoomGateway
                 error.stack
             )
 
-            // Emit error response to the requester
+            // Emit comprehensive error response to the requester
             const errorResponse = {
+                success: false,
                 status: 'error',
                 message: error.message,
+                roomId: data.roomId,
                 seatIndex: data.seatIndex,
                 isLocked: false, // Reset to false on error
-                error: error.message
+                action: 'error',
+                error: error.message,
+                timestamp: new Date().toISOString()
             }
 
             client.emit('toggleSeatLockResponse', errorResponse)
