@@ -2854,13 +2854,9 @@ export class RoomService {
      * Get detailed user profile in room context
      * Shows role, privileges, intimacy connections when user is tapped in room
      */
-    async getUserProfileInRoom(
-        roomId: string,
-        userId: string,
-        currentUserId?: string
-    ): Promise<any> {
+    async getUserProfile(userId: string, currentUserId?: string): Promise<any> {
         this.logger.log(
-            `👤 GET_USER_PROFILE_IN_ROOM: Getting profile for user ${userId} in room ${roomId}`
+            `👤 GET_USER_PROFILE: Getting profile for user ${userId}`
         )
 
         // For now, return dummy data for frontend implementation
