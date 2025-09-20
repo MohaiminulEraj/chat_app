@@ -1610,26 +1610,15 @@ export class RoomController {
                 createBattleDto.metadata
             )
 
+            // Get complete battle details using the same structure as getActivePKBattle
+            const battleDetails = battle
+                ? await this.roomService.getPKBattleDetails(battle.uuid)
+                : null
+
             return {
                 statusCode: HttpStatus.CREATED,
                 message: 'PK Battle created successfully',
-                data: {
-                    battleId: battle.uuid,
-                    roomId: battle.roomId,
-                    hostId: battle.hostId,
-                    battleType: battle.battleType,
-                    status: battle.status,
-                    duration: battle.duration,
-                    description: battle.description,
-                    participants:
-                        battle.participants?.map((p) => ({
-                            userId: p.userId,
-                            name: p.user?.name,
-                            position: p.position,
-                            status: p.status
-                        })) || [],
-                    createdAt: battle.createdAt
-                }
+                data: battleDetails
             }
         } catch (error) {
             if (error.status) throw error
