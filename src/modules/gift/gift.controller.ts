@@ -69,13 +69,13 @@ export class GiftController {
     @ApiOperation({
         summary: 'Initialize default gift categories and sample gifts',
         description:
-            "Creates default categories and sample gifts if they don't exist"
+            "Creates default categories and sample gifts if they don't exist. Prevents duplication on multiple calls."
     })
     async initializeDefaultData() {
-        await this.giftService.initializeDefaultData()
+        const result = await this.giftService.initializeDefaultData()
         return {
             success: true,
-            message: 'Default gift data initialized successfully'
+            ...result
         }
     }
 

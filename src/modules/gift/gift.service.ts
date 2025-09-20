@@ -303,9 +303,31 @@ export class GiftService {
 
     /**
      * Initialize default categories and sample gifts
+     * Prevents duplication by checking existing data per category
      */
     async initializeDefaultData() {
-        // Check if categories exist
+        let addedCategories = 0
+        let addedGifts = 0
+        let skippedCategories = []
+        let addedGiftsByCategory = {}
+
+        // Check existing gift counts by category
+        const existingGiftCounts = {
+            hot: await this.giftRepository.count({
+                where: { category: GiftCategoryEnum.HOT }
+            }),
+            activity: await this.giftRepository.count({
+                where: { category: GiftCategoryEnum.ACTIVITY }
+            }),
+            svip: await this.giftRepository.count({
+                where: { category: GiftCategoryEnum.SVIP }
+            }),
+            noble: await this.giftRepository.count({
+                where: { category: GiftCategoryEnum.NOBLE }
+            })
+        }
+
+        // Check if categories exist, create if missing
         const existingCategories = await this.giftCategoryRepository.count()
 
         if (existingCategories === 0) {
@@ -346,72 +368,428 @@ export class GiftService {
             ])
 
             await this.giftCategoryRepository.save(defaultCategories)
+            addedCategories = 4
         }
 
-        // Check if gifts exist
-        const existingGifts = await this.giftRepository.count()
+        // Now add gifts for each category that doesn't have enough sample data
+        const categoriesToProcess = [
+            {
+                name: 'hot',
+                enum: GiftCategoryEnum.HOT,
+                gifts: [
+                    {
+                        name: 'Red Rose',
+                        title: 'Beautiful Red Rose',
+                        description: 'A symbol of love and affection',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/red-rose.png',
+                        category: GiftCategoryEnum.HOT,
+                        price: 50,
+                        currencyType: 'bins',
+                        rarity: 'common',
+                        popularity: 95,
+                        sortOrder: 1,
+                        effects: {
+                            animation: 'rose_bloom',
+                            duration: 3000,
+                            sound: 'romantic_chime'
+                        }
+                    },
+                    {
+                        name: 'Heart Balloon',
+                        title: 'Flying Heart Balloon',
+                        description:
+                            'Colorful heart balloon that floats across the screen',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/heart-balloon.png',
+                        category: GiftCategoryEnum.HOT,
+                        price: 120,
+                        currencyType: 'bins',
+                        rarity: 'common',
+                        popularity: 88,
+                        sortOrder: 2,
+                        effects: {
+                            animation: 'balloon_float',
+                            duration: 5000,
+                            sound: 'balloon_pop'
+                        }
+                    },
+                    {
+                        name: 'Fireworks',
+                        title: 'Celebration Fireworks',
+                        description: 'Spectacular fireworks display',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/fireworks.png',
+                        category: GiftCategoryEnum.HOT,
+                        price: 5,
+                        currencyType: 'diamonds',
+                        rarity: 'rare',
+                        popularity: 92,
+                        sortOrder: 3,
+                        effects: {
+                            animation: 'fireworks_burst',
+                            duration: 8000,
+                            sound: 'fireworks_boom'
+                        }
+                    },
+                    {
+                        name: 'Love Potion',
+                        title: 'Magical Love Potion',
+                        description: 'A magical potion that spreads love',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/love-potion.png',
+                        category: GiftCategoryEnum.HOT,
+                        price: 200,
+                        currencyType: 'bins',
+                        rarity: 'uncommon',
+                        popularity: 76,
+                        sortOrder: 4,
+                        effects: {
+                            animation: 'potion_sparkle',
+                            duration: 6000,
+                            sound: 'magic_chime'
+                        }
+                    }
+                ]
+            },
+            {
+                name: 'activity',
+                enum: GiftCategoryEnum.ACTIVITY,
+                gifts: [
+                    {
+                        name: 'Microphone',
+                        title: 'Golden Microphone',
+                        description: 'Perfect for karaoke sessions',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/activity/microphone.png',
+                        category: GiftCategoryEnum.ACTIVITY,
+                        price: 300,
+                        currencyType: 'bins',
+                        rarity: 'uncommon',
+                        popularity: 84,
+                        sortOrder: 1,
+                        effects: {
+                            animation: 'mic_glow',
+                            duration: 4000,
+                            sound: 'mic_feedback'
+                        }
+                    },
+                    {
+                        name: 'Dance Floor',
+                        title: 'Disco Dance Floor',
+                        description: 'Light up the dance floor',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/activity/dance-floor.png',
+                        category: GiftCategoryEnum.ACTIVITY,
+                        price: 8,
+                        currencyType: 'diamonds',
+                        rarity: 'rare',
+                        popularity: 79,
+                        sortOrder: 2,
+                        effects: {
+                            animation: 'disco_lights',
+                            duration: 10000,
+                            sound: 'disco_music'
+                        }
+                    },
+                    {
+                        name: 'Party Hat',
+                        title: 'Celebration Party Hat',
+                        description: 'Perfect for any celebration',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/activity/party-hat.png',
+                        category: GiftCategoryEnum.ACTIVITY,
+                        price: 150,
+                        currencyType: 'bins',
+                        rarity: 'common',
+                        popularity: 71,
+                        sortOrder: 3,
+                        effects: {
+                            animation: 'confetti_burst',
+                            duration: 5000,
+                            sound: 'party_horn'
+                        }
+                    },
+                    {
+                        name: 'Gaming Console',
+                        title: 'Retro Gaming Console',
+                        description: 'For the gaming enthusiasts',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/activity/gaming-console.png',
+                        category: GiftCategoryEnum.ACTIVITY,
+                        price: 12,
+                        currencyType: 'diamonds',
+                        rarity: 'rare',
+                        popularity: 86,
+                        sortOrder: 4,
+                        effects: {
+                            animation: 'pixel_rain',
+                            duration: 7000,
+                            sound: '8bit_music'
+                        }
+                    },
+                    {
+                        name: 'Sports Trophy',
+                        title: 'Championship Trophy',
+                        description: 'Winner takes it all',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/activity/trophy.png',
+                        category: GiftCategoryEnum.ACTIVITY,
+                        price: 450,
+                        currencyType: 'bins',
+                        rarity: 'rare',
+                        popularity: 82,
+                        sortOrder: 5,
+                        effects: {
+                            animation: 'trophy_shine',
+                            duration: 6000,
+                            sound: 'victory_fanfare'
+                        }
+                    }
+                ]
+            },
+            {
+                name: 'svip',
+                enum: GiftCategoryEnum.SVIP,
+                gifts: [
+                    {
+                        name: 'Golden Crown',
+                        title: 'Majestic Golden Crown',
+                        description: 'Symbol of royalty and power',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/svip/golden-crown.png',
+                        category: GiftCategoryEnum.SVIP,
+                        price: 50,
+                        currencyType: 'diamonds',
+                        rarity: 'legendary',
+                        popularity: 94,
+                        requiredLevel: 10,
+                        vipRequired: true,
+                        sortOrder: 1,
+                        effects: {
+                            animation: 'crown_shine',
+                            duration: 12000,
+                            sound: 'royal_fanfare'
+                        }
+                    },
+                    {
+                        name: 'Diamond Ring',
+                        title: 'Sparkling Diamond Ring',
+                        description: 'A ring that sparkles like stars',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/svip/diamond-ring.png',
+                        category: GiftCategoryEnum.SVIP,
+                        price: 75,
+                        currencyType: 'diamonds',
+                        rarity: 'legendary',
+                        popularity: 89,
+                        requiredLevel: 15,
+                        vipRequired: true,
+                        sortOrder: 2,
+                        effects: {
+                            animation: 'diamond_sparkle',
+                            duration: 15000,
+                            sound: 'crystal_chime'
+                        }
+                    },
+                    {
+                        name: 'Phoenix Feather',
+                        title: 'Legendary Phoenix Feather',
+                        description: 'A feather from the mythical phoenix',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/svip/phoenix-feather.png',
+                        category: GiftCategoryEnum.SVIP,
+                        price: 100,
+                        currencyType: 'diamonds',
+                        rarity: 'mythical',
+                        popularity: 91,
+                        requiredLevel: 20,
+                        vipRequired: true,
+                        sortOrder: 3,
+                        effects: {
+                            animation: 'phoenix_flight',
+                            duration: 20000,
+                            sound: 'phoenix_cry'
+                        }
+                    },
+                    {
+                        name: 'Crystal Palace',
+                        title: 'Enchanted Crystal Palace',
+                        description: 'A palace made of pure crystal',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/svip/crystal-palace.png',
+                        category: GiftCategoryEnum.SVIP,
+                        price: 150,
+                        currencyType: 'diamonds',
+                        rarity: 'mythical',
+                        popularity: 87,
+                        requiredLevel: 25,
+                        vipRequired: true,
+                        sortOrder: 4,
+                        effects: {
+                            animation: 'crystal_palace_rise',
+                            duration: 18000,
+                            sound: 'crystal_harmony'
+                        }
+                    }
+                ]
+            },
+            {
+                name: 'noble',
+                enum: GiftCategoryEnum.NOBLE,
+                gifts: [
+                    {
+                        name: 'Royal Scepter',
+                        title: 'Ancient Royal Scepter',
+                        description: 'A scepter of ancient kings',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/noble/royal-scepter.png',
+                        category: GiftCategoryEnum.NOBLE,
+                        price: 200,
+                        currencyType: 'diamonds',
+                        rarity: 'mythical',
+                        popularity: 87,
+                        requiredLevel: 25,
+                        vipRequired: true,
+                        specialRequirements: ['noble_status'],
+                        sortOrder: 1,
+                        effects: {
+                            animation: 'scepter_power',
+                            duration: 25000,
+                            sound: 'ancient_power'
+                        }
+                    },
+                    {
+                        name: "Dragon's Heart",
+                        title: "Eternal Dragon's Heart",
+                        description: 'The heart of an ancient dragon',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/noble/dragon-heart.png',
+                        category: GiftCategoryEnum.NOBLE,
+                        price: 500,
+                        currencyType: 'diamonds',
+                        rarity: 'divine',
+                        popularity: 96,
+                        requiredLevel: 30,
+                        vipRequired: true,
+                        specialRequirements: [
+                            'noble_status',
+                            'dragon_guild_member'
+                        ],
+                        sortOrder: 2,
+                        effects: {
+                            animation: 'dragon_flame',
+                            duration: 30000,
+                            sound: 'dragon_roar'
+                        }
+                    },
+                    {
+                        name: 'Unicorn Horn',
+                        title: 'Pure Unicorn Horn',
+                        description: 'Horn of the last unicorn',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/noble/unicorn-horn.png',
+                        category: GiftCategoryEnum.NOBLE,
+                        price: 300,
+                        currencyType: 'diamonds',
+                        rarity: 'divine',
+                        popularity: 83,
+                        requiredLevel: 28,
+                        vipRequired: true,
+                        specialRequirements: ['noble_status'],
+                        sortOrder: 3,
+                        effects: {
+                            animation: 'unicorn_magic',
+                            duration: 28000,
+                            sound: 'magical_melody'
+                        }
+                    },
+                    {
+                        name: 'Galaxy Portal',
+                        title: 'Cosmic Galaxy Portal',
+                        description: 'A portal to distant galaxies',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/noble/galaxy-portal.png',
+                        category: GiftCategoryEnum.NOBLE,
+                        price: 1000,
+                        currencyType: 'diamonds',
+                        rarity: 'cosmic',
+                        popularity: 99,
+                        requiredLevel: 50,
+                        vipRequired: true,
+                        specialRequirements: [
+                            'noble_status',
+                            'cosmic_achievement'
+                        ],
+                        sortOrder: 4,
+                        effects: {
+                            animation: 'galaxy_swirl',
+                            duration: 35000,
+                            sound: 'cosmic_winds'
+                        }
+                    },
+                    {
+                        name: 'Throne of Power',
+                        title: 'Supreme Throne of Power',
+                        description: 'The ultimate symbol of authority',
+                        giftImage:
+                            'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/noble/throne-power.png',
+                        category: GiftCategoryEnum.NOBLE,
+                        price: 800,
+                        currencyType: 'diamonds',
+                        rarity: 'cosmic',
+                        popularity: 93,
+                        requiredLevel: 40,
+                        vipRequired: true,
+                        specialRequirements: ['noble_status', 'emperor_rank'],
+                        sortOrder: 5,
+                        effects: {
+                            animation: 'throne_ascension',
+                            duration: 32000,
+                            sound: 'imperial_anthem'
+                        }
+                    }
+                ]
+            }
+        ]
 
-        if (existingGifts === 0) {
-            // Create sample gifts
-            const sampleGifts = [
-                // Hot category
-                {
-                    name: 'Red Rose',
-                    title: 'Beautiful Red Rose',
-                    description: 'A symbol of love and affection',
-                    giftImage:
-                        'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/red-rose.png',
-                    category: GiftCategoryEnum.HOT,
-                    price: 50,
-                    currencyType: 'bins',
-                    rarity: 'common',
-                    popularity: 95,
-                    effects: {
-                        animation: 'rose_bloom',
-                        duration: 3000,
-                        sound: 'romantic_chime'
-                    }
-                },
-                {
-                    name: 'Heart Balloon',
-                    title: 'Flying Heart Balloon',
-                    description:
-                        'Colorful heart balloon that floats across the screen',
-                    giftImage:
-                        'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/heart-balloon.png',
-                    category: GiftCategoryEnum.HOT,
-                    price: 120,
-                    currencyType: 'bins',
-                    rarity: 'common',
-                    popularity: 88,
-                    effects: {
-                        animation: 'balloon_float',
-                        duration: 5000,
-                        sound: 'balloon_pop'
-                    }
-                },
-                {
-                    name: 'Fireworks',
-                    title: 'Celebration Fireworks',
-                    description: 'Spectacular fireworks display',
-                    giftImage:
-                        'https://res.cloudinary.com/demo/image/upload/v1640123456/gifts/hot/fireworks.png',
-                    category: GiftCategoryEnum.HOT,
-                    price: 5,
-                    currencyType: 'diamonds',
-                    rarity: 'rare',
-                    popularity: 92,
-                    effects: {
-                        animation: 'fireworks_burst',
-                        duration: 8000,
-                        sound: 'fireworks_boom'
-                    }
-                }
-                // Add more sample gifts as needed...
-            ]
+        // Process each category
+        for (const categoryData of categoriesToProcess) {
+            const existingCount = existingGiftCounts[categoryData.name]
 
-            const giftEntities = this.giftRepository.create(sampleGifts as any)
-            await this.giftRepository.save(giftEntities)
+            if (existingCount === 0) {
+                // Add all gifts for this category
+                const giftEntities = this.giftRepository.create(
+                    categoryData.gifts as any
+                )
+                await this.giftRepository.save(giftEntities)
+
+                addedGifts += categoryData.gifts.length
+                addedGiftsByCategory[categoryData.name] =
+                    categoryData.gifts.length
+            } else {
+                skippedCategories.push(
+                    `${categoryData.name} (${existingCount} existing)`
+                )
+            }
+        }
+
+        // Return detailed response
+        return {
+            message:
+                addedGifts > 0
+                    ? `Default data initialized successfully. Added ${addedGifts} gifts across ${Object.keys(addedGiftsByCategory).length} categories.`
+                    : 'Default data already exists for all categories',
+            initialized: addedGifts > 0,
+            addedCategories,
+            addedGifts,
+            addedGiftsByCategory,
+            skippedCategories,
+            existingGiftCounts,
+            finalCounts: {
+                categories: await this.giftCategoryRepository.count(),
+                gifts: await this.giftRepository.count()
+            }
         }
     }
 }
