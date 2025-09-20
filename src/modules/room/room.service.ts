@@ -2140,9 +2140,17 @@ export class RoomService {
         })
 
         if (existingBattle) {
-            throw new ConflictException(
-                'There is already an active PK battle in this room'
-            )
+            // Check if the existing battle has expired
+            const now = new Date()
+            if (existingBattle.endTime && now > existingBattle.endTime) {
+                // Automatically end the expired battle
+                await this.endPKBattle(existingBattle.uuid)
+            } else {
+                // There's still an active, non-expired battle
+                throw new ConflictException(
+                    'There is already an active PK battle in this room'
+                )
+            }
         }
 
         // Create the battle
@@ -2804,6 +2812,14 @@ export class RoomService {
 
         if (!battle) {
             return null
+        }
+
+        // Check if the battle has expired and auto-complete it
+        const now = new Date()
+        if (battle.endTime && now > battle.endTime) {
+            // Automatically end the expired battle
+            await this.endPKBattle(battle.uuid)
+            return null // Return null since the battle is now completed
         }
 
         return await this.getPKBattleDetails(battle.uuid)
