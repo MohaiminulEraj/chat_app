@@ -102,13 +102,6 @@ export class StartPKBattleDto {
 
 export class SendPKBattleGiftDto {
     @ApiProperty({
-        description: 'PK Battle UUID',
-        example: 'b82bef5b-443e-5e7a-c80c-227f4773h8h0'
-    })
-    @IsUUID()
-    battleId: string
-
-    @ApiProperty({
         description: 'Gift UUID to send',
         example: 'c93cef6c-554f-6f8b-d91d-338g5884i9i1'
     })
@@ -122,18 +115,16 @@ export class SendPKBattleGiftDto {
     @IsUUID()
     receiverId: string
 
-    @ApiPropertyOptional({
+    @ApiProperty({
         description: 'Number of gifts to send',
         example: 1,
-        default: 1,
         minimum: 1,
         maximum: 100
     })
-    @IsOptional()
     @IsNumber()
     @Min(1)
     @Max(100)
-    quantity?: number
+    quantity: number
 
     @ApiPropertyOptional({
         description: 'Optional message with the gift',

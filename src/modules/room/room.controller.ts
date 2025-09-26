@@ -1819,6 +1819,37 @@ export class RoomController {
             'Send a gift to a specific participant during an active PK Battle'
     })
     @ApiParam({ name: 'battleId', description: 'PK Battle UUID' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                giftId: {
+                    type: 'string',
+                    description: 'UUID of gift',
+                    example: 'c93cef6c-554f-6f8b-d91d-338g5884i9i1'
+                },
+                receiverId: {
+                    type: 'string',
+                    description:
+                        'Participant user ID who will receive the gift',
+                    example: 'user1-uuid'
+                },
+                quantity: {
+                    type: 'number',
+                    description: 'Number of gifts to send',
+                    example: 1,
+                    minimum: 1,
+                    maximum: 100
+                },
+                message: {
+                    type: 'string',
+                    description: 'Optional message with the gift',
+                    example: 'You can do it! 🔥'
+                }
+            },
+            required: ['giftId', 'receiverId', 'quantity']
+        }
+    })
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: 'Gift sent successfully',

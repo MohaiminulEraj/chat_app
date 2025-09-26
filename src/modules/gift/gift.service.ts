@@ -4,7 +4,7 @@ import {
     NotFoundException
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { Repository, In } from 'typeorm'
 import { RoomParticipant } from '../room/entities/room-participant.entity'
 import { User } from '../user/entities/user.entity'
 import { GiftTransaction } from './entities/gift-transaction.entity'
@@ -54,13 +54,25 @@ export class GiftService {
 
     async sendGift(
         senderId: string,
-        receiverId: string,
+        receiverIds: string[],
         giftId: string,
+        quantity: number = 1,
         roomId?: string,
         message?: string
     ) {
+        // Validate input
+        if (!receiverIds || receiverIds.length === 0) {
+            throw new BadRequestException(
+                'At least one receiver ID is required'
+            )
+        }
+
+        if (quantity <= 0) {
+            throw new BadRequestException('Quantity must be greater than 0')
+        }
+
         // Check if user is sending gift to self
-        if (senderId === receiverId) {
+        if (receiverIds.includes(senderId)) {
             throw new BadRequestException('You cannot send a gift to yourself')
         }
 
@@ -70,45 +82,86 @@ export class GiftService {
             throw new NotFoundException(`Gift with ID ${giftId} not found`)
         }
 
-        // Check if receiver exists
-        const receiver = await this.userRepository.findOne({
-            where: { uuid: receiverId }
+        // Validate all receivers exist
+        const receivers = await this.userRepository.find({
+            where: { uuid: In(receiverIds) }
         })
-        if (!receiver) {
+
+        if (receivers.length !== receiverIds.length) {
+            const foundIds = receivers.map((r) => r.uuid)
+            const notFoundIds = receiverIds.filter(
+                (id) => !foundIds.includes(id)
+            )
             throw new NotFoundException(
-                `Receiver with ID ${receiverId} not found`
+                `Receivers not found: ${notFoundIds.join(', ')}`
             )
         }
 
-        // If roomId is provided, verify both users are in the room
+        // If roomId is provided, verify sender and all receivers are in the room
         if (roomId) {
             const senderInRoom = await this.participantRepository.findOne({
                 where: { roomId, userId: senderId }
             })
 
-            const receiverInRoom = await this.participantRepository.findOne({
-                where: { roomId, userId: receiverId }
+            if (!senderInRoom) {
+                throw new BadRequestException(
+                    'Sender must be in the room to send a gift'
+                )
+            }
+
+            const receiversInRoom = await this.participantRepository.find({
+                where: { roomId, userId: In(receiverIds) }
             })
 
-            if (!senderInRoom || !receiverInRoom) {
+            if (receiversInRoom.length !== receiverIds.length) {
+                const foundUserIds = receiversInRoom.map((p) => p.userId)
+                const notInRoom = receiverIds.filter(
+                    (id) => !foundUserIds.includes(id)
+                )
                 throw new BadRequestException(
-                    'Both sender and receiver must be in the room to send a gift'
+                    `All receivers must be in the room. Users not in room: ${notInRoom.join(', ')}`
                 )
             }
         }
 
-        // Create transaction
-        const transaction = this.transactionRepository.create({
-            giftId,
-            userId: senderId,
-            receiverId,
-            senderId,
-            roomId,
-            amount: gift.price,
-            message
-        })
+        // Create transactions for each receiver
+        const transactions = []
+        const totalAmount = gift.price * quantity
 
-        return this.transactionRepository.save(transaction)
+        for (const receiverId of receiverIds) {
+            const transaction = this.transactionRepository.create({
+                giftId,
+                userId: senderId,
+                receiverId,
+                senderId,
+                roomId,
+                amount: totalAmount,
+                quantity,
+                message
+            })
+            transactions.push(transaction)
+        }
+
+        const savedTransactions =
+            await this.transactionRepository.save(transactions)
+
+        return {
+            success: true,
+            message: `Gift sent to ${receiverIds.length} recipient(s)`,
+            transactions: savedTransactions,
+            summary: {
+                giftName: gift.name,
+                giftImageUrl: gift.imageUrl,
+                quantity,
+                totalValue: totalAmount * receiverIds.length,
+                recipientCount: receiverIds.length,
+                senderName: (
+                    await this.userRepository.findOne({
+                        where: { uuid: senderId }
+                    })
+                )?.name
+            }
+        }
     }
 
     async getReceivedGifts(userId: string) {

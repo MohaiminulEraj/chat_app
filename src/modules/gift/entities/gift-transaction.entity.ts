@@ -30,6 +30,9 @@ export class GiftTransaction extends CustomBaseEntity {
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     amount: number
 
+    @Column({ type: 'int', default: 1 })
+    quantity: number
+
     @Column({
         type: 'enum',
         enum: TransactionStatus,

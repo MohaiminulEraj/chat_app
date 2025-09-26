@@ -28,19 +28,21 @@ export class GiftGateway {
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            receiverId: string
             giftId: string
-            roomId?: string
+            receiverId: string[]
+            quantity: number
             message?: string
+            roomId?: string
         }
     ) {
         const userId = client['user'].uuid
 
         try {
-            const transaction = await this.giftService.sendGift(
+            const result = await this.giftService.sendGift(
                 userId,
                 data.receiverId,
                 data.giftId,
+                data.quantity,
                 data.roomId,
                 data.message
             )
@@ -48,27 +50,25 @@ export class GiftGateway {
             // Emit to sender
             client.emit('giftSent', {
                 success: true,
-                transaction,
-                sender: transaction.sender
+                data: result
             })
 
-            // Emit to receiver
-            this.server.to(`user:${data.receiverId}`).emit('giftReceived', {
-                transaction: {
-                    ...transaction,
-                    sender: transaction.sender,
-                    receiver: transaction.receiver
-                }
-            })
+            // Emit to each receiver
+            for (const receiverId of data.receiverId) {
+                this.server.to(`user:${receiverId}`).emit('giftReceived', {
+                    data: result,
+                    receiverId
+                })
+            }
 
             // If in a room, emit to the room
             if (data.roomId) {
                 this.server.to(`room:${data.roomId}`).emit('roomGift', {
-                    transaction
+                    data: result
                 })
             }
 
-            return { success: true }
+            return { success: true, data: result }
         } catch (error) {
             return {
                 success: false,

@@ -2149,10 +2149,11 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            roomId: string
-            receiverId: string
             giftId: string
+            receiverId: string[]
+            quantity: number
             message?: string
+            roomId?: string
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
@@ -2160,14 +2161,15 @@ export class RoomGateway
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `🎁 SEND_GIFT: User ${userName} (${userId}) sending gift ${data.giftId} to ${data.receiverId} in room ${data.roomId}`
+            `🎁 SEND_GIFT: User ${userName} (${userId}) sending gift ${data.giftId} (qty: ${data.quantity}) to ${data.receiverId.length} recipients in room ${data.roomId}`
         )
 
         try {
-            const transaction = await this.giftService.sendGift(
+            const result = await this.giftService.sendGift(
                 userId,
                 data.receiverId,
                 data.giftId,
+                data.quantity,
                 data.roomId,
                 data.message
             )
@@ -2175,46 +2177,52 @@ export class RoomGateway
             // Emit to sender
             client.emit('giftSent', {
                 success: true,
-                transaction,
+                data: result,
                 roomId: data.roomId
             })
 
-            // Emit to receiver
-            this.server.to(`user:${data.receiverId}`).emit('giftReceived', {
-                transaction,
-                roomId: data.roomId
-            })
+            // Emit to each receiver
+            for (const receiverId of data.receiverId) {
+                this.server.to(`user:${receiverId}`).emit('giftReceived', {
+                    data: result,
+                    roomId: data.roomId,
+                    receiverId
+                })
+            }
 
             // Emit to all room participants
-            this.server.to(`room:${data.roomId}`).emit('roomGiftSent', {
-                roomId: data.roomId,
-                transaction,
-                sender: { id: userId, name: userName },
-                receiver: { id: data.receiverId }
-            })
+            if (data.roomId) {
+                this.server.to(`room:${data.roomId}`).emit('roomGiftSent', {
+                    roomId: data.roomId,
+                    data: result,
+                    sender: { id: userId, name: userName },
+                    receivers: data.receiverId
+                })
+            }
 
             // Emit gift activity update
-            this.server.to(`room:${data.roomId}`).emit('giftActivityUpdate', {
-                action: 'gift_sent',
-                roomId: data.roomId,
-                transactionId: transaction.uuid,
-                senderId: userId,
-                senderName: userName,
-                receiverId: data.receiverId,
-                giftId: data.giftId,
-                timestamp: new Date().toISOString()
-            })
+            this.server
+                .to(`room:${data.roomId || 'global'}`)
+                .emit('giftActivityUpdate', {
+                    action: 'gift_sent',
+                    roomId: data.roomId,
+                    senderId: userId,
+                    senderName: userName,
+                    receiverIds: data.receiverId,
+                    giftId: data.giftId,
+                    quantity: data.quantity,
+                    summary: result.summary,
+                    timestamp: new Date().toISOString()
+                })
 
             this.logger.log(
-                `✅ SEND_GIFT success: User ${userName} (${userId}) sent gift ${data.giftId} to ${data.receiverId} in room ${data.roomId} | ` +
-                    `Transaction: ${transaction.uuid}`
+                `✅ SEND_GIFT success: User ${userName} (${userId}) sent gift ${data.giftId} (qty: ${data.quantity}) to ${data.receiverId.length} recipients`
             )
 
-            return { status: 'success', transaction }
+            return { status: 'success', data: result }
         } catch (error) {
             this.logger.error(
-                `❌ SEND_GIFT failed: User ${userName} (${userId}) failed to send gift ${data.giftId} to ${data.receiverId} in room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `❌ SEND_GIFT failed: User ${userName} (${userId}) failed to send gift ${data.giftId} to recipients | Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -4526,11 +4534,11 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
-            battleId: string
             giftId: string
             receiverId: string
-            quantity?: number
+            quantity: number
             message?: string
+            battleId: string
         }
     ) {
         try {
@@ -4546,7 +4554,7 @@ export class RoomGateway
                 data.giftId,
                 userId,
                 data.receiverId,
-                data.quantity || 1,
+                data.quantity,
                 data.message
             )
 

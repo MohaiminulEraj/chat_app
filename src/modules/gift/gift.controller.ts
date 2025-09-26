@@ -90,48 +90,66 @@ export class GiftController {
     }
 
     @Post('send')
-    @ApiOperation({ summary: 'Send a gift to user' })
+    @ApiOperation({ summary: 'Send a gift to multiple users' })
     @ApiBody({
         schema: {
             type: 'object',
             properties: {
-                receiverId: {
+                giftId: {
                     type: 'string',
-                    description: 'UUID of recipient'
+                    description: 'UUID of gift',
+                    example: 'c93cef6c-554f-6f8b-d91d-338g5884i9i1'
                 },
-                giftId: { type: 'string', description: 'UUID of gift' },
-                roomId: {
-                    type: 'string',
-                    description: 'UUID of room (optional)'
+                receiverId: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Array of recipient UUIDs',
+                    example: ['user1-uuid', 'user2-uuid', 'user3-uuid']
+                },
+                quantity: {
+                    type: 'number',
+                    description: 'Quantity of gifts to send',
+                    example: 1,
+                    minimum: 1
                 },
                 message: {
                     type: 'string',
-                    description: 'Custom message (optional)'
+                    description: 'Custom message (optional)',
+                    example: 'You can do it! 🔥'
+                },
+                roomId: {
+                    type: 'string',
+                    description: 'UUID of room (optional)'
                 }
             },
-            required: ['receiverId', 'giftId']
+            required: ['giftId', 'receiverId', 'quantity']
         }
     })
     async sendGift(
         @Request() req,
         @Body()
         body: {
-            receiverId: string
             giftId: string
-            roomId?: string
+            receiverId: string[]
+            quantity: number
             message?: string
+            roomId?: string
         }
     ) {
-        const { receiverId, giftId, roomId, message } = body
+        const { giftId, receiverId, quantity, message, roomId } = body
+        const result = await this.giftService.sendGift(
+            req.user.uuid,
+            receiverId,
+            giftId,
+            quantity,
+            roomId,
+            message
+        )
+
         return {
-            message: 'Gift sent successfully',
-            data: await this.giftService.sendGift(
-                req.user.uuid,
-                receiverId,
-                giftId,
-                roomId,
-                message
-            )
+            success: true,
+            message: result.message,
+            data: result
         }
     }
 
