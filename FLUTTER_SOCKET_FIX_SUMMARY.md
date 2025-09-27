@@ -156,6 +156,28 @@ class RoomGiftHandler {
       // Update activity feed if you have one
       updateActivityFeed(data);
     });
+
+    // Error handling for gift sending
+    socket.on('giftError', (data) {
+      final errorType = data['type'];
+      final message = data['message'];
+
+      switch (errorType) {
+        case 'not_in_room':
+          // Show specific message for users not seated in room
+          showErrorDialog('You must be seated in the room to send gifts to participants');
+          break;
+        case 'insufficient_balance':
+          // Show balance error
+          showErrorDialog('Insufficient balance: $message');
+          break;
+        case 'general_error':
+        default:
+          // Show general error
+          showErrorDialog('Error sending gift: $message');
+          break;
+      }
+    });
   }
 
   // Send a gift - NOW REQUIRES senderId in payload

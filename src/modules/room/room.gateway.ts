@@ -2180,13 +2180,15 @@ export class RoomGateway
                 )
             }
 
+            // Use allowNonParticipants = true to allow observers to send gifts
             const result = await this.giftService.sendGift(
                 userId,
                 data.receiverId,
                 data.giftId,
                 data.quantity,
                 data.roomId,
-                data.message
+                data.message,
+                true // Allow non-participants (observers) to send gifts
             )
 
             // Emit to sender
@@ -2264,6 +2266,35 @@ export class RoomGateway
                 `❌ SEND_GIFT failed: User ${userName} (${userId}) failed to send gift ${data.giftId} to recipients | Error: ${error.message}`,
                 error.stack
             )
+
+            // Emit specific error events based on error type
+            if (
+                error.message.includes('must be in the room') ||
+                error.message.includes('not seated')
+            ) {
+                client.emit('giftError', {
+                    type: 'not_in_room',
+                    message:
+                        'You must be seated in the room to send gifts to participants',
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            } else if (error.message.includes('Insufficient diamond balance')) {
+                client.emit('giftError', {
+                    type: 'insufficient_balance',
+                    message: error.message,
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            } else {
+                client.emit('giftError', {
+                    type: 'general_error',
+                    message: error.message,
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            }
+
             return { status: 'error', message: error.message }
         }
     }
