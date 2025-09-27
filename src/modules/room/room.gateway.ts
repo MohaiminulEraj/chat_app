@@ -2165,6 +2165,14 @@ export class RoomGateway
         )
 
         try {
+            // Ensure user is in the socket room before sending gift
+            if (data.roomId) {
+                client.join(`room:${data.roomId}`)
+                this.logger.log(
+                    `🏠 SEND_GIFT: Ensured user ${userName} (${userId}) is in socket room: room:${data.roomId}`
+                )
+            }
+
             const result = await this.giftService.sendGift(
                 userId,
                 data.receiverId,
@@ -2190,13 +2198,37 @@ export class RoomGateway
                 })
             }
 
-            // Emit to all room participants
+            // Emit to all room participants with enhanced logging
             if (data.roomId) {
-                this.server.to(`room:${data.roomId}`).emit('roomGiftSent', {
+                const roomGiftData = {
                     roomId: data.roomId,
                     data: result,
                     sender: { id: userId, name: userName },
                     receivers: data.receiverId
+                }
+
+                this.logger.log(
+                    `📡 SEND_GIFT: Emitting roomGiftSent to room:${data.roomId} with data:`,
+                    JSON.stringify(roomGiftData, null, 2)
+                )
+
+                this.server
+                    .to(`room:${data.roomId}`)
+                    .emit('roomGiftSent', roomGiftData)
+
+                // Log room information for debugging
+                const roomSockets = await this.server
+                    .in(`room:${data.roomId}`)
+                    .fetchSockets()
+                this.logger.log(
+                    `📊 SEND_GIFT: Room ${data.roomId} has ${roomSockets.length} connected sockets`
+                )
+
+                roomSockets.forEach((socket, index) => {
+                    const socketUserInfo = this.connectedUsers.get(socket.id)
+                    this.logger.log(
+                        `📊 Socket ${index + 1}: ${socket.id} - User: ${socketUserInfo?.userName} (${socketUserInfo?.userId})`
+                    )
                 })
             }
 
