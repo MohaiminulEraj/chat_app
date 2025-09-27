@@ -69,13 +69,16 @@ export class GiftController {
     @ApiOperation({
         summary: 'Initialize default gift categories and sample gifts',
         description:
-            "Creates default categories and sample gifts if they don't exist"
+            "Creates default categories and sample gifts if they don't exist. Also updates all gifts to use diamonds currency."
     })
     async initializeDefaultData() {
         await this.giftService.initializeDefaultData()
+        // Update all existing gifts to use diamonds
+        await this.giftService.updateAllGiftsToDiamonds()
         return {
             success: true,
-            message: 'Default gift data initialized successfully'
+            message:
+                'Default gift data initialized successfully and all gifts updated to use diamonds'
         }
     }
 

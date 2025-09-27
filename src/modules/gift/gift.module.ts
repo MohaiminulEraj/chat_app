@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule to provide JwtService
 import { RoomParticipant } from '../room/entities/room-participant.entity'
 import { User } from '../user/entities/user.entity'
+import { UserModule } from '../user/user.module' // Import UserModule for ConversionService
 import { GiftTransaction } from './entities/gift-transaction.entity'
 import { Gift } from './entities/gift.entity'
 import { GiftCategory } from './entities/gift-category.entity'
@@ -19,7 +20,8 @@ import { GiftService } from './gift.service'
             User,
             RoomParticipant
         ]),
-        AuthModule // Add AuthModule to imports to provide JwtService for WsJwtGuard
+        AuthModule, // Add AuthModule to imports to provide JwtService for WsJwtGuard
+        UserModule // Add UserModule to import ConversionService
     ],
     controllers: [GiftController],
     providers: [

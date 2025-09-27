@@ -49,7 +49,7 @@ export class Gift extends CustomBaseEntity {
     @Column({
         type: 'enum',
         enum: CurrencyType,
-        default: CurrencyType.BINS
+        default: CurrencyType.DIAMONDS
     })
     currencyType: CurrencyType
 
