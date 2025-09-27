@@ -1,4 +1,6 @@
-import { Logger, UseGuards } from '@nestjs/common'
+import { Logger, UseGuards, Inject } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
 import { JwtService } from '@nestjs/jwt'
 import {
     ConnectedSocket,
@@ -16,6 +18,7 @@ import { GiftService } from '../gift/gift.service'
 import { CreateRoomCommentDto } from './dto/room-comment.dto'
 import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
+import { User } from '../user/entities/user.entity'
 
 @WebSocketGateway({
     cors: {
@@ -79,7 +82,9 @@ export class RoomGateway
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService,
-        private readonly jwtService: JwtService
+        private readonly jwtService: JwtService,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>
     ) {}
 
     afterInit(server: Server) {
@@ -2191,6 +2196,29 @@ export class RoomGateway
                 true // Allow non-participants (observers) to send gifts
             )
 
+            // Fetch receiver details for enhanced response
+            const receiverDetails = []
+            for (const receiverId of data.receiverId) {
+                try {
+                    const receiver = await this.userRepository.findOne({
+                        where: { uuid: receiverId },
+                        select: ['uuid', 'name', 'avatarUrl']
+                    })
+                    receiverDetails.push({
+                        uuid: receiverId,
+                        name: receiver?.name || 'Unknown User',
+                        avatarUrl: receiver?.avatarUrl || null
+                    })
+                } catch (error) {
+                    // If user not found, still include basic info
+                    receiverDetails.push({
+                        uuid: receiverId,
+                        name: 'Unknown User',
+                        avatarUrl: null
+                    })
+                }
+            }
+
             // Emit to sender
             client.emit('giftSent', {
                 success: true,
@@ -2212,8 +2240,13 @@ export class RoomGateway
                 const roomGiftData = {
                     roomId: data.roomId,
                     data: result,
-                    sender: { id: userId, name: userName },
-                    receivers: data.receiverId
+                    sender: {
+                        id: userId,
+                        name: userName,
+                        avatarUrl: userInfo?.avatarUrl || null
+                    },
+                    receivers: receiverDetails, // Now contains detailed receiver info
+                    timestamp: new Date().toISOString()
                 }
 
                 this.logger.log(
@@ -2249,7 +2282,8 @@ export class RoomGateway
                     roomId: data.roomId,
                     senderId: userId,
                     senderName: userName,
-                    receiverIds: data.receiverId,
+                    receiverIds: data.receiverId, // Keep original IDs for backward compatibility
+                    receivers: receiverDetails, // Add detailed receiver info
                     giftId: data.giftId,
                     quantity: data.quantity,
                     summary: result.summary,
