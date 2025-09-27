@@ -13,16 +13,10 @@ export class EmailService {
     private isEmailEnabled: boolean = false
 
     constructor(private configService: ConfigService) {
-        // Check if email service should be enabled
-        const enableEmail =
-            this.configService.get<string>('ENABLE_EMAIL_SERVICE') !== 'false'
-
-        if (!enableEmail) {
-            this.logger.warn(
-                'Email service is disabled. Set ENABLE_EMAIL_SERVICE=true to enable.'
-            )
-            return
-        }
+        // Always enable email service for forget password functionality
+        this.logger.log(
+            'Initializing email service for forget password functionality'
+        )
 
         // Detect email provider from SMTP host
         const smtpHost = this.configService
@@ -52,13 +46,11 @@ export class EmailService {
                 }
             })
 
-            // Only verify in non-production environments
-            if (this.configService.get('NODE_ENV') !== 'production') {
-                // Delay verification to avoid blocking startup
-                setTimeout(() => this.verifyConnection(), 5000)
-            }
-
+            // Don't verify connection automatically - only when sending emails
             this.isEmailEnabled = true
+            this.logger.log(
+                '✅ Email service initialized successfully (connection will be established when needed)'
+            )
         } catch (error) {
             this.logger.error('Failed to initialize email service:', error)
             this.isEmailEnabled = false
@@ -127,20 +119,20 @@ To disable email temporarily, set ENABLE_EMAIL_SERVICE=false in .env
     ) {
         const message = `Hello ${userName},
 
-        ${organizationName} has invited to join Kitty as ${roleName}. You can collaborate with your team in real-time to manage organizational bookkeeping. Please click on the following link to get started:
+        ${organizationName} has invited to join Xeo Live as ${roleName}. You can collaborate with your team in real-time to manage organizational bookkeeping. Please click on the following link to get started:
         ${process.env.CLIENT_APP_URL}/auth?invitation=accepted&invitation-code=${uuid}
 
         If you need any assistance, contact us at info@anchorblock.vc
 
         Best regards,
-        Kitty Organization`
+        Xeo Live Organization`
 
         const msgData = {
             recipient: userName,
-            title: `You have been added to ${organizationName} on Anchorbook - Your Accounting Software Solution`,
+            title: `You have been added to ${organizationName} on Xeo Live`,
             message: message,
             redirectTo: `${process.env.APP_URL}`,
-            btnTitle: 'Back To Kitty'
+            btnTitle: 'Back To Xeo Live'
         }
         // const template = path.join(__dirname, 'templates', 'email-template.hbs')
         // EMAIL TEMPLATE
@@ -165,20 +157,25 @@ To disable email temporarily, set ENABLE_EMAIL_SERVICE=false in .env
      * SEND A CODE TO RECOVER PASSWORD MAIL
      */
     async sendForgetPasswordCode(userObj: User, code: number) {
-        const message = `To update your password, Please verify your account by entering the following verification code: ${code}. Enter the code on the password reset page within the next 2 minutes to complete the process.
+        const message = `To reset your password, please verify your identity by entering the following verification code in your mobile app:
 
-        Thank you for choosing Kitty.
+**${code}**
 
-        Best regards,
+This code will expire in 5 minutes for your security. If you didn't request a password reset, please ignore this email.
 
-        Kitty Support Team.`
+Thank you for using our app.
+
+Best regards,
+Support Team`
 
         const msgData = {
-            recipient: userObj.name,
-            title: `Password Reset Verification Code.`,
+            recipient: userObj.name || 'User',
+            title: `Password Reset Verification Code`,
             message: message,
-            redirectTo: `${process.env.APP_URL}`,
-            btnTitle: 'Back To Kitty'
+            redirectTo: null, // No redirect for mobile app
+            btnTitle: null, // No button for mobile app
+            code: code,
+            expiryTime: '5 minutes'
         }
 
         // EMAIL TEMPLATE
@@ -194,26 +191,32 @@ To disable email temporarily, set ENABLE_EMAIL_SERVICE=false in .env
         return this.sendEmailSafely({
             to: userObj.email,
             from: this.configService.get('SMTP_MAIL_FROM'),
-            subject: `Password Reset Verification Code for Your Anchorbook account - Your Accounting Software Solution`,
+            subject: `Password Reset Verification Code`,
             html: compiled({ msgData })
         })
     }
 
     /**
-     * SEND A CODE TO RECOVER FOR EMAIL VERIFICATION
+     * SEND A CODE FOR EMAIL VERIFICATION WITH CONNECTION MANAGEMENT
      */
     async sendEmailVerificationCode(userObj: User, code: number) {
-        const message = `Thank you for signing up! To ensure the security of your account, we request you to verify your email address by entering the verification code provided below:  ${code}. Enter this code within the next 2 minutes to verify your email.
+        const message = `Thank you for signing up! To ensure the security of your account, please verify your email address by entering this verification code in your mobile app:
 
-        Best regards,
-        One Supercharged Platform.`
+**${code}**
+
+This code will expire in 5 minutes. If you didn't sign up for an account, please ignore this email.
+
+Best regards,
+Support Team`
 
         const msgData = {
-            recipient: userObj.name,
-            title: `Email Verification Code: ${code} - Action Required.`,
+            recipient: userObj.name || 'User',
+            title: `Email Verification Code`,
             message: message,
-            redirectTo: `${process.env.APP_URL}`,
-            btnTitle: 'Back'
+            redirectTo: null, // No redirect for mobile app
+            btnTitle: null, // No button for mobile app
+            code: code,
+            expiryTime: '5 minutes'
         }
 
         // EMAIL TEMPLATE
@@ -226,6 +229,7 @@ To disable email temporarily, set ENABLE_EMAIL_SERVICE=false in .env
         const source = await fs.readFile(template, 'utf-8')
         const compiled = hbs.compile(source)
 
+        // Use sendEmailSafely which manages SMTP connection automatically
         return this.sendEmailSafely({
             to: userObj.email,
             from: this.configService.get('SMTP_MAIL_FROM'),
@@ -253,14 +257,14 @@ To disable email temporarily, set ENABLE_EMAIL_SERVICE=false in .env
         Please let me know if you encounter any issues or require further assistance. Thank you for your attention.
 
         Best regards,
-        Kitty Support Team.`
+        Xeo Live Support Team.`
 
         const msgData = {
             recipient: name,
-            title: `Kitty ${documentType}.`,
+            title: `Xeo Live ${documentType}.`,
             message: message,
             redirectTo: `${process.env.APP_URL}`,
-            btnTitle: 'Go To Kitty'
+            btnTitle: 'Go To Xeo Live'
         }
 
         // const template = path.join(__dirname, 'templates', 'email-template.hbs')

@@ -119,51 +119,74 @@
                                                                 >{{msgData.message}}</div>
                                                             </td>
                                                         </tr>
-                                                    </tbody>
-                                                </table>
-                                                <table
-                                                    border='0'
-                                                    cellpadding='0'
-                                                    cellspacing='0'
-                                                    width='100%'
-                                                    class='tableButton'
-                                                    style=''
-                                                >
-                                                    <tbody>
-                                                        <tr>
-                                                            <td
-                                                                style='padding-top:20px;padding-bottom:20px'
-                                                                align='center'
-                                                                valign='top'
-                                                            >
-                                                                <table
-                                                                    border='0'
-                                                                    cellpadding='0'
-                                                                    cellspacing='0'
-                                                                    align='center'
+                                                        {{#if msgData.code}}
+                                                            <tr>
+                                                                <td
+                                                                    style='padding: 20px 0;text-align:center'
+                                                                    class='verificationCode'
                                                                 >
-                                                                    <tbody>
-                                                                        <tr>
-                                                                            <td
-                                                                                style='background-color: rgb(0, 210, 244); padding: 12px 35px; border-radius: 50px;'
-                                                                                align='center'
-                                                                                class='ctaButton'
-                                                                            >
-                                                                                <a
-                                                                                    href='{{msgData.redirectTo}}'
-                                                                                    clicktracking='off'
-                                                                                    style='color:#fff;font-family:Poppins,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;font-style:normal;letter-spacing:1px;line-height:20px;text-transform:uppercase;text-decoration:none;display:block'
-                                                                                    target='_blank'
-                                                                                    class='text'
-                                                                                >{{msgData.btnTitle}}</a>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </tbody>
-                                                                </table>
-                                                            </td>
-                                                        </tr>
+                                                                    <div
+                                                                        style='background-color:#00d2f4;color:#ffffff;font-family:Poppins,Helvetica,Arial,sans-serif;font-size:32px;font-weight:bold;padding:15px 25px;border-radius:8px;display:inline-block;letter-spacing:3px'
+                                                                    >{{msgData.code}}</div>
+                                                                    {{#if
+                                                                        msgData.expiryTime
+                                                                    }}
+                                                                        <p
+                                                                            style='color:#999;font-size:14px;margin-top:10px'
+                                                                        >Expires
+                                                                            in
+                                                                            {{msgData.expiryTime}}</p>
+                                                                    {{/if}}
+                                                                </td>
+                                                            </tr>
+                                                        {{/if}}
                                                     </tbody>
                                                 </table>
+                                                {{#if msgData.redirectTo}}
+                                                    <table
+                                                        border='0'
+                                                        cellpadding='0'
+                                                        cellspacing='0'
+                                                        width='100%'
+                                                        class='tableButton'
+                                                        style=''
+                                                    >
+                                                        <tbody>
+                                                            <tr>
+                                                                <td
+                                                                    style='padding-top:20px;padding-bottom:20px'
+                                                                    align='center'
+                                                                    valign='top'
+                                                                >
+                                                                    <table
+                                                                        border='0'
+                                                                        cellpadding='0'
+                                                                        cellspacing='0'
+                                                                        align='center'
+                                                                    >
+                                                                        <tbody>
+                                                                            <tr>
+                                                                                <td
+                                                                                    style='background-color: rgb(0, 210, 244); padding: 12px 35px; border-radius: 50px;'
+                                                                                    align='center'
+                                                                                    class='ctaButton'
+                                                                                >
+                                                                                    <a
+                                                                                        href='{{msgData.redirectTo}}'
+                                                                                        clicktracking='off'
+                                                                                        style='color:#fff;font-family:Poppins,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;font-style:normal;letter-spacing:1px;line-height:20px;text-transform:uppercase;text-decoration:none;display:block'
+                                                                                        target='_blank'
+                                                                                        class='text'
+                                                                                    >{{msgData.btnTitle}}</a>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </tbody>
+                                                                    </table>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                {{/if}}
                                             </td>
                                         </tr>
                                         <tr>
@@ -223,9 +246,9 @@
                                                 <p
                                                     class='text'
                                                     style="color:#bbb;font-family:'Open Sans',Helvetica,Arial,sans-serif;font-size:12px;font-weight:400;font-style:normal;letter-spacing:normal;line-height:20px;text-transform:none;text-align:center;padding:0;margin:0"
-                                                >©&nbsp;Anchorblock. | 30 N
-                                                    Gould St, Sheridan |
-                                                    Wyoming, 82801, USA.</p>
+                                                >©&nbsp;Xeo Live. | 30 N Gould
+                                                    St, Sheridan | Wyoming,
+                                                    82801, USA.</p>
                                             </td>
                                         </tr>
                                         <tr>
@@ -240,18 +263,18 @@
                                                     style="color:#bbb;font-family:'Open Sans',Helvetica,Arial,sans-serif;font-size:12px;font-weight:400;font-style:normal;letter-spacing:normal;line-height:20px;text-transform:none;text-align:center;padding:0;margin:0"
                                                 >
                                                     <a
-                                                        href='https://anchorblock.vc/'
+                                                        href='https://Xeo-Live.com/'
                                                         style='color:#bbb;text-decoration:underline'
                                                         target='_blank'
-                                                    >Anchorblock
+                                                    >Xeo Live
                                                     </a>&nbsp;|&nbsp;
                                                     <a
-                                                        href='https://anchorblock.vc/about-us'
+                                                        href='https://Xeo-Live.com/about-us'
                                                         style='color:#bbb;text-decoration:underline'
                                                         target='_blank'
                                                     >About Us </a>&nbsp;|&nbsp;
                                                     <a
-                                                        href='https://www.linkedin.com/company/anchorblock'
+                                                        href='https://www.linkedin.com/company/Xeo Live'
                                                         style='color:#bbb;text-decoration:underline'
                                                         target='_blank'
                                                     >LinkedIn</a>
@@ -274,7 +297,7 @@
                                                         href='#'
                                                         style='color:#bbb;text-decoration:underline'
                                                         target='_blank'
-                                                    >support@anchorblock.vc</a>
+                                                    >support@Xeo Live.vc</a>
                                                 </p>
                                             </td>
                                         </tr>
