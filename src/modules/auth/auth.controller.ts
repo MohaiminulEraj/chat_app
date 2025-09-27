@@ -216,12 +216,13 @@ export class AuthController {
     async regenerateAnotherCode(
         @Body() verificationCodeSenderDto: VerificationCodeSenderDto
     ) {
+        const result = await this.authService.generateEmailVerificationCode(
+            verificationCodeSenderDto
+        )
         return {
             status: HttpStatus.OK,
-            message: 'A new code has been sent to your inbox',
-            result: await this.authService.generateEmailVerificationCode(
-                verificationCodeSenderDto
-            )
+            message: result.message,
+            result: null
         }
     }
 
@@ -240,12 +241,13 @@ export class AuthController {
     async forgetPassword(
         @Body() verificationCodeSenderDto: VerificationCodeSenderDto
     ) {
+        const result = await this.authService.forgetPassword(
+            verificationCodeSenderDto
+        )
         return {
             status: HttpStatus.CREATED,
-            message: 'Code sent',
-            result: await this.authService.forgetPassword(
-                verificationCodeSenderDto
-            )
+            message: result.message,
+            result: null
         }
     }
 

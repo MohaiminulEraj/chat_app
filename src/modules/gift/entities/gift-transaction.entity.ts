@@ -30,6 +30,9 @@ export class GiftTransaction extends CustomBaseEntity {
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     amount: number
 
+    @Column({ type: 'int', default: 1 })
+    quantity: number
+
     @Column({
         type: 'enum',
         enum: TransactionStatus,
@@ -45,6 +48,9 @@ export class GiftTransaction extends CustomBaseEntity {
 
     @Column({ nullable: true })
     transactionReference?: string
+
+    @Column({ type: 'jsonb', nullable: true })
+    metadata?: any // Store conversion info, gift details, etc.
 
     // Relations
     @ManyToOne(() => Gift, (gift) => gift.transactions)

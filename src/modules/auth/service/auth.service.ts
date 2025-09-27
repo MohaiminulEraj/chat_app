@@ -12,6 +12,7 @@ import { LoggedInUser } from 'src/modules/user/data/logged-in-user.type'
 import { Repository } from 'typeorm'
 import { EmailService } from '../../email/services/email.service'
 import { User } from '../../user/entities/user.entity'
+import { UserTypes } from '../../user/data/user-type.enum'
 import {
     EmailVerificationDto,
     ForgetPasswordDto,
@@ -86,7 +87,10 @@ export class AuthService {
 
         // KEEPING LOG
         this.logging(user, req)
-        return await this.unifiedAuthResponse(user)
+
+        // Use getUserForResponse to get user data without sensitive fields for response
+        const userForResponse = await this.getUserForResponse({ id: user.id })
+        return await this.unifiedAuthResponse(userForResponse)
     }
 
     /**
@@ -158,7 +162,11 @@ export class AuthService {
             // verificationCodeSenderDto.email = registrationDto.email
             // await this.generateEmailVerificationCode(verificationCodeSenderDto)
 
-            return await this.unifiedAuthResponse(registeredUser)
+            // Use getUserForResponse to get user data without sensitive fields
+            const userForResponse = await this.getUserForResponse({
+                id: registeredUser.id
+            })
+            return await this.unifiedAuthResponse(userForResponse)
         } catch (error) {
             console.log(error)
             throw new HttpException(
@@ -198,12 +206,12 @@ export class AuthService {
 
             if (result.accepted.length) {
                 user.code = code.toString()
-                user.codeExpiredAt = new Date().getTime() + 2 * 60 * 1000
+                user.codeExpiredAt = new Date().getTime() + 5 * 60 * 1000 // 5 minutes
                 user.hash = crypto.randomBytes(32).toString('hex')
                 try {
-                    return await this.userRepository.save(user)
+                    await this.userRepository.save(user)
                 } catch (error) {}
-                return true
+                return { message: 'Verification code sent' }
             }
 
             throw new HttpException(
@@ -223,7 +231,7 @@ export class AuthService {
      */
     public async refreshToken(loggedInUser: LoggedInUser) {
         const user = await this.unifiedAuthResponse(
-            await this.getAUser({ id: loggedInUser.id })
+            await this.getUserForResponse({ id: loggedInUser.id })
         )
         return user
     }
@@ -231,7 +239,7 @@ export class AuthService {
     /**
      * THEN VERIFY THE CODE AND ENABLE THE USER FOR USE THIS APPLICATION
      *
-     * @param   {ForgetPasswordDto}  forgetPasswordDto  [forgetPasswordDto description]
+     * @param   {EmailVerificationDto}  emailVerificationDto  [emailVerificationDto description]
      *
      * @return  {[type]}                                [return description]
      */
@@ -259,9 +267,37 @@ export class AuthService {
             user.isEmailVerified = true
 
             await this.userRepository.save(user)
-            return await this.unifiedAuthResponse(user)
+            // Use getUserForResponse to get user data without sensitive fields
+            const userForResponse = await this.getUserForResponse({
+                id: user.id
+            })
+            return await this.unifiedAuthResponse(userForResponse)
         }
         throw new HttpException('Invalid code or user', HttpStatus.BAD_REQUEST)
+    }
+
+    /**
+     * GET A USER FOR RESPONSE (excluding sensitive data)
+     */
+    async getUserForResponse(condition: any) {
+        return await this.userRepository.findOne({
+            select: {
+                id: true,
+                uuid: true,
+                email: true,
+                phoneNumber: true,
+                // password: false, // Never include password in response
+                name: true,
+                avatarUrl: true,
+                isEmailVerified: true,
+                isPhoneVerified: true,
+                userType: true,
+                authProvider: true,
+                binsBalance: true,
+                diamondBalance: true
+            },
+            where: condition
+        })
     }
 
     /**
@@ -274,14 +310,19 @@ export class AuthService {
                 uuid: true,
                 email: true,
                 phoneNumber: true,
-                password: true,
+                password: true, // Only for internal authentication checks
                 name: true,
                 // Remove username: true,
                 avatarUrl: true,
                 isEmailVerified: true,
                 isPhoneVerified: true,
                 userType: true,
-                authProvider: true
+                authProvider: true,
+                binsBalance: true,
+                diamondBalance: true,
+                code: true, // For verification processes
+                codeExpiredAt: true, // For verification processes
+                hash: true // For password recovery
             },
             where: condition
         })
@@ -304,7 +345,10 @@ export class AuthService {
             authProvider: user.authProvider,
             avatarUrl: user.avatarUrl,
             isEmailVerified: user.isEmailVerified,
-            isPhoneVerified: user.isPhoneVerified
+            isPhoneVerified: user.isPhoneVerified,
+            binsBalance: user.binsBalance || 0,
+            diamondBalance: user.diamondBalance || 0
+            // password is intentionally excluded for security
         }
     }
 
@@ -357,12 +401,12 @@ export class AuthService {
 
             if (result.accepted.length) {
                 user.code = code.toString()
-                user.codeExpiredAt = new Date().getTime() + 2 * 60 * 1000
+                user.codeExpiredAt = new Date().getTime() + 5 * 60 * 1000 // 5 minutes
                 user.hash = crypto.randomBytes(32).toString('hex')
                 try {
-                    return await this.userRepository.save(user)
+                    await this.userRepository.save(user)
                 } catch (error) {}
-                return true
+                return { message: 'Code sent' }
             }
 
             throw new HttpException(
