@@ -12,6 +12,7 @@ import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
+import { RoomActivityTracking } from './entities/room-activity-tracking.entity'
 import { Room } from './entities/room.entity'
 import { PKBattle } from './entities/pk-battle.entity'
 import { PKBattleParticipant } from './entities/pk-battle-participant.entity'
@@ -31,6 +32,7 @@ import { RoomService } from './room.service'
             RoomSeat,
             RoomComment,
             RoomBlockedUser,
+            RoomActivityTracking,
             PKBattle,
             PKBattleParticipant,
             PKBattleGift,

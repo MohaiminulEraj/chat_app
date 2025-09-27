@@ -19,6 +19,7 @@ import { RoomParticipant } from './entities/room-participant.entity'
 import { RoomRole, RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
+import { RoomActivityTracking } from './entities/room-activity-tracking.entity'
 import { Room } from './entities/room.entity'
 import {
     PKBattle,
@@ -64,6 +65,8 @@ export class RoomService {
         private pkBattleGiftRepository: Repository<PKBattleGift>,
         @InjectRepository(Gift)
         private giftRepository: Repository<Gift>,
+        @InjectRepository(RoomActivityTracking)
+        private roomActivityTrackingRepository: Repository<RoomActivityTracking>,
         private cloudinaryService: CloudinaryService
     ) {}
 
@@ -426,6 +429,9 @@ export class RoomService {
         this.logger.log(
             `✅ Created participant: User ${userId} joined room ${roomId} at seat ${assignedSeat} (stored as ${assignedSeat + 1})`
         )
+
+        // Track room activity for popularity calculations
+        await this.trackRoomActivity(roomId, userId)
 
         // If user sits in seat 0, they become the host
         if (assignedSeat === 0) {
@@ -1557,6 +1563,202 @@ export class RoomService {
         }
 
         return recommendedRooms
+    }
+
+    /**
+     * Track user room activity for popularity calculations
+     */
+    async trackRoomActivity(roomId: string, userId: string): Promise<void> {
+        try {
+            const today = new Date()
+            today.setHours(0, 0, 0, 0) // Set to start of day
+
+            // Check if there's already an entry for today
+            const existingActivity =
+                await this.roomActivityTrackingRepository.findOne({
+                    where: {
+                        roomId,
+                        userId,
+                        activityDate: today
+                    }
+                })
+
+            if (existingActivity) {
+                // Increment visit count and update last visit time
+                existingActivity.visitCount += 1
+                existingActivity.lastVisitTime = new Date()
+                await this.roomActivityTrackingRepository.save(existingActivity)
+            } else {
+                // Create new activity record
+                const newActivity = this.roomActivityTrackingRepository.create({
+                    roomId,
+                    userId,
+                    activityDate: today,
+                    visitCount: 1,
+                    lastVisitTime: new Date()
+                })
+                await this.roomActivityTrackingRepository.save(newActivity)
+            }
+        } catch (error) {
+            this.logger.error(`Failed to track room activity: ${error.message}`)
+            // Don't throw error to avoid disrupting the main flow
+        }
+    }
+
+    /**
+     * Get popular rooms based on activity tracking
+     */
+    async getPopularRooms(): Promise<any[]> {
+        try {
+            // Get room popularity scores based on recent activity (last 30 days)
+            const thirtyDaysAgo = new Date()
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+            const popularityQuery = `
+                SELECT
+                    r.uuid as room_id,
+                    r.name,
+                    r.description,
+                    r.level,
+                    r."roomAvatarUrl",
+                    r."maxSeats",
+                    r."createdAt",
+                    r."updatedAt",
+                    r."ownerId",
+                    r."groupId",
+                    COALESCE(activity_stats.total_visits, 0) as total_visits,
+                    COALESCE(activity_stats.unique_visitors, 0) as unique_visitors,
+                    COALESCE(activity_stats.recent_activity_score, 0) as popularity_score
+                FROM rooms r
+                LEFT JOIN (
+                    SELECT
+                        rat."roomId",
+                        SUM(rat."visitCount") as total_visits,
+                        COUNT(DISTINCT rat."userId") as unique_visitors,
+                        -- Calculate popularity score: recent visits have higher weight
+                        SUM(
+                            rat."visitCount" *
+                            CASE
+                                WHEN rat."activityDate" >= CURRENT_DATE - INTERVAL '7 days' THEN 3.0
+                                WHEN rat."activityDate" >= CURRENT_DATE - INTERVAL '14 days' THEN 2.0
+                                WHEN rat."activityDate" >= CURRENT_DATE - INTERVAL '30 days' THEN 1.0
+                                ELSE 0.5
+                            END
+                        ) as recent_activity_score
+                    FROM room_activity_tracking rat
+                    WHERE rat."activityDate" >= $1
+                    GROUP BY rat."roomId"
+                ) activity_stats ON r.uuid = activity_stats."roomId"
+                WHERE r."isActive" = true
+                ORDER BY popularity_score DESC, r."createdAt" DESC
+            `
+
+            const roomsWithPopularity = await this.roomRepository.query(
+                popularityQuery,
+                [thirtyDaysAgo]
+            )
+
+            // Get all active rooms in case some don't have activity tracking yet
+            const allActiveRooms = await this.roomRepository.find({
+                where: { isActive: true },
+                relations: [
+                    'owner',
+                    'group',
+                    'participants',
+                    'participants.user'
+                ],
+                order: { createdAt: 'DESC' }
+            })
+
+            // Create a map of room popularity scores
+            const popularityMap = new Map()
+            roomsWithPopularity.forEach((room) => {
+                popularityMap.set(room.room_id, {
+                    totalVisits: parseInt(room.total_visits) || 0,
+                    uniqueVisitors: parseInt(room.unique_visitors) || 0,
+                    popularityScore: parseFloat(room.popularity_score) || 0
+                })
+            })
+
+            // Format room details with popularity info
+            const popularRooms = []
+            for (const room of allActiveRooms) {
+                const roomDetails = await this.formatRoomDetails(room)
+                if (roomDetails) {
+                    const popularityInfo = popularityMap.get(room.uuid) || {
+                        totalVisits: 0,
+                        uniqueVisitors: 0,
+                        popularityScore: 0
+                    }
+
+                    roomDetails.roomAvatarUrl = room.roomAvatarUrl || null
+                    roomDetails.popularity = popularityInfo
+
+                    popularRooms.push(roomDetails)
+                }
+            }
+
+            // Sort by popularity score, then by creation date
+            popularRooms.sort((a, b) => {
+                if (
+                    b.popularity.popularityScore !==
+                    a.popularity.popularityScore
+                ) {
+                    return (
+                        b.popularity.popularityScore -
+                        a.popularity.popularityScore
+                    )
+                }
+                return (
+                    new Date(b.createdAt).getTime() -
+                    new Date(a.createdAt).getTime()
+                )
+            })
+
+            // Add some randomization to prevent rooms from being stuck in positions
+            // Group rooms by popularity tiers and shuffle within tiers
+            const tiers = {
+                hot: [], // Top 20% by popularity score > 10
+                trending: [], // Next 30% by popularity score > 5
+                popular: [], // Next 30% by popularity score > 1
+                regular: [] // Remaining rooms
+            }
+
+            popularRooms.forEach((room) => {
+                const score = room.popularity.popularityScore
+                if (score > 10) {
+                    tiers.hot.push(room)
+                } else if (score > 5) {
+                    tiers.trending.push(room)
+                } else if (score > 1) {
+                    tiers.popular.push(room)
+                } else {
+                    tiers.regular.push(room)
+                }
+            })
+
+            // Shuffle within each tier to add variety
+            Object.values(tiers).forEach((tier) => {
+                for (let i = tier.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1))
+                    ;[tier[i], tier[j]] = [tier[j], tier[i]]
+                }
+            })
+
+            // Combine tiers back together
+            const shuffledRooms = [
+                ...tiers.hot,
+                ...tiers.trending,
+                ...tiers.popular,
+                ...tiers.regular
+            ]
+
+            return shuffledRooms
+        } catch (error) {
+            this.logger.error(`Failed to get popular rooms: ${error.message}`)
+            // Fallback to recommended rooms logic
+            return await this.getRecommendedRooms()
+        }
     }
 
     // ==================== SEAT MANAGEMENT METHODS ====================

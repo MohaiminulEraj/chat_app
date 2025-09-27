@@ -1349,6 +1349,133 @@ export class RoomController {
         }
     }
 
+    @Get('popular')
+    @ApiOperation({
+        summary: 'Get popular rooms',
+        description:
+            'Get a list of rooms sorted by popularity based on user activity. Popular rooms are determined by how frequently users visit them, with recent activity weighted higher.'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'List of popular rooms',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Popular rooms fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            _id: { type: 'string' },
+                            name: { type: 'string' },
+                            description: { type: 'string' },
+                            level: { type: 'number', example: 2 },
+                            country: { type: 'string' },
+                            roomAvatarUrl: { type: 'string', nullable: true },
+                            popularity: {
+                                type: 'object',
+                                properties: {
+                                    totalVisits: {
+                                        type: 'number',
+                                        example: 45
+                                    },
+                                    uniqueVisitors: {
+                                        type: 'number',
+                                        example: 12
+                                    },
+                                    popularityScore: {
+                                        type: 'number',
+                                        example: 15.5
+                                    }
+                                }
+                            },
+                            roomOwner: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number' },
+                                    uuid: { type: 'string' },
+                                    name: { type: 'string' },
+                                    email: { type: 'string' },
+                                    phoneNumber: { type: 'string' },
+                                    userType: { type: 'string' },
+                                    authProvider: { type: 'string' },
+                                    avatarUrl: { type: 'string' },
+                                    isEmailVerified: { type: 'boolean' },
+                                    isPhoneVerified: { type: 'boolean' }
+                                }
+                            },
+                            host: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number' },
+                                    uuid: { type: 'string' },
+                                    name: { type: 'string' },
+                                    email: { type: 'string' },
+                                    phoneNumber: { type: 'string' },
+                                    userType: { type: 'string' },
+                                    authProvider: { type: 'string' },
+                                    avatarUrl: { type: 'string' },
+                                    isEmailVerified: { type: 'boolean' },
+                                    isPhoneVerified: { type: 'boolean' }
+                                }
+                            },
+                            members: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        _id: { type: 'string' },
+                                        name: { type: 'string' },
+                                        email: { type: 'string' },
+                                        image: { type: 'string' },
+                                        role: {
+                                            type: 'string',
+                                            enum: [
+                                                'owner',
+                                                'host',
+                                                'admin',
+                                                'speaker',
+                                                'listener'
+                                            ]
+                                        },
+                                        status: { type: 'boolean' },
+                                        join: { type: 'boolean' },
+                                        invitedBy: { type: 'string' },
+                                        blocked: { type: 'boolean' }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getPopularRooms() {
+        try {
+            const rooms = await this.roomService.getPopularRooms()
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Popular rooms fetched successfully',
+                data: rooms
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to fetch popular rooms'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
     // ==================== SEAT MANAGEMENT ENDPOINTS ====================
 
     @Get(':id/seats')
