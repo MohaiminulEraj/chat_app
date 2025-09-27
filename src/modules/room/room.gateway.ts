@@ -2149,6 +2149,7 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
+            senderId: string
             giftId: string
             receiverId: string[]
             quantity: number
@@ -2157,8 +2158,14 @@ export class RoomGateway
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        const userId = data.senderId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
+
+        // Validate senderId is provided
+        if (!data.senderId) {
+            this.logger.error(`❌ SEND_GIFT: senderId is required in payload`)
+            return { status: 'error', message: 'senderId is required' }
+        }
 
         this.logger.log(
             `🎁 SEND_GIFT: User ${userName} (${userId}) sending gift ${data.giftId} (qty: ${data.quantity}) to ${data.receiverId.length} recipients in room ${data.roomId}`

@@ -63,6 +63,7 @@ socket.on('connect', () => {
     setTimeout(() => {
         console.log('\n🎁 Sending test gift...')
         socket.emit('sendGiftInRoom', {
+            senderId: USER_ID, // Now required in payload
             giftId: 'test-gift-id',
             receiverId: ['test-receiver-id'],
             quantity: 1,

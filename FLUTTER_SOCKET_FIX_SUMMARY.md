@@ -14,7 +14,25 @@ The issue was that users might not be properly joined to Socket.IO rooms when se
 
 ## Solution Implemented
 
-### 1. Enhanced Room Joining in sendGiftInRoom Handler
+### 1. Updated Payload Structure (Authentication Removed)
+
+**File**: `/src/modules/room/room.gateway.ts`
+**Method**: `handleSendGiftInRoom`
+
+Since authentication has been removed for socket clients, the payload now requires `senderId`:
+
+```typescript
+data: {
+    senderId: string     // Now required in payload
+    giftId: string
+    receiverId: string[]
+    quantity: number
+    message?: string
+    roomId?: string
+}
+```
+
+### 2. Enhanced Room Joining in sendGiftInRoom Handler
 
 **File**: `/src/modules/room/room.gateway.ts`
 **Method**: `handleSendGiftInRoom`
@@ -95,6 +113,70 @@ socket.on('roomGiftSent', (data) {
   print('🎁 Received roomGiftSent: $data');
   // Your Flutter handling code here
 });
+```
+
+## Complete Flutter Implementation Example
+
+```dart
+class RoomGiftHandler {
+  void setupGiftListeners(IO.Socket socket) {
+    // Main event for all room members to see gifts
+    socket.on('roomGiftSent', (data) {
+      // This is the PRIMARY event for showing gifts in the room
+      // All users in the room will receive this
+      final roomId = data['roomId'];
+      final senderInfo = data['sender'];
+      final receivers = data['receivers'];
+      final giftData = data['data'];
+
+      // Update your UI to show the gift animation/notification
+      showGiftAnimation(
+        senderName: senderInfo['name'],
+        giftDetails: giftData['summary'],
+        receivers: receivers,
+      );
+    });
+
+    // Personal confirmation for sender
+    socket.on('giftSent', (data) {
+      if (data['success']) {
+        // Show success message to sender
+        showSuccessToast('Gift sent successfully!');
+      }
+    });
+
+    // Personal notification for receivers
+    socket.on('giftReceived', (data) {
+      // Show special notification for the receiver
+      showReceivedGiftNotification(data);
+    });
+
+    // Activity updates
+    socket.on('giftActivityUpdate', (data) {
+      // Update activity feed if you have one
+      updateActivityFeed(data);
+    });
+  }
+
+  // Send a gift - NOW REQUIRES senderId in payload
+  void sendGift({
+    required String senderId,    // Now required!
+    required String giftId,
+    required List<String> receiverIds,
+    required int quantity,
+    required String roomId,
+    String? message,
+  }) {
+    socket.emit('sendGiftInRoom', {
+      'senderId': senderId,      // Must be included in payload
+      'giftId': giftId,
+      'receiverId': receiverIds,
+      'quantity': quantity,
+      'roomId': roomId,
+      'message': message,
+    });
+  }
+}
 ```
 
 ## Key Changes Made
