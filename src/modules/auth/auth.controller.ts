@@ -240,12 +240,13 @@ export class AuthController {
     async forgetPassword(
         @Body() verificationCodeSenderDto: VerificationCodeSenderDto
     ) {
+        const result = await this.authService.forgetPassword(
+            verificationCodeSenderDto
+        )
         return {
             status: HttpStatus.CREATED,
-            message: 'Code sent',
-            result: await this.authService.forgetPassword(
-                verificationCodeSenderDto
-            )
+            message: result.message,
+            result: null
         }
     }
 

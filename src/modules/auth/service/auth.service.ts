@@ -12,6 +12,7 @@ import { LoggedInUser } from 'src/modules/user/data/logged-in-user.type'
 import { Repository } from 'typeorm'
 import { EmailService } from '../../email/services/email.service'
 import { User } from '../../user/entities/user.entity'
+import { UserTypes } from '../../user/data/user-type.enum'
 import {
     EmailVerificationDto,
     ForgetPasswordDto,
@@ -198,7 +199,7 @@ export class AuthService {
 
             if (result.accepted.length) {
                 user.code = code.toString()
-                user.codeExpiredAt = new Date().getTime() + 2 * 60 * 1000
+                user.codeExpiredAt = new Date().getTime() + 5 * 60 * 1000 // 5 minutes
                 user.hash = crypto.randomBytes(32).toString('hex')
                 try {
                     return await this.userRepository.save(user)
@@ -281,7 +282,9 @@ export class AuthService {
                 isEmailVerified: true,
                 isPhoneVerified: true,
                 userType: true,
-                authProvider: true
+                authProvider: true,
+                binsBalance: true,
+                diamondBalance: true
             },
             where: condition
         })
@@ -304,7 +307,9 @@ export class AuthService {
             authProvider: user.authProvider,
             avatarUrl: user.avatarUrl,
             isEmailVerified: user.isEmailVerified,
-            isPhoneVerified: user.isPhoneVerified
+            isPhoneVerified: user.isPhoneVerified,
+            binsBalance: user.binsBalance || 0,
+            diamondBalance: user.diamondBalance || 0
         }
     }
 
@@ -357,12 +362,12 @@ export class AuthService {
 
             if (result.accepted.length) {
                 user.code = code.toString()
-                user.codeExpiredAt = new Date().getTime() + 2 * 60 * 1000
+                user.codeExpiredAt = new Date().getTime() + 5 * 60 * 1000 // 5 minutes
                 user.hash = crypto.randomBytes(32).toString('hex')
                 try {
-                    return await this.userRepository.save(user)
+                    await this.userRepository.save(user)
                 } catch (error) {}
-                return true
+                return { message: 'Code sent' }
             }
 
             throw new HttpException(
