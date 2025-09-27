@@ -7,6 +7,7 @@ import { LoginLog } from '../../auth/entities/login-log.entity'
 import { Friendship } from '../../friendship/entities/friendship.entity'
 import { Gift } from '../../gift/entities/gift.entity'
 import { AchievementItem } from '../interfaces/achievement.interface'
+import { UserTypes } from '../data/user-type.enum'
 
 @Entity('users')
 export class User extends CustomBaseEntity {
@@ -67,8 +68,13 @@ export class User extends CustomBaseEntity {
     @Column({ default: 'local' })
     authProvider: string
 
-    @Column({ default: 'user' })
-    userType: string
+    @Column({
+        type: 'enum',
+        enum: UserTypes,
+        default: UserTypes.USER,
+        nullable: false
+    })
+    userType: UserTypes
 
     // Achievement system fields
     @Column({ nullable: true })
