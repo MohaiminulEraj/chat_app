@@ -225,25 +225,60 @@ export class RoomService {
 
             // Handle avatar upload if provided
             if (avatarFile) {
-                // Validate file type and size
+                // Validate file type and size - Support for all common image formats
                 const allowedMimeTypes = [
+                    // JPEG formats
                     'image/jpeg',
                     'image/jpg',
+                    'image/pjpeg', // Progressive JPEG
+
+                    // PNG formats
                     'image/png',
+                    'image/x-png',
+
+                    // GIF formats
                     'image/gif',
+
+                    // WebP formats
                     'image/webp',
+
+                    // BMP formats
                     'image/bmp',
+                    'image/x-bmp',
+                    'image/x-bitmap',
+                    'image/x-win-bitmap',
+                    'image/x-windows-bmp',
+                    'image/ms-bmp',
+
+                    // TIFF formats
                     'image/tiff',
+                    'image/tif',
+                    'image/x-tiff',
+
+                    // SVG formats
                     'image/svg+xml',
+                    'image/svg',
+
+                    // Modern formats
                     'image/avif',
                     'image/heic',
                     'image/heif',
-                    'image/x-icon'
+
+                    // Icon formats
+                    'image/x-icon',
+                    'image/vnd.microsoft.icon',
+                    'image/ico',
+
+                    // Additional formats
+                    'image/jfif',
+                    'image/pjp',
+                    'image/jpg2',
+                    'image/jp2'
                 ]
 
                 if (!allowedMimeTypes.includes(avatarFile.mimetype)) {
                     throw new BadRequestException(
-                        'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+                        'Invalid file type. Please upload a valid image file (JPEG/JPG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO, JFIF)'
                     )
                 }
 
@@ -1459,26 +1494,60 @@ export class RoomService {
         file: Express.Multer.File,
         currentUserId: string
     ): Promise<{ roomAvatarUrl: string }> {
-        // Validate file type and size
+        // Validate file type and size - Support for all common image formats
         const allowedMimeTypes = [
+            // JPEG formats
             'image/jpeg',
             'image/jpg',
+            'image/pjpeg', // Progressive JPEG
+
+            // PNG formats
             'image/png',
+            'image/x-png',
+
+            // GIF formats
             'image/gif',
+
+            // WebP formats
             'image/webp',
+
+            // BMP formats
             'image/bmp',
+            'image/x-bmp',
+            'image/x-bitmap',
+            'image/x-win-bitmap',
+            'image/x-windows-bmp',
+            'image/ms-bmp',
+
+            // TIFF formats
             'image/tiff',
+            'image/tif',
+            'image/x-tiff',
+
+            // SVG formats
             'image/svg+xml',
+            'image/svg',
+
+            // Modern formats
             'image/avif',
             'image/heic',
             'image/heif',
+
+            // Icon formats
             'image/x-icon',
-            'image/vnd.microsoft.icon'
+            'image/vnd.microsoft.icon',
+            'image/ico',
+
+            // Additional formats
+            'image/jfif',
+            'image/pjp',
+            'image/jpg2',
+            'image/jp2'
         ]
 
         if (!allowedMimeTypes.includes(file.mimetype)) {
             throw new BadRequestException(
-                'Invalid file type. Please upload a valid image file (JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO)'
+                'Invalid file type. Please upload a valid image file (JPEG/JPG, PNG, GIF, WebP, BMP, TIFF, SVG, AVIF, HEIC, HEIF, ICO, JFIF)'
             )
         }
 
