@@ -66,7 +66,8 @@ export class GiftService {
         giftId: string,
         quantity: number = 1,
         roomId?: string,
-        message?: string
+        message?: string,
+        allowNonParticipants: boolean = false
     ) {
         // Validate input
         if (!receiverIds || receiverIds.length === 0) {
@@ -127,8 +128,9 @@ export class GiftService {
             )
         }
 
-        // If roomId is provided, verify sender and all receivers are in the room
-        if (roomId) {
+        // If roomId is provided, verify sender and receivers based on allowNonParticipants flag
+        if (roomId && !allowNonParticipants) {
+            // Strict mode - both sender and receivers must be seated participants
             const senderInRoom = await this.participantRepository.findOne({
                 where: { roomId, userId: senderId }
             })
@@ -150,6 +152,32 @@ export class GiftService {
                 )
                 throw new BadRequestException(
                     `All receivers must be in the room. Users not in room: ${notInRoom.join(', ')}`
+                )
+            }
+        } else if (roomId && allowNonParticipants) {
+            // Relaxed mode - only verify receivers are participants (observers can send to seated users)
+            const receiversInRoom = await this.participantRepository.find({
+                where: { roomId, userId: In(receiverIds) }
+            })
+
+            if (receiversInRoom.length !== receiverIds.length) {
+                const foundUserIds = receiversInRoom.map((p) => p.userId)
+                const notInRoom = receiverIds.filter(
+                    (id) => !foundUserIds.includes(id)
+                )
+                throw new BadRequestException(
+                    `Gift recipients must be seated in the room. Users not seated: ${notInRoom.join(', ')}`
+                )
+            }
+
+            // Log for debugging - check if sender is an observer
+            const senderInRoom = await this.participantRepository.findOne({
+                where: { roomId, userId: senderId }
+            })
+
+            if (!senderInRoom) {
+                console.log(
+                    `📝 Observer ${sender.name} (${senderId}) sending gift in room ${roomId}`
                 )
             }
         }
@@ -208,7 +236,20 @@ export class GiftService {
                             binsReceived: binsToAdd,
                             conversionRate: diamondToBinsRate,
                             giftPrice: gift.price,
-                            totalQuantity: quantity
+                            totalQuantity: quantity,
+                            senderType:
+                                roomId && allowNonParticipants
+                                    ? (await this.participantRepository.findOne(
+                                          {
+                                              where: {
+                                                  roomId,
+                                                  userId: senderId
+                                              }
+                                          }
+                                      ))
+                                        ? 'participant'
+                                        : 'observer'
+                                    : 'participant'
                         }
                     }
                 )

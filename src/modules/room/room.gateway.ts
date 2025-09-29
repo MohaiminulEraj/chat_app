@@ -1,4 +1,6 @@
-import { Logger, UseGuards } from '@nestjs/common'
+import { Logger, UseGuards, Inject } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
 import { JwtService } from '@nestjs/jwt'
 import {
     ConnectedSocket,
@@ -16,6 +18,7 @@ import { GiftService } from '../gift/gift.service'
 import { CreateRoomCommentDto } from './dto/room-comment.dto'
 import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
+import { User } from '../user/entities/user.entity'
 
 @WebSocketGateway({
     cors: {
@@ -79,7 +82,9 @@ export class RoomGateway
     constructor(
         private readonly roomService: RoomService,
         private readonly giftService: GiftService,
-        private readonly jwtService: JwtService
+        private readonly jwtService: JwtService,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>
     ) {}
 
     afterInit(server: Server) {
@@ -2149,6 +2154,7 @@ export class RoomGateway
         @ConnectedSocket() client: Socket,
         @MessageBody()
         data: {
+            senderId: string
             giftId: string
             receiverId: string[]
             quantity: number
@@ -2157,22 +2163,61 @@ export class RoomGateway
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
-        const userId = userInfo?.userId
+        const userId = data.senderId || userInfo?.userId
         const userName = userInfo?.userName || 'Unknown User'
+
+        // Validate senderId is provided
+        if (!data.senderId) {
+            this.logger.error(`❌ SEND_GIFT: senderId is required in payload`)
+            return { status: 'error', message: 'senderId is required' }
+        }
 
         this.logger.log(
             `🎁 SEND_GIFT: User ${userName} (${userId}) sending gift ${data.giftId} (qty: ${data.quantity}) to ${data.receiverId.length} recipients in room ${data.roomId}`
         )
 
         try {
+            // Ensure user is in the socket room before sending gift
+            if (data.roomId) {
+                client.join(`room:${data.roomId}`)
+                this.logger.log(
+                    `🏠 SEND_GIFT: Ensured user ${userName} (${userId}) is in socket room: room:${data.roomId}`
+                )
+            }
+
+            // Use allowNonParticipants = true to allow observers to send gifts
             const result = await this.giftService.sendGift(
                 userId,
                 data.receiverId,
                 data.giftId,
                 data.quantity,
                 data.roomId,
-                data.message
+                data.message,
+                true // Allow non-participants (observers) to send gifts
             )
+
+            // Fetch receiver details for enhanced response
+            const receiverDetails = []
+            for (const receiverId of data.receiverId) {
+                try {
+                    const receiver = await this.userRepository.findOne({
+                        where: { uuid: receiverId },
+                        select: ['uuid', 'name', 'avatarUrl']
+                    })
+                    receiverDetails.push({
+                        uuid: receiverId,
+                        name: receiver?.name || 'Unknown User',
+                        avatarUrl: receiver?.avatarUrl || null
+                    })
+                } catch (error) {
+                    // If user not found, still include basic info
+                    receiverDetails.push({
+                        uuid: receiverId,
+                        name: 'Unknown User',
+                        avatarUrl: null
+                    })
+                }
+            }
 
             // Emit to sender
             client.emit('giftSent', {
@@ -2190,13 +2235,42 @@ export class RoomGateway
                 })
             }
 
-            // Emit to all room participants
+            // Emit to all room participants with enhanced logging
             if (data.roomId) {
-                this.server.to(`room:${data.roomId}`).emit('roomGiftSent', {
+                const roomGiftData = {
                     roomId: data.roomId,
                     data: result,
-                    sender: { id: userId, name: userName },
-                    receivers: data.receiverId
+                    sender: {
+                        id: userId,
+                        name: userName,
+                        avatarUrl: userInfo?.avatarUrl || null
+                    },
+                    receivers: receiverDetails, // Now contains detailed receiver info
+                    timestamp: new Date().toISOString()
+                }
+
+                this.logger.log(
+                    `📡 SEND_GIFT: Emitting roomGiftSent to room:${data.roomId} with data:`,
+                    JSON.stringify(roomGiftData, null, 2)
+                )
+
+                this.server
+                    .to(`room:${data.roomId}`)
+                    .emit('roomGiftSent', roomGiftData)
+
+                // Log room information for debugging
+                const roomSockets = await this.server
+                    .in(`room:${data.roomId}`)
+                    .fetchSockets()
+                this.logger.log(
+                    `📊 SEND_GIFT: Room ${data.roomId} has ${roomSockets.length} connected sockets`
+                )
+
+                roomSockets.forEach((socket, index) => {
+                    const socketUserInfo = this.connectedUsers.get(socket.id)
+                    this.logger.log(
+                        `📊 Socket ${index + 1}: ${socket.id} - User: ${socketUserInfo?.userName} (${socketUserInfo?.userId})`
+                    )
                 })
             }
 
@@ -2208,7 +2282,8 @@ export class RoomGateway
                     roomId: data.roomId,
                     senderId: userId,
                     senderName: userName,
-                    receiverIds: data.receiverId,
+                    receiverIds: data.receiverId, // Keep original IDs for backward compatibility
+                    receivers: receiverDetails, // Add detailed receiver info
                     giftId: data.giftId,
                     quantity: data.quantity,
                     summary: result.summary,
@@ -2225,6 +2300,35 @@ export class RoomGateway
                 `❌ SEND_GIFT failed: User ${userName} (${userId}) failed to send gift ${data.giftId} to recipients | Error: ${error.message}`,
                 error.stack
             )
+
+            // Emit specific error events based on error type
+            if (
+                error.message.includes('must be in the room') ||
+                error.message.includes('not seated')
+            ) {
+                client.emit('giftError', {
+                    type: 'not_in_room',
+                    message:
+                        'You must be seated in the room to send gifts to participants',
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            } else if (error.message.includes('Insufficient diamond balance')) {
+                client.emit('giftError', {
+                    type: 'insufficient_balance',
+                    message: error.message,
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            } else {
+                client.emit('giftError', {
+                    type: 'general_error',
+                    message: error.message,
+                    roomId: data.roomId,
+                    senderId: userId
+                })
+            }
+
             return { status: 'error', message: error.message }
         }
     }
