@@ -6,6 +6,8 @@ import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift f
 import { GroupMember } from '../group/entities/group-member.entity'
 import { Group } from '../group/entities/group.entity'
 import { User } from '../user/entities/user.entity'
+import { UserProfileStats } from '../user/entities/user-profile-stats.entity'
+import { Friendship } from '../friendship/entities/friendship.entity'
 import { RoomBlockedUser } from './entities/room-blocked-user.entity'
 import { RoomComment } from './entities/room-comment.entity'
 import { RoomParticipant } from './entities/room-participant.entity'
@@ -18,6 +20,7 @@ import { PKBattle } from './entities/pk-battle.entity'
 import { PKBattleParticipant } from './entities/pk-battle-participant.entity'
 import { PKBattleGift } from './entities/pk-battle-gift.entity'
 import { Gift } from '../gift/entities/gift.entity'
+import { GiftTransaction } from '../gift/entities/gift-transaction.entity'
 import { RoomController } from './room.controller'
 import { RoomGateway } from './room.gateway' // Main gateway now uses root namespace
 import { RoomService } from './room.service'
@@ -39,7 +42,10 @@ import { RoomService } from './room.service'
             GroupMember,
             Group,
             User,
-            Gift
+            Gift,
+            GiftTransaction,
+            UserProfileStats,
+            Friendship
         ]),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
         CloudinaryModule, // Add CloudinaryModule for image upload functionality

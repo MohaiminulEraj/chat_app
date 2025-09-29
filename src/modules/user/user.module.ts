@@ -7,6 +7,7 @@ import { AdminWallet } from './entities/admin-wallet.entity'
 import { ConversionConfig } from './entities/conversion-config.entity'
 import { ConversionTransaction } from './entities/conversion-transaction.entity'
 import { ProfileVisit } from './entities/profile-visit.entity'
+import { UserProfileStats } from './entities/user-profile-stats.entity'
 import { User } from './entities/user.entity'
 import { ConversionService } from './services/conversion.service'
 import { UserController } from './user.controller'
@@ -20,7 +21,8 @@ import { UserService } from './user.service'
             ProfileVisit,
             ConversionConfig,
             ConversionTransaction,
-            AdminWallet
+            AdminWallet,
+            UserProfileStats
         ]),
         CloudinaryModule
     ],

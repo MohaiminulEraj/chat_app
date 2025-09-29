@@ -21,6 +21,12 @@ import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { RoomActivityTracking } from './entities/room-activity-tracking.entity'
 import { Room } from './entities/room.entity'
+import { UserProfileStats } from '../user/entities/user-profile-stats.entity'
+import { GiftTransaction } from '../gift/entities/gift-transaction.entity'
+import {
+    Friendship,
+    FriendshipStatus
+} from '../friendship/entities/friendship.entity'
 import {
     PKBattle,
     PKBattleStatus,
@@ -67,6 +73,12 @@ export class RoomService {
         private giftRepository: Repository<Gift>,
         @InjectRepository(RoomActivityTracking)
         private roomActivityTrackingRepository: Repository<RoomActivityTracking>,
+        @InjectRepository(UserProfileStats)
+        private userProfileStatsRepository: Repository<UserProfileStats>,
+        @InjectRepository(GiftTransaction)
+        private giftTransactionRepository: Repository<GiftTransaction>,
+        @InjectRepository(Friendship)
+        private friendshipRepository: Repository<Friendship>,
         private cloudinaryService: CloudinaryService
     ) {}
 
@@ -3077,259 +3089,554 @@ export class RoomService {
             `👤 GET_USER_PROFILE: Getting profile for user ${userId}`
         )
 
-        // For now, return dummy data for frontend implementation
-        // TODO: Implement actual data fetching in future iterations
+        try {
+            // Fetch user with related data
+            const user = await this.userRepository.findOne({
+                where: { uuid: userId },
+                select: [
+                    'uuid',
+                    'name',
+                    'displayName',
+                    'email',
+                    'avatarUrl',
+                    'coverImage',
+                    'bio',
+                    'level',
+                    'badge',
+                    'binsBalance',
+                    'diamondBalance',
+                    'country',
+                    'frames',
+                    'entryEffects',
+                    'purchasedGifts'
+                ]
+            })
 
-        const dummyProfile = {
-            userId: userId,
-            name: 'Alice Johnson',
-            displayName: 'AliceGamer',
-            role: 'host', // This should come from room roles
-            location: 'New York, USA',
-            followersCount: 1250,
-            profile: {
-                avatarUrl:
-                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_avatar.jpg',
-                coverPhoto:
-                    'https://res.cloudinary.com/demo/image/upload/v1640123456/sample_cover.jpg',
-                bio: 'Gaming enthusiast and community leader. Love connecting with people through interactive experiences.',
-                level: 25,
-                badge: [
-                    'VIP',
-                    'Top Gifter',
-                    'Host Master',
-                    'Community Champion'
-                ],
-                // Currency balances (formatted as numbers)
-                binsBalance: 2750.5,
-                diamondBalance: 185.25
-            },
-            privileges: {
-                giftWall: {
-                    count: 847,
-                    totalValue: 15420.5,
-                    recentGifts: [
-                        {
-                            giftId: 'gift-001',
-                            name: 'Golden Rose',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_rose.png',
-                            value: 250.0,
-                            senderName: 'Bob Wilson',
-                            receivedAt: '2025-09-12T10:30:00Z'
-                        },
-                        {
-                            giftId: 'gift-002',
-                            name: 'Diamond Crown',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/diamond_crown.png',
-                            value: 500.0,
-                            senderName: 'Charlie Brown',
-                            receivedAt: '2025-09-12T09:15:00Z'
-                        },
-                        {
-                            giftId: 'gift-003',
-                            name: 'Magic Wand',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/magic_wand.png',
-                            value: 150.0,
-                            senderName: 'Diana Prince',
-                            receivedAt: '2025-09-12T08:45:00Z'
-                        },
-                        {
-                            giftId: 'gift-004',
-                            name: 'Sparkle Heart',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_heart.png',
-                            value: 75.0,
-                            senderName: 'Eve Anderson',
-                            receivedAt: '2025-09-11T22:20:00Z'
-                        },
-                        {
-                            giftId: 'gift-005',
-                            name: 'Rainbow Butterfly',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/rainbow_butterfly.png',
-                            value: 120.0,
-                            senderName: 'Frank Miller',
-                            receivedAt: '2025-09-11T20:10:00Z'
-                        }
-                    ]
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`)
+            }
+
+            // Get user's room roles (check all active rooms)
+            const userRoles = await this.roomRoleRepository.find({
+                where: { userId, isActive: true },
+                order: { assignedAt: 'DESC' }
+            })
+
+            // Determine primary role (prioritize: owner > host > admin > speaker > listener)
+            let primaryRole = 'listener'
+            if (userRoles.find((r) => r.role === RoomRole.OWNER)) {
+                primaryRole = 'owner'
+            } else if (userRoles.find((r) => r.role === RoomRole.HOST)) {
+                primaryRole = 'host'
+            } else if (userRoles.find((r) => r.role === RoomRole.ADMIN)) {
+                primaryRole = 'admin'
+            } else if (userRoles.find((r) => r.role === RoomRole.SPEAKER)) {
+                primaryRole = 'speaker'
+            }
+
+            // Get followers count from friendships
+            const followersCount = await this.getFollowersCount(userId)
+
+            // Get user profile stats
+            const profileStats = await this.getUserProfileStats(userId)
+
+            // Get gift wall data (gifts received)
+            const giftWallData = await this.getUserGiftWall(userId)
+
+            // Get decoration/purchases data
+            const decorationData = await this.getUserDecorations(user)
+
+            // Get intimacy connections
+            const intimacyData = await this.getUserIntimacyConnections(
+                userId,
+                currentUserId
+            )
+
+            // Get current room context if user is in a room
+            const roomContext = await this.getUserCurrentRoomContext(userId)
+
+            // Build the response maintaining the exact structure
+            const profileData = {
+                userId: user.uuid,
+                name: user.name || user.email,
+                displayName: user.displayName || user.name || user.email,
+                role: primaryRole,
+                location:
+                    user.country ||
+                    profileStats?.location ||
+                    'Unknown Location',
+                followersCount: followersCount,
+                profile: {
+                    avatarUrl:
+                        user.avatarUrl ||
+                        'https://res.cloudinary.com/demo/image/upload/v1640123456/default_avatar.jpg',
+                    coverPhoto:
+                        user.coverImage ||
+                        'https://res.cloudinary.com/demo/image/upload/v1640123456/default_cover.jpg',
+                    bio: user.bio || profileStats?.bio || 'No bio available',
+                    level: user.level || 1,
+                    badge: user.badge || [],
+                    binsBalance: parseFloat(
+                        user.binsBalance?.toString() || '0'
+                    ),
+                    diamondBalance: parseFloat(
+                        user.diamondBalance?.toString() || '0'
+                    )
                 },
-                decoration: {
-                    count: 23,
-                    totalSpent: 3450.75,
-                    activeDecorations: [
-                        {
-                            decorationId: 'deco-001',
-                            name: 'Golden Frame',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/golden_frame.png',
-                            type: 'frame',
-                            isActive: true,
-                            purchasedAt: '2025-09-10T14:30:00Z',
-                            price: 299.99
-                        },
-                        {
-                            decorationId: 'deco-002',
-                            name: 'Sparkle Effect',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/sparkle_effect.gif',
-                            type: 'effect',
-                            isActive: true,
-                            purchasedAt: '2025-09-08T16:45:00Z',
-                            price: 199.99
-                        },
-                        {
-                            decorationId: 'deco-003',
-                            name: 'VIP Badge',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/vip_badge.png',
-                            type: 'badge',
-                            isActive: true,
-                            purchasedAt: '2025-09-05T11:20:00Z',
-                            price: 149.99
-                        },
-                        {
-                            decorationId: 'deco-004',
-                            name: 'Royal Crown Frame',
-                            imageUrl:
-                                'https://res.cloudinary.com/demo/image/upload/v1640123456/royal_crown_frame.png',
-                            type: 'frame',
-                            isActive: false,
-                            purchasedAt: '2025-09-03T09:15:00Z',
-                            price: 399.99
-                        }
-                    ]
+                privileges: {
+                    giftWall: giftWallData,
+                    decoration: decorationData
+                },
+                intimacy: intimacyData,
+                roomContext: roomContext,
+                stats: {
+                    totalRoomsJoined: profileStats?.totalRoomsJoined || 0,
+                    totalTimeInRooms: `${profileStats?.totalTimeInRoomsHours || 0} hours`,
+                    favoriteRoomType:
+                        profileStats?.favoriteRoomType || 'General',
+                    hostingExperience: `${profileStats?.hostingExperienceMonths || 0} months`,
+                    communityRating: parseFloat(
+                        profileStats?.communityRating?.toString() || '0'
+                    ),
+                    totalGiftsReceived: profileStats?.totalGiftsReceived || 0,
+                    totalGiftsSent: profileStats?.totalGiftsSent || 0,
+                    achievements: profileStats?.achievements || []
                 }
-            },
-            intimacy: {
-                totalConnections: 156,
-                intimacyScore: 8.7, // Overall intimacy score out of 10
-                topConnections: [
-                    {
-                        userId: 'user-int-001',
-                        name: 'Bob Wilson',
-                        displayName: 'BobTheBuilder',
-                        avatarUrl:
-                            'https://res.cloudinary.com/demo/image/upload/v1640123456/bob_avatar.jpg',
-                        intimacyLevel: 95,
-                        connectionType: 'gift_exchange',
-                        giftExchangeCount: 127,
-                        totalGiftValue: 2340.5,
-                        mutualGifts: 89,
-                        lastInteraction: '2025-09-12T11:45:00Z',
-                        relationshipDuration: '3 months',
-                        connectionStrength: 'Very Strong'
-                    },
-                    {
-                        userId: 'user-int-002',
-                        name: 'Charlie Brown',
-                        displayName: 'CharlieG',
-                        avatarUrl:
-                            'https://res.cloudinary.com/demo/image/upload/v1640123456/charlie_avatar.jpg',
-                        intimacyLevel: 87,
-                        connectionType: 'frequent_interaction',
-                        giftExchangeCount: 78,
-                        totalGiftValue: 1890.25,
-                        mutualGifts: 34,
-                        lastInteraction: '2025-09-12T10:20:00Z',
-                        relationshipDuration: '2 months',
-                        connectionStrength: 'Strong'
-                    },
-                    {
-                        userId: 'user-int-003',
-                        name: 'Diana Prince',
-                        displayName: 'WonderDiana',
-                        avatarUrl:
-                            'https://res.cloudinary.com/demo/image/upload/v1640123456/diana_avatar.jpg',
-                        intimacyLevel: 72,
-                        connectionType: 'mutual_friend',
-                        giftExchangeCount: 45,
-                        totalGiftValue: 890.75,
-                        mutualGifts: 23,
-                        lastInteraction: '2025-09-11T18:30:00Z',
-                        relationshipDuration: '1.5 months',
-                        connectionStrength: 'Good'
-                    },
-                    {
-                        userId: 'user-int-004',
-                        name: 'Eve Anderson',
-                        displayName: 'EveTheGreat',
-                        avatarUrl:
-                            'https://res.cloudinary.com/demo/image/upload/v1640123456/eve_avatar.jpg',
-                        intimacyLevel: 68,
-                        connectionType: 'gift_exchange',
-                        giftExchangeCount: 56,
-                        totalGiftValue: 1120.0,
-                        mutualGifts: 28,
-                        lastInteraction: '2025-09-11T16:45:00Z',
-                        relationshipDuration: '1 month',
-                        connectionStrength: 'Good'
-                    },
-                    {
-                        userId: 'user-int-005',
-                        name: 'Frank Miller',
-                        displayName: 'FrankTheTank',
-                        avatarUrl:
-                            'https://res.cloudinary.com/demo/image/upload/v1640123456/frank_avatar.jpg',
-                        intimacyLevel: 61,
-                        connectionType: 'frequent_interaction',
-                        giftExchangeCount: 32,
-                        totalGiftValue: 645.5,
-                        mutualGifts: 16,
-                        lastInteraction: '2025-09-11T14:20:00Z',
-                        relationshipDuration: '3 weeks',
-                        connectionStrength: 'Moderate'
-                    }
-                ]
-            },
-            roomContext: {
-                joinedAt: '2025-09-12T08:00:00Z',
-                timeInRoom: '3 hours 45 minutes',
-                seatNumber: 1,
-                isHost: true,
-                contributions: {
-                    commentsCount: 47,
-                    giftsGivenInRoom: 12,
-                    giftsReceivedInRoom: 28
-                },
-                roomInteractions: [
-                    {
-                        type: 'comment',
-                        content: "Welcome everyone to today's session!",
-                        timestamp: '2025-09-12T11:30:00Z'
-                    },
-                    {
-                        type: 'gift_received',
-                        from: 'Bob Wilson',
-                        giftName: 'Golden Rose',
-                        timestamp: '2025-09-12T10:30:00Z'
-                    }
-                ]
-            },
-            stats: {
-                totalRoomsJoined: 342,
-                totalTimeInRooms: '287 hours',
-                favoriteRoomType: 'Gaming',
-                hostingExperience: '15 months',
-                communityRating: 4.8,
-                totalGiftsReceived: 2847,
-                totalGiftsSent: 1923,
-                achievements: [
-                    'Top Host of the Month',
-                    'Community Builder',
-                    'Gift Master',
-                    'Social Butterfly',
-                    'Room Legend'
-                ]
+            }
+
+            this.logger.log(
+                `✅ GET_USER_PROFILE: Successfully fetched profile for user ${userId}`
+            )
+
+            return profileData
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_USER_PROFILE: Failed to fetch profile for user ${userId}`,
+                error.stack
+            )
+            throw error
+        }
+    }
+
+    // Helper method to get followers count
+    private async getFollowersCount(userId: string): Promise<number> {
+        const followersCount = await this.friendshipRepository.count({
+            where: {
+                friendId: userId,
+                status: FriendshipStatus.ACCEPTED
+            }
+        })
+
+        return followersCount
+    }
+
+    // Helper method to get or create user profile stats
+    private async getUserProfileStats(
+        userId: string
+    ): Promise<UserProfileStats> {
+        let stats = await this.userProfileStatsRepository.findOne({
+            where: { userId }
+        })
+
+        if (!stats) {
+            // Create default stats if not exists
+            stats = this.userProfileStatsRepository.create({
+                userId,
+                totalRoomsJoined: 0,
+                totalTimeInRoomsHours: 0,
+                favoriteRoomType: 'General',
+                hostingExperienceMonths: 0,
+                communityRating: 4.0,
+                totalGiftsReceived: 0,
+                totalGiftsSent: 0,
+                achievements: [],
+                followersCount: 0,
+                location: 'Unknown',
+                bio: ''
+            })
+            stats = await this.userProfileStatsRepository.save(stats)
+        }
+
+        // Update stats with actual room participation data
+        const roomCount = await this.participantRepository.count({
+            where: { userId }
+        })
+
+        if (roomCount > 0 && stats.totalRoomsJoined !== roomCount) {
+            stats.totalRoomsJoined = roomCount
+            await this.userProfileStatsRepository.save(stats)
+        }
+
+        return stats
+    }
+
+    // Helper method to get gift wall data
+    private async getUserGiftWall(userId: string): Promise<any> {
+        // Get total gift count and value
+        const giftStats = await this.giftTransactionRepository
+            .createQueryBuilder('gt')
+            .select('COUNT(*)', 'count')
+            .addSelect('SUM(gt.amount * gt.quantity)', 'totalValue')
+            .where('gt.receiverId = :userId', { userId })
+            .getRawOne()
+
+        // Get recent 5 gifts with details
+        const recentGifts = await this.giftTransactionRepository
+            .createQueryBuilder('gt')
+            .leftJoinAndSelect('gt.gift', 'gift')
+            .leftJoinAndSelect('gt.sender', 'sender')
+            .where('gt.receiverId = :userId', { userId })
+            .orderBy('gt.createdAt', 'DESC')
+            .limit(5)
+            .getMany()
+
+        const formattedGifts = recentGifts.map((transaction) => ({
+            giftId: transaction.giftId,
+            name: transaction.gift?.name || 'Unknown Gift',
+            imageUrl:
+                transaction.gift?.imageUrl || transaction.gift?.giftImage || '',
+            value: parseFloat(transaction.amount?.toString() || '0'),
+            senderName:
+                transaction.sender?.name ||
+                transaction.sender?.displayName ||
+                transaction.sender?.email ||
+                'Anonymous',
+            receivedAt: transaction.createdAt
+        }))
+
+        return {
+            count: parseInt(giftStats?.count || '0'),
+            totalValue: parseFloat(giftStats?.totalValue || '0'),
+            recentGifts: formattedGifts
+        }
+    }
+
+    // Helper method to get user decorations
+    private async getUserDecorations(user: any): Promise<any> {
+        const decorations = []
+
+        // Add frames as decorations
+        if (user.frames && Array.isArray(user.frames)) {
+            user.frames.forEach((frame: any) => {
+                decorations.push({
+                    decorationId: frame.id || `frame-${Date.now()}`,
+                    name: frame.name || 'Custom Frame',
+                    imageUrl: frame.imageUrl || frame.url || '',
+                    type: 'frame',
+                    isActive: frame.isActive || false,
+                    purchasedAt: frame.purchasedAt || new Date(),
+                    price: frame.price || 0
+                })
+            })
+        }
+
+        // Add entry effects as decorations
+        if (user.entryEffects && Array.isArray(user.entryEffects)) {
+            user.entryEffects.forEach((effect: any) => {
+                decorations.push({
+                    decorationId: effect.id || `effect-${Date.now()}`,
+                    name: effect.name || 'Entry Effect',
+                    imageUrl: effect.imageUrl || effect.url || '',
+                    type: 'effect',
+                    isActive: effect.isActive || false,
+                    purchasedAt: effect.purchasedAt || new Date(),
+                    price: effect.price || 0
+                })
+            })
+        }
+
+        // Add purchased gifts as decorations
+        if (user.purchasedGifts && Array.isArray(user.purchasedGifts)) {
+            user.purchasedGifts.forEach((gift: any) => {
+                decorations.push({
+                    decorationId: gift.id || `gift-${Date.now()}`,
+                    name: gift.name || 'Special Item',
+                    imageUrl: gift.imageUrl || gift.url || '',
+                    type: 'special',
+                    isActive: false,
+                    purchasedAt: gift.purchasedAt || new Date(),
+                    price: gift.price || 0
+                })
+            })
+        }
+
+        // Calculate total spent
+        const totalSpent = decorations.reduce(
+            (sum, item) => sum + (item.price || 0),
+            0
+        )
+
+        // Sort by purchase date and take the 4 most recent active ones
+        const activeDecorations = decorations
+            .sort(
+                (a, b) =>
+                    new Date(b.purchasedAt).getTime() -
+                    new Date(a.purchasedAt).getTime()
+            )
+            .slice(0, 4)
+
+        return {
+            count: decorations.length,
+            totalSpent: totalSpent,
+            activeDecorations: activeDecorations
+        }
+    }
+
+    // Helper method to get intimacy connections
+    private async getUserIntimacyConnections(
+        userId: string,
+        currentUserId?: string
+    ): Promise<any> {
+        // Get gift exchange statistics between users
+        const intimacyQuery = await this.giftTransactionRepository
+            .createQueryBuilder('gt')
+            .select(
+                'CASE WHEN gt.senderId = :userId THEN gt.receiverId ELSE gt.senderId END',
+                'connecteduserid'
+            )
+            .addSelect('COUNT(*)', 'exchangecount')
+            .addSelect('SUM(gt.amount * gt.quantity)', 'totalvalue')
+            .addSelect('MAX(gt.createdAt)', 'lastinteraction')
+            .where('(gt.senderId = :userId OR gt.receiverId = :userId)', {
+                userId
+            })
+            .groupBy('connecteduserid')
+            .orderBy('exchangecount', 'DESC')
+            .limit(5)
+            .getRawMany()
+
+        // Get user details for top connections
+        const topConnections = []
+        for (const connection of intimacyQuery) {
+            const connectedUser = await this.userRepository.findOne({
+                where: { uuid: connection.connecteduserid },
+                select: ['uuid', 'name', 'displayName', 'avatarUrl']
+            })
+
+            if (connectedUser) {
+                // Calculate mutual gifts
+                const mutualGifts = await this.giftTransactionRepository
+                    .createQueryBuilder('gt')
+                    .where(
+                        'gt.senderId = :userId AND gt.receiverId = :connectedId',
+                        {
+                            userId,
+                            connectedId: connection.connecteduserid
+                        }
+                    )
+                    .orWhere(
+                        'gt.senderId = :connectedId AND gt.receiverId = :userId',
+                        {
+                            userId,
+                            connectedId: connection.connecteduserid
+                        }
+                    )
+                    .getCount()
+
+                // Calculate intimacy level (0-100 scale)
+                const intimacyLevel = Math.min(
+                    100,
+                    Math.floor(
+                        parseInt(connection.exchangecount) * 2 +
+                            mutualGifts * 5 +
+                            Math.log(
+                                parseFloat(connection.totalvalue || '0') + 1
+                            ) *
+                                3
+                    )
+                )
+
+                // Calculate relationship duration
+                const firstInteraction = await this.giftTransactionRepository
+                    .createQueryBuilder('gt')
+                    .where(
+                        '(gt.senderId = :userId AND gt.receiverId = :connectedId) OR (gt.senderId = :connectedId AND gt.receiverId = :userId)',
+                        {
+                            userId,
+                            connectedId: connection.connecteduserid
+                        }
+                    )
+                    .orderBy('gt.createdAt', 'ASC')
+                    .getOne()
+
+                const durationDays = firstInteraction
+                    ? Math.floor(
+                          (Date.now() - firstInteraction.createdAt.getTime()) /
+                              (1000 * 60 * 60 * 24)
+                      )
+                    : 0
+
+                let relationshipDuration = '< 1 week'
+                if (durationDays > 365) {
+                    relationshipDuration = `${Math.floor(durationDays / 365)} year${durationDays >= 730 ? 's' : ''}`
+                } else if (durationDays > 30) {
+                    relationshipDuration = `${Math.floor(durationDays / 30)} month${durationDays >= 60 ? 's' : ''}`
+                } else if (durationDays > 7) {
+                    relationshipDuration = `${Math.floor(durationDays / 7)} week${durationDays >= 14 ? 's' : ''}`
+                }
+
+                // Determine connection strength
+                let connectionStrength = 'Weak'
+                if (intimacyLevel >= 80) {
+                    connectionStrength = 'Very Strong'
+                } else if (intimacyLevel >= 60) {
+                    connectionStrength = 'Strong'
+                } else if (intimacyLevel >= 40) {
+                    connectionStrength = 'Good'
+                } else if (intimacyLevel >= 20) {
+                    connectionStrength = 'Moderate'
+                }
+
+                topConnections.push({
+                    userId: connectedUser.uuid,
+                    name: connectedUser.name || connectedUser.displayName,
+                    displayName:
+                        connectedUser.displayName || connectedUser.name,
+                    avatarUrl: connectedUser.avatarUrl || null,
+                    intimacyLevel,
+                    connectionType:
+                        mutualGifts > 10
+                            ? 'gift_exchange'
+                            : 'frequent_interaction',
+                    giftExchangeCount: parseInt(connection.exchangecount),
+                    totalGiftValue: parseFloat(connection.totalvalue || '0'),
+                    mutualGifts,
+                    lastInteraction: connection.lastinteraction,
+                    relationshipDuration,
+                    connectionStrength
+                })
             }
         }
 
-        this.logger.log(
-            `✅ GET_USER_PROFILE_IN_ROOM: Successfully generated dummy profile for user ${userId}`
+        // Calculate overall intimacy score (0-10 scale)
+        const intimacyScore =
+            topConnections.length > 0
+                ? Math.min(
+                      10,
+                      topConnections.reduce(
+                          (sum, c) => sum + c.intimacyLevel,
+                          0
+                      ) /
+                          (topConnections.length * 10)
+                  )
+                : 0
+
+        return {
+            totalConnections: intimacyQuery.length,
+            intimacyScore: Math.round(intimacyScore * 10) / 10,
+            topConnections
+        }
+    }
+
+    // Helper method to get current room context
+    private async getUserCurrentRoomContext(
+        userId: string
+    ): Promise<any | null> {
+        // Check if user is currently in any room
+        const currentParticipation = await this.participantRepository.findOne({
+            where: { userId },
+            relations: ['room'],
+            order: { createdAt: 'DESC' }
+        })
+
+        if (!currentParticipation) {
+            return null
+        }
+
+        const room = currentParticipation.room
+        const roomId = room.uuid
+
+        // Calculate time in room
+        const joinTime = currentParticipation.createdAt
+        const now = new Date()
+        const timeInMinutes = Math.floor(
+            (now.getTime() - joinTime.getTime()) / (1000 * 60)
+        )
+        const hours = Math.floor(timeInMinutes / 60)
+        const minutes = timeInMinutes % 60
+        const timeInRoom =
+            hours > 0
+                ? `${hours} hours ${minutes} minutes`
+                : `${minutes} minutes`
+
+        // Get user's role in this room
+        const roomRole = await this.roomRoleRepository.findOne({
+            where: { roomId, userId, isActive: true }
+        })
+
+        // Count comments in room
+        const commentsCount = await this.roomCommentRepository.count({
+            where: { roomId, userId }
+        })
+
+        // Count gifts given and received in this room
+        const giftsGiven = await this.giftTransactionRepository.count({
+            where: { roomId, senderId: userId }
+        })
+
+        const giftsReceived = await this.giftTransactionRepository.count({
+            where: { roomId, receiverId: userId }
+        })
+
+        // Get recent interactions (last 3)
+        const recentComments = await this.roomCommentRepository.find({
+            where: { roomId, userId },
+            order: { createdAt: 'DESC' },
+            take: 2
+        })
+
+        const recentGiftReceived = await this.giftTransactionRepository.findOne(
+            {
+                where: { roomId, receiverId: userId },
+                relations: ['sender', 'gift'],
+                order: { createdAt: 'DESC' }
+            }
         )
 
-        return dummyProfile
+        const roomInteractions = []
+
+        // Add recent comments as interactions
+        recentComments.forEach((comment) => {
+            roomInteractions.push({
+                type: 'comment',
+                content: comment.message,
+                timestamp: comment.createdAt
+            })
+        })
+
+        // Add recent gift received as interaction
+        if (recentGiftReceived) {
+            roomInteractions.push({
+                type: 'gift_received',
+                from:
+                    recentGiftReceived.sender?.name ||
+                    recentGiftReceived.sender?.displayName ||
+                    'Anonymous',
+                giftName: recentGiftReceived.gift?.name || 'Gift',
+                timestamp: recentGiftReceived.createdAt
+            })
+        }
+
+        // Sort interactions by timestamp
+        roomInteractions.sort(
+            (a, b) =>
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime()
+        )
+
+        return {
+            roomId,
+            roomName: room.name,
+            joinedAt: joinTime,
+            timeInRoom,
+            seatNumber: currentParticipation.seatNumber,
+            isHost: roomRole?.role === RoomRole.HOST || room.ownerId === userId,
+            contributions: {
+                commentsCount,
+                giftsGivenInRoom: giftsGiven,
+                giftsReceivedInRoom: giftsReceived
+            },
+            roomInteractions: roomInteractions.slice(0, 3)
+        }
     }
 }
