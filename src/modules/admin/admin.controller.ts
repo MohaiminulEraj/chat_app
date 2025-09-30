@@ -41,8 +41,7 @@ export class AdminController {
     @Post('gift-currency')
     @ApiOperation({
         summary: 'Gift currency to user (Admin Only)',
-        description:
-            'Admin can gift bins or diamonds to any user with tracking'
+        description: 'Admin can gift bins or diamonds to any user with tracking'
     })
     @ApiBody({
         schema: {
@@ -246,11 +245,9 @@ export class AdminController {
             data: {
                 conversionType,
                 oldRate:
-                    result.oldConfig.targetValue /
-                    result.oldConfig.sourceValue,
+                    result.oldConfig.targetValue / result.oldConfig.sourceValue,
                 newRate:
-                    result.newConfig.targetValue /
-                    result.newConfig.sourceValue,
+                    result.newConfig.targetValue / result.newConfig.sourceValue,
                 oldSourceValue: result.oldConfig.sourceValue,
                 oldTargetValue: result.oldConfig.targetValue,
                 newSourceValue: result.newConfig.sourceValue,

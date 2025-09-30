@@ -31,12 +31,8 @@ export class AdminGuard implements CanActivate {
         this.logger.log(
             `🔐 [ADMIN_GUARD] Checking authorization for user: ${user?.email}`
         )
-        this.logger.log(
-            `   ├─ User Type: ${user?.userType || 'undefined'}`
-        )
-        this.logger.log(
-            `   └─ Required Roles: ${requiredRoles.join(', ')}`
-        )
+        this.logger.log(`   ├─ User Type: ${user?.userType || 'undefined'}`)
+        this.logger.log(`   └─ Required Roles: ${requiredRoles.join(', ')}`)
 
         if (!user) {
             this.logger.error('❌ [ADMIN_GUARD] User not authenticated')

@@ -22,16 +22,16 @@ CREATE TABLE IF NOT EXISTS admin_transactions (
 );
 
 -- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_admin_transactions_admin_id_created 
+CREATE INDEX IF NOT EXISTS idx_admin_transactions_admin_id_created
 ON admin_transactions("adminId", "createdAt" DESC);
 
-CREATE INDEX IF NOT EXISTS idx_admin_transactions_user_id_created 
+CREATE INDEX IF NOT EXISTS idx_admin_transactions_user_id_created
 ON admin_transactions("userId", "createdAt" DESC);
 
-CREATE INDEX IF NOT EXISTS idx_admin_transactions_type_created 
+CREATE INDEX IF NOT EXISTS idx_admin_transactions_type_created
 ON admin_transactions("transactionType", "createdAt" DESC);
 
-CREATE INDEX IF NOT EXISTS idx_admin_transactions_created 
+CREATE INDEX IF NOT EXISTS idx_admin_transactions_created
 ON admin_transactions("createdAt" DESC);
 
 -- Add trigger to update updated_at

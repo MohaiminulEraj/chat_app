@@ -472,9 +472,7 @@ export class AdminService {
         return {
             totalUsers,
             activeUsers,
-            totalBinsInCirculation: parseFloat(
-                currencyStats?.totalBins || '0'
-            ),
+            totalBinsInCirculation: parseFloat(currencyStats?.totalBins || '0'),
             totalDiamondsInCirculation: parseFloat(
                 currencyStats?.totalDiamonds || '0'
             ),
