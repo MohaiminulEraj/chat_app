@@ -39,7 +39,8 @@ export class JwtService {
             email: user.email,
             authProvider: user.authProvider,
             avatarUrl: user.avatarUrl,
-            isEmailVerified: user.isEmailVerified
+            isEmailVerified: user.isEmailVerified,
+            userType: user.userType
         }
     }
 
@@ -48,7 +49,8 @@ export class JwtService {
         return this.jwt.sign({
             id: auth.id,
             uuid: auth.uuid,
-            email: auth.email
+            email: auth.email,
+            userType: auth.userType
         })
     }
 

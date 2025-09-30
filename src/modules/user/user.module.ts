@@ -4,6 +4,7 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module'
 import { Friendship } from '../friendship/entities/friendship.entity'
 import { ConversionController } from './controllers/conversion.controller'
 import { AdminWallet } from './entities/admin-wallet.entity'
+import { AdminTransaction } from './entities/admin-transaction.entity'
 import { ConversionConfig } from './entities/conversion-config.entity'
 import { ConversionTransaction } from './entities/conversion-transaction.entity'
 import { ProfileVisit } from './entities/profile-visit.entity'
@@ -22,6 +23,7 @@ import { UserService } from './user.service'
             ConversionConfig,
             ConversionTransaction,
             AdminWallet,
+            AdminTransaction,
             UserProfileStats
         ]),
         CloudinaryModule

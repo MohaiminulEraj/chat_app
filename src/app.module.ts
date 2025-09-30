@@ -17,6 +17,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor'
 import { LoggerMiddleware } from './common/middleware/logger.middleware'
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware'
 import smtpConfig from './config/smtp.config'
+import { AdminModule } from './modules/admin/admin.module'
 import { AgoraModule } from './modules/agora/agora.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
@@ -70,6 +71,7 @@ import { SocketIOModule } from './modules/socketio/socketio.module'
         AgoraModule,
         AuthModule,
         UserModule,
+        AdminModule, // Add AdminModule for admin-only endpoints
         FriendshipModule,
         GroupModule,
         SocketIOModule, // New unified Socket.IO implementation
