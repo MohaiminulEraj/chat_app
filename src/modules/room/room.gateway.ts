@@ -1158,7 +1158,39 @@ export class RoomGateway
                 throw new Error('Invalid seat index')
             }
 
-            // Check if seat is occupied
+            // Special handling for admin seat (-1)
+            if (data.seatIndex === -1) {
+                // Check if user is admin/host/owner
+                const userRoles = await this.roomService.getUserRolesInRoom(
+                    roomId,
+                    userId
+                )
+                const isAdmin =
+                    userRoles.includes(RoomRole.ADMIN) ||
+                    userRoles.includes(RoomRole.HOST) ||
+                    userRoles.includes(RoomRole.OWNER)
+
+                if (!isAdmin) {
+                    throw new Error(
+                        'Only admins, hosts, or owners can sit in the admin seat'
+                    )
+                }
+
+                // If seat is occupied, send request instead
+                if (targetSeat.occupied) {
+                    this.logger.log(
+                        `📝 Admin seat occupied, triggering request for user ${userName} (${userId})`
+                    )
+
+                    // Redirect to request handler
+                    return this.handleRequestAdminSeat(client, {
+                        roomId,
+                        userId
+                    })
+                }
+            }
+
+            // Check if seat is occupied (for non-admin seats or empty admin seat)
             if (targetSeat.occupied) {
                 throw new Error('Seat is already occupied')
             }
@@ -1339,6 +1371,198 @@ export class RoomGateway
 
             client.emit('sitInSeatResponse', errorResponse)
             return errorResponse
+        }
+    }
+
+    @SubscribeMessage('requestAdminSeat')
+    async handleRequestAdminSeat(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            userId?: string
+        }
+    ) {
+        const validatedUser = await this.getUserInfo(client, data.userId)
+        if (!validatedUser) {
+            client.emit('requestAdminSeatResponse', {
+                status: 'rejected',
+                message: 'User information not available'
+            })
+            return
+        }
+
+        const { userId, userName } = validatedUser
+
+        this.logger.log(
+            `📝 REQUEST_ADMIN_SEAT: User ${userName} (${userId}) requesting admin seat in room ${data.roomId}`
+        )
+
+        try {
+            const result = await this.roomService.requestAdminSeat(
+                data.roomId,
+                userId
+            )
+
+            // Notify the requester
+            client.emit('requestAdminSeatResponse', {
+                status: 'pending',
+                message: 'Admin seat request sent successfully',
+                requestId: result.requestId
+            })
+
+            // Find the current admin and notify them
+            const adminSockets = Array.from(this.connectedUsers.entries())
+                .filter(
+                    ([_, userInfo]) => userInfo.userId === result.currentAdminId
+                )
+                .map(([socketId]) => socketId)
+
+            adminSockets.forEach((socketId) => {
+                this.server.to(socketId).emit('adminSeatRequested', {
+                    roomId: data.roomId,
+                    requestId: result.requestId,
+                    requesterId: userId,
+                    requesterName: userName,
+                    timestamp: new Date().toISOString()
+                })
+            })
+
+            this.logger.log(
+                `✅ REQUEST_ADMIN_SEAT: Request ${result.requestId} sent to admin ${result.currentAdminId}`
+            )
+
+            return { status: 'pending', requestId: result.requestId }
+        } catch (error) {
+            this.logger.error(`❌ REQUEST_ADMIN_SEAT failed: ${error.message}`)
+
+            client.emit('requestAdminSeatResponse', {
+                status: 'rejected',
+                message: error.message
+            })
+
+            return { status: 'rejected', message: error.message }
+        }
+    }
+
+    @SubscribeMessage('approveAdminSeatRequest')
+    async handleApproveAdminSeatRequest(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            requestId: string
+            requesterId: string
+            approved: boolean
+            userId?: string
+        }
+    ) {
+        const validatedUser = await this.getUserInfo(client, data.userId)
+        if (!validatedUser) {
+            client.emit('approveAdminSeatResponse', {
+                status: 'rejected',
+                message: 'User information not available'
+            })
+            return
+        }
+
+        const { userId: approverId, userName } = validatedUser
+
+        this.logger.log(
+            `🔍 APPROVE_ADMIN_SEAT: User ${userName} (${approverId}) ${data.approved ? 'approving' : 'rejecting'} request ${data.requestId}`
+        )
+
+        try {
+            if (!data.approved) {
+                // Rejection - notify requester
+                const requesterSockets = Array.from(
+                    this.connectedUsers.entries()
+                )
+                    .filter(
+                        ([_, userInfo]) => userInfo.userId === data.requesterId
+                    )
+                    .map(([socketId]) => socketId)
+
+                requesterSockets.forEach((socketId) => {
+                    this.server.to(socketId).emit('adminSeatRequestRejected', {
+                        roomId: data.roomId,
+                        requestId: data.requestId,
+                        message: 'Admin seat request was rejected',
+                        timestamp: new Date().toISOString()
+                    })
+                })
+
+                client.emit('approveAdminSeatResponse', {
+                    status: 'success',
+                    message: 'Request rejected successfully'
+                })
+
+                this.logger.log(
+                    `❌ APPROVE_ADMIN_SEAT: Request ${data.requestId} rejected by ${userName}`
+                )
+
+                return { status: 'success', message: 'Request rejected' }
+            }
+
+            // Approval - swap seats
+            const result = await this.roomService.approveAdminSeatRequest(
+                data.roomId,
+                approverId,
+                data.requesterId
+            )
+
+            // Update room seats state
+            await this.updateRoomSeatsState(data.roomId)
+
+            // Notify the requester
+            const requesterSockets = Array.from(this.connectedUsers.entries())
+                .filter(([_, userInfo]) => userInfo.userId === data.requesterId)
+                .map(([socketId]) => socketId)
+
+            requesterSockets.forEach((socketId) => {
+                this.server.to(socketId).emit('adminSeatRequestApproved', {
+                    roomId: data.roomId,
+                    requestId: data.requestId,
+                    seatIndex: -1,
+                    message: 'You are now in the admin seat',
+                    timestamp: new Date().toISOString()
+                })
+            })
+
+            // Notify approver
+            client.emit('approveAdminSeatResponse', {
+                status: 'success',
+                message: 'Admin seat transferred successfully'
+            })
+
+            // Broadcast to entire room
+            this.server.to(`room:${data.roomId}`).emit('seatUpdated', {
+                roomId: data.roomId,
+                seatIndex: -1,
+                occupied: true,
+                user: {
+                    id: data.requesterId,
+                    name: '', // Will be filled by client from participant list
+                    avatar: ''
+                },
+                isAdminSeat: true,
+                timestamp: new Date().toISOString()
+            })
+
+            this.logger.log(
+                `✅ APPROVE_ADMIN_SEAT: Admin seat transferred from ${approverId} to ${data.requesterId} in room ${data.roomId}`
+            )
+
+            return { status: 'success', message: result.message }
+        } catch (error) {
+            this.logger.error(`❌ APPROVE_ADMIN_SEAT failed: ${error.message}`)
+
+            client.emit('approveAdminSeatResponse', {
+                status: 'rejected',
+                message: error.message
+            })
+
+            return { status: 'rejected', message: error.message }
         }
     }
 
