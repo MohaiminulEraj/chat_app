@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { ScheduleModule } from '@nestjs/schedule'
 import { AuthModule } from '../auth/auth.module' // Import AuthModule
 import { CloudinaryModule } from '../cloudinary/cloudinary.module' // Import CloudinaryModule
 import { GiftModule } from '../gift/gift.module' // Import GiftModule for gift functionality
@@ -15,6 +16,7 @@ import { RoomRoleAssignment } from './entities/room-role.entity'
 import { RoomSeat } from './entities/room-seat.entity'
 import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { RoomActivityTracking } from './entities/room-activity-tracking.entity'
+import { RoomRanking } from './entities/room-ranking.entity'
 import { Room } from './entities/room.entity'
 import { PKBattle } from './entities/pk-battle.entity'
 import { PKBattleParticipant } from './entities/pk-battle-participant.entity'
@@ -24,6 +26,7 @@ import { GiftTransaction } from '../gift/entities/gift-transaction.entity'
 import { RoomController } from './room.controller'
 import { RoomGateway } from './room.gateway' // Main gateway now uses root namespace
 import { RoomService } from './room.service'
+import { RoomRankingService } from './services/room-ranking.service'
 
 @Module({
     imports: [
@@ -36,6 +39,7 @@ import { RoomService } from './room.service'
             RoomComment,
             RoomBlockedUser,
             RoomActivityTracking,
+            RoomRanking,
             PKBattle,
             PKBattleParticipant,
             PKBattleGift,
@@ -47,6 +51,7 @@ import { RoomService } from './room.service'
             UserProfileStats,
             Friendship
         ]),
+        ScheduleModule.forRoot(),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
         CloudinaryModule, // Add CloudinaryModule for image upload functionality
         GiftModule // Add GiftModule for gift functionality
@@ -54,8 +59,9 @@ import { RoomService } from './room.service'
     controllers: [RoomController],
     providers: [
         RoomService,
-        RoomGateway // Main gateway now uses root namespace
+        RoomGateway, // Main gateway now uses root namespace
+        RoomRankingService
     ],
-    exports: [RoomService]
+    exports: [RoomService, RoomRankingService]
 })
 export class RoomModule {}

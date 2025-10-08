@@ -18,6 +18,7 @@ import { GiftService } from '../gift/gift.service'
 import { CreateRoomCommentDto } from './dto/room-comment.dto'
 import { RoomRole } from './entities/room-role.entity'
 import { RoomService } from './room.service'
+import { RoomRankingService } from './services/room-ranking.service'
 import { User } from '../user/entities/user.entity'
 
 @WebSocketGateway({
@@ -84,7 +85,8 @@ export class RoomGateway
         private readonly giftService: GiftService,
         private readonly jwtService: JwtService,
         @InjectRepository(User)
-        private readonly userRepository: Repository<User>
+        private readonly userRepository: Repository<User>,
+        private readonly roomRankingService: RoomRankingService
     ) {}
 
     afterInit(server: Server) {
@@ -1063,6 +1065,12 @@ export class RoomGateway
 
                     // Track user activity
                     this.trackUserActivity(userId, 'joinRoom')
+
+                    // Track user for online rankings
+                    await this.roomRankingService.trackUserActivity(
+                        roomId,
+                        userId
+                    )
                 } catch (asyncError) {
                     this.logger.error(
                         `❌ JOIN_ROOM async data loading failed: ${asyncError.message}`,
@@ -2102,6 +2110,9 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             })
 
+            // Remove user from online rankings tracking
+            await this.roomRankingService.removeUserActivity(roomId, userId)
+
             this.logger.log(
                 `✅ LEAVE_ROOM success: User ${userName} (${userId}) left room ${roomId} | ` +
                     `Room users: ${newCount}`
@@ -2513,6 +2524,16 @@ export class RoomGateway
                     summary: result.summary,
                     timestamp: new Date().toISOString()
                 })
+
+            // Update rankings after successful gift transaction
+            if (data.roomId) {
+                await this.roomRankingService.updateRankingsAfterGift(
+                    data.roomId
+                )
+
+                // Broadcast ranking updates to subscribed users
+                await this.broadcastRankingUpdates(data.roomId)
+            }
 
             this.logger.log(
                 `✅ SEND_GIFT success: User ${userName} (${userId}) sent gift ${data.giftId} (qty: ${data.quantity}) to ${data.receiverId.length} recipients`
@@ -5220,6 +5241,281 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ PK_BATTLE_ENDED emit failed: ${error.message}`
+            )
+        }
+    }
+
+    // ==================== RANKING SOCKET EVENTS ====================
+
+    @SubscribeMessage('getRoomRankings')
+    async handleGetRoomRankings(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            period: 'hourly' | 'weekly' | 'total' | 'online'
+            limit?: number
+        }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📊 GET_ROOM_RANKINGS: User ${userName} (${userId}) requesting ${data.period} rankings for room ${data.roomId}`
+        )
+
+        try {
+            let rankings = []
+            const limit = data.limit || 50
+
+            switch (data.period) {
+                case 'hourly':
+                    rankings = await this.roomRankingService.getHourlyRankings(
+                        data.roomId,
+                        limit
+                    )
+                    break
+                case 'weekly':
+                    rankings = await this.roomRankingService.getWeeklyRankings(
+                        data.roomId,
+                        limit
+                    )
+                    break
+                case 'total':
+                    rankings = await this.roomRankingService.getTotalRankings(
+                        data.roomId,
+                        limit
+                    )
+                    break
+                case 'online':
+                    rankings = await this.roomRankingService.getOnlineRankings(
+                        data.roomId,
+                        limit
+                    )
+                    break
+            }
+
+            const response = {
+                status: 'success',
+                roomId: data.roomId,
+                period: data.period,
+                rankings,
+                totalCount: rankings.length,
+                timestamp: new Date().toISOString()
+            }
+
+            client.emit('roomRankingsResponse', response)
+
+            this.logger.log(
+                `✅ GET_ROOM_RANKINGS: Sent ${rankings.length} ${data.period} rankings to user ${userName}`
+            )
+
+            return response
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_ROOM_RANKINGS failed: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId,
+                period: data.period,
+                rankings: [],
+                totalCount: 0,
+                timestamp: new Date().toISOString()
+            }
+
+            client.emit('roomRankingsResponse', errorResponse)
+            return errorResponse
+        }
+    }
+
+    @SubscribeMessage('getAllRoomRankings')
+    async handleGetAllRoomRankings(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            limit?: number
+        }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📊 GET_ALL_ROOM_RANKINGS: User ${userName} (${userId}) requesting all rankings for room ${data.roomId}`
+        )
+
+        try {
+            const limit = data.limit || 10
+            const allRankings = await this.roomRankingService.getTopRankedUsers(
+                data.roomId,
+                limit
+            )
+
+            const response = {
+                status: 'success',
+                roomId: data.roomId,
+                rankings: allRankings,
+                timestamp: new Date().toISOString()
+            }
+
+            client.emit('allRoomRankingsResponse', response)
+
+            this.logger.log(
+                `✅ GET_ALL_ROOM_RANKINGS: Sent all rankings to user ${userName}`
+            )
+
+            return response
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_ALL_ROOM_RANKINGS failed: ${error.message}`,
+                error.stack
+            )
+
+            const errorResponse = {
+                status: 'error',
+                message: error.message,
+                roomId: data.roomId,
+                rankings: {
+                    hourly: [],
+                    weekly: [],
+                    total: [],
+                    online: [],
+                    updatedAt: new Date().toISOString()
+                },
+                timestamp: new Date().toISOString()
+            }
+
+            client.emit('allRoomRankingsResponse', errorResponse)
+            return errorResponse
+        }
+    }
+
+    @SubscribeMessage('subscribeToRankings')
+    async handleSubscribeToRankings(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            periods?: string[]
+        }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = userInfo?.userId
+
+        const periods = data.periods || ['hourly', 'weekly', 'total', 'online']
+
+        periods.forEach((period) => {
+            const channel = `rankings:${data.roomId}:${period}`
+            client.join(channel)
+        })
+
+        this.logger.log(
+            `📊 User ${userId} subscribed to rankings for room ${data.roomId}: ${periods.join(', ')}`
+        )
+
+        client.emit('rankingsSubscribed', {
+            status: 'success',
+            roomId: data.roomId,
+            subscribedPeriods: periods,
+            timestamp: new Date().toISOString()
+        })
+
+        return { status: 'success', subscribedPeriods: periods }
+    }
+
+    @SubscribeMessage('unsubscribeFromRankings')
+    async handleUnsubscribeFromRankings(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            periods?: string[]
+        }
+    ) {
+        const periods = data.periods || ['hourly', 'weekly', 'total', 'online']
+
+        periods.forEach((period) => {
+            const channel = `rankings:${data.roomId}:${period}`
+            client.leave(channel)
+        })
+
+        this.logger.log(
+            `📊 User unsubscribed from rankings for room ${data.roomId}`
+        )
+
+        client.emit('rankingsUnsubscribed', {
+            status: 'success',
+            roomId: data.roomId,
+            unsubscribedPeriods: periods,
+            timestamp: new Date().toISOString()
+        })
+
+        return { status: 'success', unsubscribedPeriods: periods }
+    }
+
+    /**
+     * Broadcast ranking updates to subscribed users
+     */
+    private async broadcastRankingUpdates(roomId: string): Promise<void> {
+        try {
+            const periods = ['hourly', 'weekly', 'total', 'online']
+
+            for (const period of periods) {
+                const channel = `rankings:${roomId}:${period}`
+
+                let rankings = []
+                switch (period) {
+                    case 'hourly':
+                        rankings =
+                            await this.roomRankingService.getHourlyRankings(
+                                roomId,
+                                10
+                            )
+                        break
+                    case 'weekly':
+                        rankings =
+                            await this.roomRankingService.getWeeklyRankings(
+                                roomId,
+                                10
+                            )
+                        break
+                    case 'total':
+                        rankings =
+                            await this.roomRankingService.getTotalRankings(
+                                roomId,
+                                10
+                            )
+                        break
+                    case 'online':
+                        rankings =
+                            await this.roomRankingService.getOnlineRankings(
+                                roomId,
+                                10
+                            )
+                        break
+                }
+
+                this.server.to(channel).emit('rankingUpdate', {
+                    roomId,
+                    period,
+                    rankings,
+                    timestamp: new Date().toISOString()
+                })
+            }
+
+            this.logger.log(
+                `📊 RANKING_UPDATES: Broadcast to all subscribed users in room ${roomId}`
+            )
+        } catch (error) {
+            this.logger.error(
+                `❌ RANKING_UPDATES failed: ${error.message}`,
+                error.stack
             )
         }
     }
