@@ -11,7 +11,7 @@ export class RoomSeat extends CustomBaseEntity {
     roomId: string
 
     @Column({ type: 'int' })
-    seatIndex: number // -1 for admin seat, 0 to maxSeats - 1 for regular seats
+    seatIndex: number // 0 for host/admin seat, 1 to maxSeats - 1 for regular seats
 
     @Column({ default: false })
     isLocked: boolean
@@ -23,7 +23,7 @@ export class RoomSeat extends CustomBaseEntity {
     lockedAt: Date
 
     @Column({ name: 'is_admin_seat', default: false })
-    isAdminSeat: boolean // True for seat index -1
+    isAdminSeat: boolean // True for seat index 0 (host/admin seat)
 
     @Column({ name: 'metadata', type: 'jsonb', nullable: true })
     metadata?: any // Additional seat metadata

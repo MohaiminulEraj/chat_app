@@ -1845,31 +1845,21 @@ export class RoomService {
     // ==================== SEAT MANAGEMENT METHODS ====================
 
     /**
-     * Initialize seat records for a room (including admin seat -1)
+     * Initialize seat records for a room (seat 0 is host/admin seat)
      */
     async initializeRoomSeats(roomId: string, maxSeats: number): Promise<void> {
         const seats = []
 
-        // Add special admin seat (-1 index)
-        seats.push(
-            this.roomSeatRepository.create({
-                roomId,
-                seatIndex: -1,
-                isLocked: false,
-                isAdminSeat: true,
-                metadata: { seatType: 'admin' }
-            })
-        )
-
-        // Add regular seats (0 to maxSeats-1)
+        // Add seats (0 to maxSeats-1)
+        // Seat 0 is the host/admin seat (reserved for room owner)
         for (let i = 0; i < maxSeats; i++) {
             seats.push(
                 this.roomSeatRepository.create({
                     roomId,
                     seatIndex: i,
                     isLocked: false,
-                    isAdminSeat: false,
-                    metadata: { seatType: 'regular' }
+                    isAdminSeat: i === 0, // Seat 0 is the admin/host seat
+                    metadata: { seatType: i === 0 ? 'admin' : 'regular' }
                 })
             )
         }
@@ -1892,41 +1882,34 @@ export class RoomService {
             throw new NotFoundException('Room not found')
         }
 
-        // Special handling for admin seat (-1)
-        if (seatIndex === -1) {
-            // Check if user is admin/host
-            const userRoles = await this.getUserRolesInRoom(roomId, userId)
-            const isAdmin =
-                userRoles.includes(RoomRole.ADMIN) ||
-                userRoles.includes(RoomRole.HOST) ||
-                userRoles.includes(RoomRole.OWNER)
+        // Validate seat index is within bounds
+        if (seatIndex < 0 || seatIndex >= room.maxSeats) {
+            throw new BadRequestException(
+                `Seat index must be between 0 and ${room.maxSeats - 1}`
+            )
+        }
 
-            if (!isAdmin) {
+        // Special handling for seat 0 (host/admin seat)
+        if (seatIndex === 0) {
+            // Only the room owner can sit in seat 0
+            if (room.ownerId !== userId) {
                 throw new ForbiddenException(
-                    'Only admins, hosts, or owners can sit in the admin seat'
+                    'Only the room owner can sit in seat 0 (host seat)'
                 )
             }
 
-            // Check if admin seat is already occupied
-            const existingAdminSeat = await this.participantRepository.findOne({
-                where: { roomId, seatNumber: -1 }
+            // Check if seat 0 is already occupied
+            const existingSeat = await this.participantRepository.findOne({
+                where: { roomId, seatNumber: 1 } // seatNumber is 1-based (seatIndex 0 = seatNumber 1)
             })
 
-            if (existingAdminSeat) {
-                // Admin seat is occupied - need to request approval
+            if (existingSeat && existingSeat.userId !== userId) {
                 throw new BadRequestException(
-                    'Admin seat is occupied. Request needs to be sent for approval.'
+                    'Seat 0 (host seat) is already occupied'
                 )
             }
 
             return seatIndex
-        }
-
-        // Validate regular seat index is within bounds
-        if (seatIndex < 0 || seatIndex >= room.maxSeats) {
-            throw new BadRequestException(
-                `Seat index must be between 0 and ${room.maxSeats - 1} (or -1 for admin seat)`
-            )
         }
 
         // Check if seat is locked
@@ -2089,24 +2072,8 @@ export class RoomService {
 
         const seats = []
 
-        // Add admin seat (-1)
-        const adminSeatLock = seatLocks.find((lock) => lock.seatIndex === -1)
-        const adminParticipant =
-            room.participants.find((p) => p.seatNumber === -1) || null
-
-        seats.push({
-            index: -1,
-            locked: adminSeatLock?.isLocked || false,
-            occupied: !!adminParticipant,
-            occupantUserId:
-                adminParticipant?.user?.uuid ||
-                adminParticipant?.userId ||
-                null,
-            isAdminSeat: true,
-            metadata: { seatType: 'admin' }
-        })
-
-        // Add regular seats
+        // Add all seats (0 to maxSeats-1)
+        // Seat 0 is the host/admin seat
         for (let i = 0; i < room.maxSeats; i++) {
             const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
             // Find participant whose stored seatNumber matches this index (1-based in DB)
@@ -2128,99 +2095,16 @@ export class RoomService {
                 occupied: !!participant,
                 occupantUserId:
                     participant?.user?.uuid || participant?.userId || null,
-                isAdminSeat: false
+                isAdminSeat: i === 0, // Seat 0 is the host/admin seat
+                metadata: { seatType: i === 0 ? 'admin' : 'regular' }
             })
         }
 
         return seats
     }
 
-    /**
-     * Request to sit in admin seat when occupied
-     */
-    async requestAdminSeat(
-        roomId: string,
-        requesterId: string
-    ): Promise<{ requestId: string; currentAdminId: string }> {
-        // Verify requester is admin/host
-        const requesterRoles = await this.getUserRolesInRoom(
-            roomId,
-            requesterId
-        )
-        const isAdmin =
-            requesterRoles.includes(RoomRole.ADMIN) ||
-            requesterRoles.includes(RoomRole.HOST) ||
-            requesterRoles.includes(RoomRole.OWNER)
-
-        if (!isAdmin) {
-            throw new ForbiddenException(
-                'Only admins, hosts, or owners can request the admin seat'
-            )
-        }
-
-        // Find current admin in seat -1
-        const currentAdmin = await this.participantRepository.findOne({
-            where: { roomId, seatNumber: -1 },
-            relations: ['user']
-        })
-
-        if (!currentAdmin) {
-            throw new BadRequestException('Admin seat is not occupied')
-        }
-
-        // Create request record
-        const requestId = `admin-seat-req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-        this.logger.log(
-            `📝 Admin seat request created: ${requestId} by ${requesterId} for room ${roomId}`
-        )
-
-        return {
-            requestId,
-            currentAdminId: currentAdmin.userId
-        }
-    }
-
-    /**
-     * Approve admin seat request and swap users
-     */
-    async approveAdminSeatRequest(
-        roomId: string,
-        approverId: string,
-        requesterId: string
-    ): Promise<{ success: boolean; message: string }> {
-        // Verify approver is current admin in seat -1
-        const currentAdmin = await this.participantRepository.findOne({
-            where: { roomId, seatNumber: -1, userId: approverId }
-        })
-
-        if (!currentAdmin) {
-            throw new ForbiddenException(
-                'Only the current admin in seat can approve seat requests'
-            )
-        }
-
-        // Remove current admin from seat -1
-        await this.participantRepository.remove(currentAdmin)
-
-        // Add requester to seat -1
-        const newAdminSeat = this.participantRepository.create({
-            roomId,
-            userId: requesterId,
-            seatNumber: -1 // Store -1 directly for admin seat
-        })
-
-        await this.participantRepository.save(newAdminSeat)
-
-        this.logger.log(
-            `✅ Admin seat transferred from ${approverId} to ${requesterId} in room ${roomId}`
-        )
-
-        return {
-            success: true,
-            message: 'Admin seat successfully transferred'
-        }
-    }
+    // NOTE: requestAdminSeat and approveAdminSeatRequest methods removed
+    // Seat 0 is now reserved exclusively for the room owner (no seat swapping needed)
 
     // ==================== BLOCKED USERS MANAGEMENT ====================
 
