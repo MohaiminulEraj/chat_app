@@ -30,12 +30,13 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     coverImage?: string
 
     @ApiProperty({
-        description: 'User country',
-        required: false
+        description: 'Country ID (UUID)',
+        required: false,
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     })
     @IsOptional()
     @IsString()
-    country?: string
+    countryId?: string
 
     @ApiProperty({
         description: 'User level',

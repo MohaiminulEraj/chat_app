@@ -50,9 +50,14 @@ export class UserService {
         // Hash password
         const hashedPassword = await bcrypt.hash(createUserDto.password, 10)
 
+        // Separate country from createUserDto since it's a legacy field
+        const { country, ...userDataWithoutCountry } = createUserDto
+
         const user = this.userRepository.create({
-            ...createUserDto,
-            password: hashedPassword
+            ...userDataWithoutCountry,
+            password: hashedPassword,
+            // If country is provided, use it as countryId (legacy support)
+            ...(country && { countryId: country })
         })
 
         const savedUser = await this.userRepository.save(user)
@@ -91,7 +96,10 @@ export class UserService {
     }
 
     async findOne(id: string): Promise<User> {
-        const user = await this.userRepository.findOne({ where: { uuid: id } })
+        const user = await this.userRepository.findOne({
+            where: { uuid: id },
+            relations: ['country']
+        })
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`)
         }
@@ -125,7 +133,8 @@ export class UserService {
         // Instead of using select with potentially incorrect property names,
         // fetch all users and let TypeORM handle the property mapping
         const users = await this.userRepository.find({
-            where: { isActive: true }
+            where: { isActive: true },
+            relations: ['country']
         })
 
         // Format currency values as numbers for all users
@@ -294,6 +303,7 @@ export class UserService {
     async getUserAchievementData(userId: string): Promise<UserAchievementData> {
         const user = await this.userRepository.findOne({
             where: { uuid: userId, isActive: true },
+            relations: ['country'],
             select: [
                 'uuid',
                 'name',
@@ -301,7 +311,7 @@ export class UserService {
                 'displayName',
                 'avatarUrl',
                 'coverImage',
-                'country',
+                'countryId',
                 'level',
                 'binsBalance',
                 'diamondBalance',
@@ -349,7 +359,9 @@ export class UserService {
             _id: user.uuid,
             userId: user.uuid,
             name: user.displayName || user.name || '',
-            country: user.country || '',
+            country: user.country?.name || '',
+            countryCode: user.country?.code || '',
+            countryFlag: user.country?.emoji || '',
             email: user.email,
             image: user.avatarUrl || '',
             coverImage: user.coverImage || '',
@@ -383,7 +395,7 @@ export class UserService {
             badge?: string[]
             displayName?: string
             bio?: string
-            country?: string
+            countryId?: string
         },
         files?: {
             image?: Express.Multer.File
@@ -509,8 +521,8 @@ export class UserService {
         if (achievementUpdates.bio !== undefined) {
             user.bio = achievementUpdates.bio
         }
-        if (achievementUpdates.country !== undefined) {
-            user.country = achievementUpdates.country
+        if (achievementUpdates.countryId !== undefined) {
+            user.countryId = achievementUpdates.countryId
         }
 
         const savedUser = await this.userRepository.save(user)

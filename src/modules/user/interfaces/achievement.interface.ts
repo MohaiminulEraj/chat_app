@@ -11,6 +11,8 @@ export interface UserAchievementData {
     userId: string
     name: string
     country: string
+    countryCode: string
+    countryFlag: string
     email: string
     image: string
     coverImage: string

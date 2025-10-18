@@ -2,7 +2,15 @@ import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
 import { GroupMember } from 'src/modules/group/entities/group-member.entity'
 import { Group } from 'src/modules/group/entities/group.entity'
 import { RoomParticipant } from 'src/modules/room/entities/room-participant.entity'
-import { Column, Entity, Index, OneToMany } from 'typeorm'
+import { Country } from 'src/modules/country/entities/country.entity'
+import {
+    Column,
+    Entity,
+    Index,
+    OneToMany,
+    ManyToOne,
+    JoinColumn
+} from 'typeorm'
 import { LoginLog } from '../../auth/entities/login-log.entity'
 import { Friendship } from '../../friendship/entities/friendship.entity'
 import { Gift } from '../../gift/entities/gift.entity'
@@ -77,8 +85,12 @@ export class User extends CustomBaseEntity {
     userType: UserTypes
 
     // Achievement system fields
-    @Column({ nullable: true })
-    country: string
+    @Column({ type: 'uuid', nullable: true })
+    countryId: string
+
+    @ManyToOne(() => Country, (country) => country.users, { nullable: true })
+    @JoinColumn({ name: 'countryId', referencedColumnName: 'uuid' })
+    country: Country
 
     @Column({ type: 'int', default: 0 })
     level: number
