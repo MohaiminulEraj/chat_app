@@ -322,6 +322,17 @@ export class RoomRankingService {
         period: RankingPeriod,
         rankings: any[]
     ): Promise<void> {
+        const isRoomExists = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+
+        if (!isRoomExists) {
+            this.logger.warn(
+                `Room with ID ${roomId} does not exist. Skipping ranking persistence.`
+            )
+            return
+        }
+
         try {
             await this.roomRankingRepository.delete({
                 roomId,
