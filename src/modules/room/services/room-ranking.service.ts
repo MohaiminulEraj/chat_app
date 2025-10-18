@@ -557,6 +557,135 @@ export class RoomRankingService {
     }
 
     /**
+     * Get top ranked users across all periods WITHOUT caching
+     * Used for real-time broadcasts to all room users
+     */
+    async getTopRankedUsersNoCaching(
+        roomId: string,
+        limit: number = 10
+    ): Promise<any> {
+        const oneHourAgo = new Date(Date.now() - 3600000)
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 3600000)
+        const oneDayAgo = new Date(Date.now() - 24 * 3600000)
+
+        const room = await this.roomRepository.findOne({
+            where: { uuid: roomId }
+        })
+
+        const onlineUsers = this.onlineUsersCache.get(roomId)
+        const onlineUserIds = onlineUsers ? Array.from(onlineUsers) : []
+
+        // Calculate all rankings in parallel WITHOUT using cache
+        const [hourly, weekly, total, online] = await Promise.all([
+            this.calculateRankings(
+                roomId,
+                RankingPeriod.HOURLY,
+                oneHourAgo,
+                new Date()
+            ),
+            this.calculateRankings(
+                roomId,
+                RankingPeriod.WEEKLY,
+                oneWeekAgo,
+                new Date()
+            ),
+            this.calculateRankings(
+                roomId,
+                RankingPeriod.TOTAL,
+                room?.createdAt || new Date(0),
+                new Date()
+            ),
+            this.getOnlineRankingsNoCaching(roomId, onlineUserIds)
+        ])
+
+        return {
+            hourly: limit ? hourly.slice(0, limit) : hourly,
+            weekly: limit ? weekly.slice(0, limit) : weekly,
+            total: limit ? total.slice(0, limit) : total,
+            online: limit ? online.slice(0, limit) : online,
+            updatedAt: new Date().toISOString()
+        }
+    }
+
+    /**
+     * Get online rankings WITHOUT caching
+     */
+    private async getOnlineRankingsNoCaching(
+        roomId: string,
+        userIds: string[]
+    ): Promise<any[]> {
+        if (!userIds || userIds.length === 0) {
+            return []
+        }
+
+        const oneDayAgo = new Date(Date.now() - 24 * 3600000)
+
+        const rankings = await this.calculateRankings(
+            roomId,
+            RankingPeriod.ONLINE,
+            oneDayAgo,
+            new Date(),
+            userIds
+        )
+
+        // Include ALL online users even if they have no gift activity
+        const rankedUserIds = new Set(rankings.map((r) => r.userId))
+        const unrankedUserIds = userIds.filter((id) => !rankedUserIds.has(id))
+
+        if (unrankedUserIds.length > 0) {
+            const unrankedUsers = await this.userRepository.find({
+                where: { uuid: In(unrankedUserIds) }
+            })
+
+            const unrankedRankings = unrankedUsers.map((user) => ({
+                userId: user.uuid,
+                userName: user.name || user.displayName || 'Unknown',
+                name: user.name || user.displayName || 'Unknown',
+                userAvatar: user.avatarUrl || null,
+                image: user.avatarUrl || null,
+                country: user.country || '',
+                diamond:
+                    Math.round(
+                        parseFloat(user.diamondBalance?.toString() || '0') * 100
+                    ) / 100,
+                diamondBalance:
+                    Math.round(
+                        parseFloat(user.diamondBalance?.toString() || '0') * 100
+                    ) / 100,
+                isEmailVerified: user.isEmailVerified || false,
+                isVerified: user.isEmailVerified || false,
+                level: user.level || 0,
+                rank: 0,
+                giftsSent: {
+                    value: 0,
+                    count: 0,
+                    topGift: null
+                },
+                giftsReceived: {
+                    value: 0,
+                    count: 0,
+                    topGift: null
+                },
+                totalScore: 0,
+                interactions: {
+                    uniqueSenders: 0,
+                    uniqueReceivers: 0
+                },
+                isOnline: true,
+                period: RankingPeriod.ONLINE
+            }))
+
+            rankings.push(...unrankedRankings)
+            rankings.sort((a, b) => b.totalScore - a.totalScore)
+            rankings.forEach((ranking, index) => {
+                ranking.rank = index + 1
+            })
+        }
+
+        return rankings
+    }
+
+    /**
      * Scheduled task to update hourly rankings
      */
     @Cron(CronExpression.EVERY_HOUR)

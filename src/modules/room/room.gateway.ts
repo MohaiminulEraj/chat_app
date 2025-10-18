@@ -1370,6 +1370,27 @@ export class RoomGateway
 
             client.emit('joinRoomResponse', joinRoomResponseData)
 
+            // Broadcast updated room details to all users in the room for HTTP API sync
+            try {
+                const updatedRoomDetails =
+                    await this.roomService.getRoomDetails(roomId)
+                this.server.to(`room:${roomId}`).emit('roomDetailsUpdated', {
+                    roomId,
+                    details: updatedRoomDetails,
+                    updateType: 'seat_assignment',
+                    updatedBy: userId,
+                    timestamp: new Date().toISOString()
+                })
+
+                this.logger.log(
+                    `📡 SIT_IN_SEAT: Broadcasted updated room details to all users in room ${roomId}`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to broadcast room details update: ${error.message}`
+                )
+            }
+
             this.logger.log(
                 `✅ SIT_IN_SEAT success: User ${userName} (${userId}) seated in seat ${data.seatIndex} in room ${roomId}`
             )
@@ -1952,6 +1973,27 @@ export class RoomGateway
 
             // Remove user from online rankings tracking
             await this.roomRankingService.removeUserActivity(roomId, userId)
+
+            // Broadcast updated room details to all users in the room for HTTP API sync
+            try {
+                const updatedRoomDetails =
+                    await this.roomService.getRoomDetails(roomId)
+                this.server.to(`room:${roomId}`).emit('roomDetailsUpdated', {
+                    roomId,
+                    details: updatedRoomDetails,
+                    updateType: 'user_left',
+                    updatedBy: userId,
+                    timestamp: new Date().toISOString()
+                })
+
+                this.logger.log(
+                    `📡 LEAVE_ROOM: Broadcasted updated room details to all users in room ${roomId}`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to broadcast room details update: ${error.message}`
+                )
+            }
 
             this.logger.log(
                 `✅ LEAVE_ROOM success: User ${userName} (${userId}) left room ${roomId} | ` +
@@ -2971,6 +3013,29 @@ export class RoomGateway
                 participantCount: newCount,
                 timestamp: new Date().toISOString()
             })
+
+            // Broadcast updated room details to all users in the room for HTTP API sync
+            try {
+                const updatedRoomDetails =
+                    await this.roomService.getRoomDetails(data.roomId)
+                this.server
+                    .to(`room:${data.roomId}`)
+                    .emit('roomDetailsUpdated', {
+                        roomId: data.roomId,
+                        details: updatedRoomDetails,
+                        updateType: 'user_kicked',
+                        updatedBy: userId,
+                        timestamp: new Date().toISOString()
+                    })
+
+                this.logger.log(
+                    `📡 KICK_USER: Broadcasted updated room details to all users in room ${data.roomId}`
+                )
+            } catch (error) {
+                this.logger.warn(
+                    `⚠️ Failed to broadcast room details update: ${error.message}`
+                )
+            }
 
             this.logger.log(
                 `✅ KICK_USER success: User ${userName} (${userId}) kicked ${kickedUserName} (${kickedUserId}) from room ${data.roomId} | Room users: ${newCount}`
@@ -5196,10 +5261,13 @@ export class RoomGateway
 
         try {
             const limit = data.limit || 10
-            const allRankings = await this.roomRankingService.getTopRankedUsers(
-                data.roomId,
-                limit
-            )
+
+            // Use no-caching method for real-time data
+            const allRankings =
+                await this.roomRankingService.getTopRankedUsersNoCaching(
+                    data.roomId,
+                    limit
+                )
 
             const response = {
                 status: 'success',
@@ -5208,10 +5276,13 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             }
 
-            client.emit('allRoomRankingsResponse', response)
+            // Broadcast globally to ALL users in the room (real-time updates)
+            this.server
+                .to(`room:${data.roomId}`)
+                .emit('allRoomRankingsResponse', response)
 
             this.logger.log(
-                `✅ GET_ALL_ROOM_RANKINGS: Sent all rankings to user ${userName}`
+                `✅ GET_ALL_ROOM_RANKINGS: Broadcasted all rankings to room ${data.roomId} (${limit} per period)`
             )
 
             return response
@@ -5235,7 +5306,10 @@ export class RoomGateway
                 timestamp: new Date().toISOString()
             }
 
-            client.emit('allRoomRankingsResponse', errorResponse)
+            // Broadcast error globally to all users in the room
+            this.server
+                .to(`room:${data.roomId}`)
+                .emit('allRoomRankingsResponse', errorResponse)
             return errorResponse
         }
     }
