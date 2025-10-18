@@ -2,6 +2,8 @@ import {
     BadRequestException,
     ConflictException,
     ForbiddenException,
+    HttpException,
+    HttpStatus,
     Injectable,
     Logger,
     NotFoundException
@@ -3740,6 +3742,199 @@ export class RoomService {
                 giftsReceivedInRoom: giftsReceived
             },
             roomInteractions: roomInteractions.slice(0, 3)
+        }
+    }
+
+    /**
+     * Get highest gift sender to a specific user in a room
+     * Returns the user who sent the most gifts (by value) to the specified receiver in the room
+     */
+    async getHighestGiftSenderToUser(
+        roomId: string,
+        receiverId: string,
+        period?: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'all'
+    ): Promise<{
+        highestSender: {
+            userId: string
+            userName: string
+            userAvatar: string
+            totalGiftValue: number
+            totalGiftCount: number
+            topGift: {
+                giftId: string
+                giftName: string
+                giftImage: string
+                value: number
+                quantity: number
+            } | null
+        } | null
+        allSenders: Array<{
+            userId: string
+            userName: string
+            userAvatar: string
+            totalGiftValue: number
+            totalGiftCount: number
+            rank: number
+        }>
+        timeframe: string
+    }> {
+        this.logger.log(
+            `📊 Getting highest gift sender to user ${receiverId} in room ${roomId} (period: ${period || 'all'})`
+        )
+
+        // Calculate time range based on period
+        let startDate: Date
+        const endDate = new Date()
+
+        switch (period) {
+            case 'hourly':
+                startDate = new Date(Date.now() - 3600000) // 1 hour
+                break
+            case 'daily':
+                startDate = new Date(Date.now() - 86400000) // 24 hours
+                break
+            case 'weekly':
+                startDate = new Date(Date.now() - 7 * 86400000) // 7 days
+                break
+            case 'monthly':
+                startDate = new Date(Date.now() - 30 * 86400000) // 30 days
+                break
+            default:
+                startDate = new Date(0) // All time
+        }
+
+        try {
+            // Build query to get gift transactions
+            const queryBuilder = this.giftTransactionRepository
+                .createQueryBuilder('gt')
+                .leftJoinAndSelect('gt.gift', 'gift')
+                .leftJoinAndSelect('gt.sender', 'sender')
+                .where('gt.roomId = :roomId', { roomId })
+                .andWhere('gt.receiverId = :receiverId', { receiverId })
+                .andWhere('gt.status = :status', { status: 'completed' })
+                .andWhere('gt.createdAt BETWEEN :startDate AND :endDate', {
+                    startDate,
+                    endDate
+                })
+
+            const transactions = await queryBuilder.getMany()
+
+            if (transactions.length === 0) {
+                return {
+                    highestSender: null,
+                    allSenders: [],
+                    timeframe: period || 'all'
+                }
+            }
+
+            // Aggregate gifts by sender
+            const senderStats = new Map<
+                string,
+                {
+                    userId: string
+                    userName: string
+                    userAvatar: string
+                    totalGiftValue: number
+                    totalGiftCount: number
+                    gifts: Array<{
+                        giftId: string
+                        giftName: string
+                        giftImage: string
+                        value: number
+                        quantity: number
+                    }>
+                }
+            >()
+
+            for (const transaction of transactions) {
+                const senderId = transaction.senderId
+                const giftValue =
+                    parseFloat(transaction.amount?.toString() || '0') *
+                    transaction.quantity
+
+                if (!senderStats.has(senderId)) {
+                    senderStats.set(senderId, {
+                        userId: senderId,
+                        userName: transaction.sender?.name || 'Unknown User',
+                        userAvatar:
+                            transaction.sender?.avatarUrl ||
+                            'https://via.placeholder.com/150',
+                        totalGiftValue: 0,
+                        totalGiftCount: 0,
+                        gifts: []
+                    })
+                }
+
+                const stats = senderStats.get(senderId)!
+                stats.totalGiftValue += giftValue
+                stats.totalGiftCount += transaction.quantity
+
+                // Track individual gifts for finding top gift
+                stats.gifts.push({
+                    giftId: transaction.gift?.uuid || transaction.giftId,
+                    giftName: transaction.gift?.name || 'Unknown Gift',
+                    giftImage:
+                        transaction.gift?.imageUrl ||
+                        'https://via.placeholder.com/100',
+                    value: giftValue,
+                    quantity: transaction.quantity
+                })
+            }
+
+            // Convert to array and sort by total gift value
+            const sendersArray = Array.from(senderStats.values())
+            sendersArray.sort((a, b) => b.totalGiftValue - a.totalGiftValue)
+
+            // Get highest sender
+            const highestSender = sendersArray[0]
+            const topGift = highestSender?.gifts.sort(
+                (a, b) => b.value - a.value
+            )[0]
+
+            // Format all senders with rank
+            const allSenders = sendersArray.map((sender, index) => ({
+                userId: sender.userId,
+                userName: sender.userName,
+                userAvatar: sender.userAvatar,
+                totalGiftValue: Math.round(sender.totalGiftValue * 100) / 100,
+                totalGiftCount: sender.totalGiftCount,
+                rank: index + 1
+            }))
+
+            this.logger.log(
+                `✅ Found ${allSenders.length} gift senders to user ${receiverId} in room ${roomId}`
+            )
+            this.logger.log(
+                `   ├─ Highest Sender: ${highestSender.userName} (${highestSender.userId})`
+            )
+            this.logger.log(
+                `   ├─ Total Value: ${Math.round(highestSender.totalGiftValue * 100) / 100}`
+            )
+            this.logger.log(
+                `   └─ Total Gifts: ${highestSender.totalGiftCount}`
+            )
+
+            return {
+                highestSender: {
+                    userId: highestSender.userId,
+                    userName: highestSender.userName,
+                    userAvatar: highestSender.userAvatar,
+                    totalGiftValue:
+                        Math.round(highestSender.totalGiftValue * 100) / 100,
+                    totalGiftCount: highestSender.totalGiftCount,
+                    topGift: topGift || null
+                },
+                allSenders,
+                timeframe: period || 'all'
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ Error getting highest gift sender: ${error.message}`
+            )
+            throw new HttpException(
+                'Failed to get highest gift sender',
+                HttpStatus.INTERNAL_SERVER_ERROR
+            )
         }
     }
 }

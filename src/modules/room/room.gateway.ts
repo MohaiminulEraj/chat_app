@@ -5322,4 +5322,200 @@ export class RoomGateway
             )
         }
     }
+
+    // ==================== GIFT ANALYTICS SOCKET EVENTS ====================
+
+    /**
+     * Get highest gift sender to a specific user in a room
+     * This is independent of PK battles - shows who sent the most gifts to a specific user
+     */
+    @SubscribeMessage('getHighestGiftSender')
+    async handleGetHighestGiftSender(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            receiverId: string
+            period?: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'all'
+        }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const requesterId = userInfo?.userId
+        const requesterName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📊 GET_HIGHEST_GIFT_SENDER: User ${requesterName} (${requesterId}) requesting highest sender to user ${data.receiverId} in room ${data.roomId} | Period: ${data.period || 'all'}`
+        )
+
+        if (!data.roomId || !data.receiverId) {
+            this.logger.warn(
+                `⚠️ GET_HIGHEST_GIFT_SENDER: Missing required fields - roomId: ${!!data.roomId}, receiverId: ${!!data.receiverId}`
+            )
+
+            client.emit('highestGiftSender:error', {
+                success: false,
+                error: 'Missing required fields: roomId and receiverId are required'
+            })
+            return
+        }
+
+        try {
+            // Verify room exists
+            const room = await this.roomService.findOne(data.roomId)
+            if (!room) {
+                this.logger.warn(
+                    `⚠️ GET_HIGHEST_GIFT_SENDER: Room ${data.roomId} not found`
+                )
+
+                client.emit('highestGiftSender:error', {
+                    success: false,
+                    error: 'Room not found'
+                })
+                return
+            }
+
+            // Verify receiver exists
+            const receiver = await this.roomService.findUserById(
+                data.receiverId
+            )
+            if (!receiver) {
+                this.logger.warn(
+                    `⚠️ GET_HIGHEST_GIFT_SENDER: User ${data.receiverId} not found`
+                )
+
+                client.emit('highestGiftSender:error', {
+                    success: false,
+                    error: 'Receiver user not found'
+                })
+                return
+            }
+
+            // Get highest gift sender data
+            const result = await this.roomService.getHighestGiftSenderToUser(
+                data.roomId,
+                data.receiverId,
+                data.period
+            )
+
+            this.logger.log(
+                `✅ GET_HIGHEST_GIFT_SENDER: Successfully retrieved data for receiver ${receiver.name} (${data.receiverId})`
+            )
+            this.logger.log(
+                `   ├─ Highest Sender: ${result.highestSender ? `${result.highestSender.userName} (${result.highestSender.userId})` : 'None'}`
+            )
+            this.logger.log(
+                `   ├─ Total Value: ${result.highestSender ? result.highestSender.totalGiftValue : 0}`
+            )
+            this.logger.log(`   ├─ Total Senders: ${result.allSenders.length}`)
+            this.logger.log(`   └─ Timeframe: ${result.timeframe}`)
+
+            // Emit result to requesting client
+            client.emit('highestGiftSender:response', {
+                success: true,
+                data: {
+                    roomId: data.roomId,
+                    receiverId: data.receiverId,
+                    receiverName: receiver.name,
+                    receiverAvatar: receiver.avatarUrl,
+                    highestSender: result.highestSender,
+                    allSenders: result.allSenders,
+                    timeframe: result.timeframe,
+                    timestamp: new Date().toISOString()
+                }
+            })
+
+            // Also broadcast to room if someone is interested
+            this.server.to(data.roomId).emit('highestGiftSender:update', {
+                roomId: data.roomId,
+                receiverId: data.receiverId,
+                receiverName: receiver.name,
+                highestSender: result.highestSender
+                    ? {
+                          userId: result.highestSender.userId,
+                          userName: result.highestSender.userName,
+                          totalGiftValue: result.highestSender.totalGiftValue
+                      }
+                    : null,
+                timestamp: new Date().toISOString()
+            })
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_HIGHEST_GIFT_SENDER failed: ${error.message}`,
+                error.stack
+            )
+
+            client.emit('highestGiftSender:error', {
+                success: false,
+                error: error.message || 'Failed to get highest gift sender data'
+            })
+        }
+    }
+
+    /**
+     * Get top gift senders to a user (top N senders)
+     */
+    @SubscribeMessage('getTopGiftSenders')
+    async handleGetTopGiftSenders(
+        @ConnectedSocket() client: Socket,
+        @MessageBody()
+        data: {
+            roomId: string
+            receiverId: string
+            limit?: number
+            period?: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'all'
+        }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const requesterId = userInfo?.userId
+        const requesterName = userInfo?.userName || 'Unknown User'
+
+        this.logger.log(
+            `📊 GET_TOP_GIFT_SENDERS: User ${requesterName} (${requesterId}) requesting top ${data.limit || 10} senders to user ${data.receiverId} in room ${data.roomId}`
+        )
+
+        if (!data.roomId || !data.receiverId) {
+            client.emit('topGiftSenders:error', {
+                success: false,
+                error: 'Missing required fields: roomId and receiverId are required'
+            })
+            return
+        }
+
+        try {
+            const result = await this.roomService.getHighestGiftSenderToUser(
+                data.roomId,
+                data.receiverId,
+                data.period
+            )
+
+            const limit = data.limit || 10
+            const topSenders = result.allSenders.slice(0, limit)
+
+            this.logger.log(
+                `✅ GET_TOP_GIFT_SENDERS: Retrieved ${topSenders.length} top senders`
+            )
+
+            client.emit('topGiftSenders:response', {
+                success: true,
+                data: {
+                    roomId: data.roomId,
+                    receiverId: data.receiverId,
+                    topSenders,
+                    totalSenders: result.allSenders.length,
+                    timeframe: result.timeframe,
+                    timestamp: new Date().toISOString()
+                }
+            })
+        } catch (error) {
+            this.logger.error(
+                `❌ GET_TOP_GIFT_SENDERS failed: ${error.message}`,
+                error.stack
+            )
+
+            client.emit('topGiftSenders:error', {
+                success: false,
+                error: error.message || 'Failed to get top gift senders'
+            })
+        }
+    }
 }
