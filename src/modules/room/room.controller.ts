@@ -1478,6 +1478,87 @@ export class RoomController {
         }
     }
 
+    @Get('by-country/:countryId')
+    @ApiOperation({
+        summary: 'Get rooms by country',
+        description:
+            'Get all active rooms filtered by country with detailed information'
+    })
+    @ApiParam({
+        name: 'countryId',
+        description: 'Country UUID',
+        type: 'string'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Rooms filtered by country',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Rooms fetched successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'string' },
+                            roomId: { type: 'string' },
+                            roomName: { type: 'string' },
+                            description: { type: 'string' },
+                            level: { type: 'number' },
+                            roomAvatarUrl: { type: 'string' },
+                            country: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'string' },
+                                    name: { type: 'string' },
+                                    code: { type: 'string' },
+                                    flag: { type: 'string' },
+                                    flagUrl: { type: 'string' }
+                                }
+                            },
+                            hostId: { type: 'string' },
+                            hostName: { type: 'string' },
+                            hostImage: { type: 'string' },
+                            ownerId: { type: 'string' },
+                            ownerName: { type: 'string' },
+                            ownerImage: { type: 'string' },
+                            maxSeats: { type: 'number' },
+                            currentParticipants: { type: 'number' },
+                            isLocked: { type: 'boolean' },
+                            type: { type: 'string' },
+                            createdAt: { type: 'string' },
+                            updatedAt: { type: 'string' }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getRoomsByCountry(@Param('countryId') countryId: string) {
+        try {
+            const rooms = await this.roomService.getRoomsByCountry(countryId)
+
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Rooms fetched successfully',
+                data: rooms
+            }
+        } catch (error) {
+            throw new HttpException(
+                {
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    message: error.message || 'Failed to fetch rooms by country'
+                },
+                HttpStatus.BAD_REQUEST
+            )
+        }
+    }
+
     // ==================== SEAT MANAGEMENT ENDPOINTS ====================
 
     @Get(':id/seats')

@@ -125,4 +125,13 @@ export class CreateRoomDto {
     })
     @IsOptional()
     avatar?: any
+
+    @ApiProperty({
+        description: 'Country ID (UUID) where the room is located',
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    countryId?: string
 }

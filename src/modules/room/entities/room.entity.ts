@@ -2,6 +2,7 @@ import { CustomBaseEntity } from 'src/common/entity/custom-base.entity'
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm'
 import { Group } from '../../group/entities/group.entity'
 import { User } from '../../user/entities/user.entity'
+import { Country } from '../../country/entities/country.entity'
 import { RoomParticipant } from './room-participant.entity'
 import { RoomRoleAssignment } from './room-role.entity'
 import { RoomWaitingList } from './room-waiting-list.entity'
@@ -53,7 +54,13 @@ export class Room extends CustomBaseEntity {
     @Column({ default: true }) // Add isActive property
     isActive: boolean
 
+    @Column({ type: 'uuid', nullable: true })
+    countryId?: string
+
     // Relations
+    @ManyToOne(() => Country, (country) => country.rooms, { nullable: true })
+    @JoinColumn({ name: 'countryId', referencedColumnName: 'uuid' })
+    country?: Country
     @ManyToOne(() => User)
     @JoinColumn({ name: 'ownerId', referencedColumnName: 'uuid' })
     owner: User

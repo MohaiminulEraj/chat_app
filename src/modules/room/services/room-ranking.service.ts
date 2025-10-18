@@ -291,7 +291,10 @@ export class RoomRankingService {
                         transaction.sender?.displayName ||
                         'Unknown',
                     userAvatar: transaction.sender?.avatarUrl || '',
-                    country: transaction.sender?.country || '',
+                    country:
+                        typeof transaction.sender?.country === 'string'
+                            ? transaction.sender?.country
+                            : transaction.sender?.country?.name || '',
                     diamondBalance: parseFloat(
                         transaction.sender?.diamondBalance?.toString() || '0'
                     ),
@@ -337,7 +340,10 @@ export class RoomRankingService {
                         transaction.receiver?.displayName ||
                         'Unknown',
                     userAvatar: transaction.receiver?.avatarUrl || '',
-                    country: transaction.receiver?.country || '',
+                    country:
+                        typeof transaction.receiver?.country === 'string'
+                            ? transaction.receiver?.country
+                            : transaction.receiver?.country?.name || '',
                     diamondBalance: parseFloat(
                         transaction.receiver?.diamondBalance?.toString() || '0'
                     ),

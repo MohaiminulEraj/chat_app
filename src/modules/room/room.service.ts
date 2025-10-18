@@ -1033,6 +1033,7 @@ export class RoomService {
             relations: [
                 'owner',
                 'group',
+                'country',
                 'participants',
                 'participants.user',
                 'roleAssignments',
@@ -1139,6 +1140,16 @@ export class RoomService {
             hostId: hostInfo?.uuid || room.ownerId,
             hostName: hostInfo?.name || ownerInfo.name,
             hostImage: hostInfo?.avatarUrl || ownerInfo.avatarUrl || null,
+            // Country information
+            country: room.country
+                ? {
+                      id: room.country.uuid,
+                      name: room.country.name,
+                      code: room.country.code,
+                      flag: room.country.emoji || room.country.flagUrl,
+                      flagUrl: room.country.flagUrl
+                  }
+                : null,
             participants: participantsList,
             seats: seats,
             maxSeats: room.maxSeats,
@@ -1841,6 +1852,96 @@ export class RoomService {
             this.logger.error(`Failed to get popular rooms: ${error.message}`)
             // Fallback to recommended rooms logic
             return await this.getRecommendedRooms()
+        }
+    }
+
+    /**
+     * Get rooms by country with detailed information
+     */
+    async getRoomsByCountry(countryId: string): Promise<any[]> {
+        try {
+            const rooms = await this.roomRepository
+                .createQueryBuilder('room')
+                .leftJoinAndSelect('room.owner', 'owner')
+                .leftJoinAndSelect('room.group', 'group')
+                .leftJoinAndSelect('room.country', 'country')
+                .leftJoinAndSelect('room.participants', 'participants')
+                .leftJoinAndSelect('participants.user', 'participantUser')
+                .where('room.countryId = :countryId', { countryId })
+                .andWhere('room.isActive = :isActive', { isActive: true })
+                .orderBy('room.createdAt', 'DESC')
+                .getMany()
+
+            // Format rooms similar to recommended/popular rooms
+            const formattedRooms = await Promise.all(
+                rooms.map(async (room) => {
+                    // Get role assignments for the room
+                    const roleAssignments = await this.roomRoleRepository.find({
+                        where: { roomId: room.uuid, isActive: true },
+                        relations: ['user']
+                    })
+
+                    // Find host role
+                    const hostRole = roleAssignments.find(
+                        (role) => role.role === RoomRole.HOST
+                    )
+
+                    const hostInfo = hostRole?.user || room.owner
+
+                    // Get online participants count
+                    const onlineParticipantsCount =
+                        await this.participantRepository.count({
+                            where: { roomId: room.uuid },
+                            relations: ['user']
+                        })
+
+                    // Get room activity for popularity
+                    const roomActivity =
+                        await this.roomActivityTrackingRepository.findOne({
+                            where: { roomId: room.uuid },
+                            order: { createdAt: 'DESC' }
+                        })
+
+                    return {
+                        id: room.uuid,
+                        roomId: room.uuid,
+                        roomName: room.name,
+                        description: room.description || null,
+                        level: (room as any).level ?? 0,
+                        roomAvatarUrl: room.roomAvatarUrl || null,
+                        country: room.country
+                            ? {
+                                  id: room.country.uuid,
+                                  name: room.country.name,
+                                  code: room.country.code,
+                                  flag:
+                                      room.country.emoji ||
+                                      room.country.flagUrl,
+                                  flagUrl: room.country.flagUrl
+                              }
+                            : null,
+                        hostId: hostInfo.uuid,
+                        hostName: hostInfo.name,
+                        hostImage: hostInfo.avatarUrl || null,
+                        ownerId: room.owner.uuid,
+                        ownerName: room.owner.name,
+                        ownerImage: room.owner.avatarUrl || null,
+                        maxSeats: room.maxSeats,
+                        currentParticipants: onlineParticipantsCount,
+                        isLocked: room.isLocked,
+                        type: room.type,
+                        createdAt: room.createdAt,
+                        updatedAt: room.updatedAt
+                    }
+                })
+            )
+
+            return formattedRooms
+        } catch (error) {
+            this.logger.error(
+                `Failed to get rooms by country: ${error.message}`
+            )
+            return []
         }
     }
 
