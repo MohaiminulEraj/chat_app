@@ -242,8 +242,9 @@ export class RoomRankingService {
             .andWhere("gt.status = 'completed'")
 
         if (userIds && userIds.length > 0) {
+            // Cast UUIDs explicitly to avoid integer conversion error
             query.andWhere(
-                '(gt.senderId IN (:...userIds) OR gt.receiverId IN (:...userIds))',
+                '(gt.senderId::uuid IN (:...userIds) OR gt.receiverId::uuid IN (:...userIds))',
                 { userIds }
             )
         }
