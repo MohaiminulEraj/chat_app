@@ -36,13 +36,17 @@ import { UpdateUserAchievementsDto } from './dto/update-user-achievements.dto'
 import { User } from './entities/user.entity'
 import { UserService } from './user.service'
 import { IPaginationOptions } from 'nestjs-typeorm-paginate'
+import { TaskService } from '../task/task.service'
 
 @ApiTags('👤 Users')
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UserController {
-    constructor(private readonly userService: UserService) {}
+    constructor(
+        private readonly userService: UserService,
+        private readonly taskService: TaskService
+    ) {}
 
     // @Post()
     // @ApiOperation({
@@ -86,6 +90,56 @@ export class UserController {
             statusCode: HttpStatus.OK,
             message: 'Users fetched successfully',
             data: await this.userService.findAll()
+        }
+    }
+
+    @Get('daily-tasks')
+    @ApiOperation({
+        summary: 'Get user daily tasks',
+        description:
+            'Fetch daily tasks for the authenticated user with their progress'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Daily tasks retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'string', example: 'join_video_calls' },
+                            icon: { type: 'string', example: '📹' },
+                            title: {
+                                type: 'string',
+                                example: 'Join Video Calls'
+                            },
+                            description: {
+                                type: 'string',
+                                example: 'Join 5 video calls today'
+                            },
+                            progress: { type: 'number', example: 2 },
+                            total: { type: 'number', example: 5 },
+                            reward: { type: 'number', example: 100 },
+                            color: { type: 'string', example: '#1976D2' },
+                            isCompleted: { type: 'boolean', example: false },
+                            rewardClaimed: { type: 'boolean', example: false }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getUserDailyTasks(@Request() req) {
+        const userId = req.user.uuid
+        const tasks = await this.taskService.getUserDailyTasks(userId)
+
+        return {
+            success: true,
+            data: tasks
         }
     }
 

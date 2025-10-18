@@ -1169,8 +1169,9 @@ export class RoomGateway
             // Special handling for seat 0 (host/admin seat)
             if (data.seatIndex === 0) {
                 // Get room details to check ownership
-                const roomDetails = await this.roomService.getRoomDetails(roomId)
-                
+                const roomDetails =
+                    await this.roomService.getRoomDetails(roomId)
+
                 // Only the room owner can sit in seat 0
                 if (roomDetails.ownerId !== userId) {
                     throw new Error(
@@ -1179,7 +1180,10 @@ export class RoomGateway
                 }
 
                 // Check if seat 0 is occupied by someone else
-                if (targetSeat.occupied && targetSeat.occupantUserId !== userId) {
+                if (
+                    targetSeat.occupied &&
+                    targetSeat.occupantUserId !== userId
+                ) {
                     throw new Error(
                         'Seat 0 (host seat) is already occupied by the room owner'
                     )

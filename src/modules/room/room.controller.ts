@@ -53,6 +53,7 @@ import { RoomWaitingList } from './entities/room-waiting-list.entity'
 import { Room } from './entities/room.entity'
 import { RoomGateway } from './room.gateway'
 import { RoomService } from './room.service'
+import { TaskService } from '../task/task.service'
 
 @ApiTags('🎮 Rooms')
 @Controller('rooms')
@@ -61,7 +62,8 @@ import { RoomService } from './room.service'
 export class RoomController {
     constructor(
         private readonly roomService: RoomService,
-        private readonly roomGateway: RoomGateway
+        private readonly roomGateway: RoomGateway,
+        private readonly taskService: TaskService
     ) {}
 
     @Post()
@@ -2156,6 +2158,59 @@ export class RoomController {
             throw new BadRequestException(
                 error.message || 'Failed to cancel battle'
             )
+        }
+    }
+
+    @Get(':roomId/daily-tasks')
+    @ApiOperation({
+        summary: 'Get room daily tasks',
+        description: 'Fetch daily tasks for a specific room with user progress'
+    })
+    @ApiParam({ name: 'roomId', description: 'Room UUID' })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Room daily tasks retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string',
+                                example: 'send_gifts_in_room'
+                            },
+                            icon: { type: 'string', example: '🎁' },
+                            title: {
+                                type: 'string',
+                                example: 'Send Gifts in Room'
+                            },
+                            description: {
+                                type: 'string',
+                                example: 'Send 10 gifts in this room today'
+                            },
+                            progress: { type: 'number', example: 3 },
+                            total: { type: 'number', example: 10 },
+                            reward: { type: 'number', example: 200 },
+                            color: { type: 'string', example: '#FF6B6B' },
+                            isCompleted: { type: 'boolean', example: false },
+                            rewardClaimed: { type: 'boolean', example: false }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async getRoomDailyTasks(@Param('roomId') roomId: string, @Request() req) {
+        const userId = req.user.uuid
+        const tasks = await this.taskService.getRoomDailyTasks(roomId, userId)
+
+        return {
+            success: true,
+            data: tasks
         }
     }
 

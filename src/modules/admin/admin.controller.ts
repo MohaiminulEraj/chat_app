@@ -3,6 +3,7 @@ import {
     Post,
     Get,
     Put,
+    Delete,
     Body,
     Param,
     Query,
@@ -29,6 +30,13 @@ import {
     AdminTransactionType
 } from '../user/entities/admin-transaction.entity'
 import { ConversionType } from '../user/entities/conversion-config.entity'
+import { TaskService } from '../task/task.service'
+import {
+    CreateTaskDto,
+    UpdateTaskDto,
+    ClaimRewardDto
+} from '../task/dto/task.dto'
+import { TaskCategory } from '../task/entities/daily-task.entity'
 
 @ApiTags('🔐 Admin Management')
 @Controller('admin')
@@ -36,7 +44,10 @@ import { ConversionType } from '../user/entities/conversion-config.entity'
 @AdminOnly()
 @ApiBearerAuth()
 export class AdminController {
-    constructor(private readonly adminService: AdminService) {}
+    constructor(
+        private readonly adminService: AdminService,
+        private readonly taskService: TaskService
+    ) {}
 
     @Post('gift-currency')
     @ApiOperation({
@@ -49,7 +60,7 @@ export class AdminController {
             properties: {
                 userId: {
                     type: 'string',
-                    example: '123e4567-e89b-12d3-a456-426614174000',
+                    example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
                     description: 'Target user UUID'
                 },
                 currencyType: {
@@ -329,6 +340,615 @@ export class AdminController {
             success: true,
             message: 'User transaction history retrieved',
             data: result
+        }
+    }
+
+    // ==================== TASK MANAGEMENT ====================
+
+    @Post('tasks')
+    @ApiOperation({
+        summary: 'Create a new daily task (Admin Only)',
+        description:
+            'Create a new task for users or rooms with specific requirements'
+    })
+    @ApiBody({
+        type: CreateTaskDto,
+        examples: {
+            userTask: {
+                summary: 'User Task Example',
+                description: 'Create a task for all users to join video calls',
+                value: {
+                    taskId: 'join_video_calls',
+                    icon: 'video_call',
+                    title: 'Join 3 Video Calls',
+                    description:
+                        'Join video calls with friends to earn rewards',
+                    total: 3,
+                    reward: 50,
+                    color: '#8E24AA',
+                    taskType: 'global',
+                    category: 'user_tab',
+                    sortOrder: 1,
+                    metadata: {
+                        rewardType: 'bins',
+                        requiredLevel: 1,
+                        repeatDaily: true
+                    }
+                }
+            },
+            sendMessagesTask: {
+                summary: 'Send Messages Task',
+                description: 'Create a messaging task for users',
+                value: {
+                    taskId: 'send_messages',
+                    icon: 'message',
+                    title: 'Send 20 Messages',
+                    description: 'Chat with friends and send 20 messages today',
+                    total: 20,
+                    reward: 30,
+                    color: '#1976D2',
+                    taskType: 'global',
+                    category: 'user_tab',
+                    sortOrder: 2,
+                    metadata: {
+                        rewardType: 'bins',
+                        repeatDaily: true
+                    }
+                }
+            },
+            sendGiftsTask: {
+                summary: 'Send Gifts Task',
+                description: 'Create a gift sending task',
+                value: {
+                    taskId: 'send_gifts',
+                    icon: 'favorite',
+                    title: 'Send 10 Gifts',
+                    description: 'Show your appreciation by sending gifts',
+                    total: 10,
+                    reward: 100,
+                    color: '#EC407A',
+                    taskType: 'global',
+                    category: 'user_tab',
+                    sortOrder: 3,
+                    metadata: {
+                        rewardType: 'diamonds',
+                        repeatDaily: true,
+                        requirements: {
+                            minGiftValue: 10
+                        }
+                    }
+                }
+            },
+            dailyBonusTask: {
+                summary: 'Daily Bonus Task',
+                description: 'Single-action daily bonus collection task',
+                value: {
+                    taskId: 'collect_bonus',
+                    icon: 'star',
+                    title: 'Collect Daily Bonus',
+                    description: 'Claim your daily login bonus',
+                    total: 1,
+                    reward: 25,
+                    color: '#FFB300',
+                    taskType: 'global',
+                    category: 'user_tab',
+                    sortOrder: 4,
+                    metadata: {
+                        rewardType: 'bins',
+                        repeatDaily: true
+                    }
+                }
+            },
+            inviteFriendsTask: {
+                summary: 'Invite Friends Task',
+                description: 'Social task to invite friends',
+                value: {
+                    taskId: 'invite_friends',
+                    icon: 'people',
+                    title: 'Invite 2 Friends',
+                    description: 'Invite friends to join the platform',
+                    total: 2,
+                    reward: 200,
+                    color: '#388E3C',
+                    taskType: 'global',
+                    category: 'user_tab',
+                    sortOrder: 5,
+                    metadata: {
+                        rewardType: 'diamonds',
+                        repeatDaily: false,
+                        requirements: {
+                            friendsMustJoin: true
+                        }
+                    }
+                }
+            },
+            roomGiftsTask: {
+                summary: 'Room-Specific Gift Task',
+                description:
+                    'Create a task for sending gifts in a specific room',
+                value: {
+                    taskId: 'room_gifts_vip',
+                    icon: 'favorite',
+                    title: 'Send 15 Gifts in Room',
+                    description:
+                        'Support your favorite broadcasters by sending gifts',
+                    total: 15,
+                    reward: 250,
+                    color: '#FF6B6B',
+                    taskType: 'room',
+                    category: 'room_tab',
+                    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                    sortOrder: 1,
+                    metadata: {
+                        rewardType: 'diamonds',
+                        requiredLevel: 5,
+                        repeatDaily: true
+                    }
+                }
+            },
+            roomCommentsTask: {
+                summary: 'Room Comments Task',
+                description: 'Create a task for sending comments in rooms',
+                value: {
+                    taskId: 'room_comments',
+                    icon: 'chat_bubble',
+                    title: 'Send 30 Comments',
+                    description: 'Engage with the community by commenting',
+                    total: 30,
+                    reward: 40,
+                    color: '#42A5F5',
+                    taskType: 'room',
+                    category: 'room_tab',
+                    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                    sortOrder: 2,
+                    metadata: {
+                        rewardType: 'bins',
+                        repeatDaily: true
+                    }
+                }
+            },
+            roomSeatTimeTask: {
+                summary: 'Room Seat Time Task',
+                description: 'Create a task for staying in room seats',
+                value: {
+                    taskId: 'room_seat_time',
+                    icon: 'event_seat',
+                    title: 'Sit for 30 Minutes',
+                    description: 'Stay in a room seat for 30 minutes',
+                    total: 30,
+                    reward: 150,
+                    color: '#9C27B0',
+                    taskType: 'room',
+                    category: 'room_tab',
+                    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                    sortOrder: 3,
+                    metadata: {
+                        rewardType: 'bins',
+                        repeatDaily: true,
+                        requirements: {
+                            unit: 'minutes',
+                            mustBeInSeat: true
+                        }
+                    }
+                }
+            },
+            pkBattleTask: {
+                summary: 'PK Battle Task',
+                description: 'Create a task for winning PK battles',
+                value: {
+                    taskId: 'win_pk_battles',
+                    icon: 'emoji_events',
+                    title: 'Win 3 PK Battles',
+                    description: 'Compete and win PK battles in rooms',
+                    total: 3,
+                    reward: 300,
+                    color: '#FF5722',
+                    taskType: 'global',
+                    category: 'room_tab',
+                    sortOrder: 4,
+                    metadata: {
+                        rewardType: 'diamonds',
+                        requiredLevel: 10,
+                        repeatDaily: true
+                    }
+                }
+            },
+            roomRankingTask: {
+                summary: 'Room Ranking Task',
+                description: 'Create a task for achieving room rankings',
+                value: {
+                    taskId: 'room_top_10',
+                    icon: 'leaderboard',
+                    title: 'Reach Top 10 in Room',
+                    description: 'Climb the room leaderboard to top 10',
+                    total: 1,
+                    reward: 500,
+                    color: '#FFC107',
+                    taskType: 'room',
+                    category: 'room_tab',
+                    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                    sortOrder: 5,
+                    metadata: {
+                        rewardType: 'diamonds',
+                        requiredLevel: 15,
+                        repeatDaily: false,
+                        requirements: {
+                            rankingType: 'daily',
+                            maxRank: 10
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: 'Task created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Task created successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+                        },
+                        taskId: { type: 'string', example: 'join_video_calls' },
+                        icon: { type: 'string', example: 'video_call' },
+                        title: {
+                            type: 'string',
+                            example: 'Join 3 Video Calls'
+                        },
+                        description: {
+                            type: 'string',
+                            example:
+                                'Join video calls with friends to earn rewards'
+                        },
+                        total: { type: 'number', example: 3 },
+                        reward: { type: 'number', example: 50 },
+                        color: { type: 'string', example: '#8E24AA' },
+                        taskType: { type: 'string', example: 'global' },
+                        category: { type: 'string', example: 'user_tab' },
+                        roomId: {
+                            type: 'string',
+                            nullable: true,
+                            example: null
+                        },
+                        isActive: { type: 'boolean', example: true },
+                        sortOrder: { type: 'number', example: 1 },
+                        metadata: {
+                            type: 'object',
+                            example: {
+                                rewardType: 'bins',
+                                requiredLevel: 1,
+                                repeatDaily: true
+                            }
+                        },
+                        createdBy: { type: 'string', example: 'admin-uuid' },
+                        createdAt: {
+                            type: 'string',
+                            example: '2025-10-18T12:00:00Z'
+                        },
+                        updatedAt: {
+                            type: 'string',
+                            example: '2025-10-18T12:00:00Z'
+                        }
+                    }
+                }
+            }
+        }
+    })
+    async createTask(@Body() createTaskDto: CreateTaskDto, @Request() req) {
+        const adminId = req.user.uuid
+        const task = await this.taskService.createTask(createTaskDto, adminId)
+
+        return {
+            success: true,
+            message: 'Task created successfully',
+            data: task
+        }
+    }
+
+    @Get('tasks')
+    @ApiOperation({
+        summary: 'Get all tasks (Admin Only)',
+        description:
+            'Retrieve all tasks with optional filters by category or room'
+    })
+    @ApiQuery({
+        name: 'category',
+        enum: TaskCategory,
+        required: false,
+        description: 'Filter by task category (user_tab or room_tab)',
+        example: 'user_tab'
+    })
+    @ApiQuery({
+        name: 'roomId',
+        type: String,
+        required: false,
+        description: 'Filter by specific room UUID',
+        example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Tasks retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Tasks retrieved successfully'
+                },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            uuid: { type: 'string' },
+                            taskId: { type: 'string' },
+                            icon: { type: 'string' },
+                            title: { type: 'string' },
+                            total: { type: 'number' },
+                            reward: { type: 'number' },
+                            color: { type: 'string' },
+                            taskType: { type: 'string' },
+                            category: { type: 'string' },
+                            roomId: { type: 'string', nullable: true },
+                            isActive: { type: 'boolean' },
+                            sortOrder: { type: 'number' }
+                        }
+                    },
+                    example: [
+                        {
+                            uuid: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                            taskId: 'join_video_calls',
+                            icon: 'video_call',
+                            title: 'Join 3 Video Calls',
+                            total: 3,
+                            reward: 50,
+                            color: '#8E24AA',
+                            taskType: 'global',
+                            category: 'user_tab',
+                            roomId: null,
+                            isActive: true,
+                            sortOrder: 1
+                        },
+                        {
+                            uuid: '234e5678-e89b-12d3-a456-426614174001',
+                            taskId: 'send_messages',
+                            icon: 'message',
+                            title: 'Send 20 Messages',
+                            total: 20,
+                            reward: 30,
+                            color: '#1976D2',
+                            taskType: 'global',
+                            category: 'user_tab',
+                            roomId: null,
+                            isActive: true,
+                            sortOrder: 2
+                        }
+                    ]
+                }
+            }
+        }
+    })
+    async getAllTasks(
+        @Query('category') category?: TaskCategory,
+        @Query('roomId') roomId?: string
+    ) {
+        const tasks = await this.taskService.getAllTasks(category, roomId)
+
+        return {
+            success: true,
+            message: 'Tasks retrieved successfully',
+            data: tasks
+        }
+    }
+
+    @Put('tasks/:taskId')
+    @ApiOperation({
+        summary: 'Update a task (Admin Only)',
+        description:
+            'Update task properties like title, reward, isActive status, or any other field. All fields are optional for partial updates.'
+    })
+    @ApiParam({
+        name: 'taskId',
+        description: 'Task UUID to update',
+        example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+    })
+    @ApiBody({
+        type: UpdateTaskDto,
+        examples: {
+            updateTitle: {
+                summary: 'Update Task Title',
+                description: 'Change the title of an existing task',
+                value: {
+                    title: 'Join 5 Video Calls (Updated)',
+                    description:
+                        'Join video calls with friends to earn more rewards'
+                }
+            },
+            updateReward: {
+                summary: 'Update Reward Amount',
+                description: 'Increase or decrease the reward',
+                value: {
+                    reward: 75,
+                    color: '#9C27B0'
+                }
+            },
+            updateTotal: {
+                summary: 'Update Total Requirement',
+                description: 'Change the completion requirement',
+                value: {
+                    total: 5,
+                    reward: 80
+                }
+            },
+            deactivateTask: {
+                summary: 'Deactivate Task',
+                description: 'Disable a task without deleting it',
+                value: {
+                    isActive: false
+                }
+            },
+            updateMetadata: {
+                summary: 'Update Task Metadata',
+                description: 'Change reward type or requirements',
+                value: {
+                    metadata: {
+                        rewardType: 'diamonds',
+                        requiredLevel: 5,
+                        repeatDaily: true
+                    }
+                }
+            },
+            fullUpdate: {
+                summary: 'Complete Update',
+                description: 'Update multiple fields at once',
+                value: {
+                    title: 'Send 15 Messages',
+                    description: 'Chat actively with friends',
+                    total: 15,
+                    reward: 50,
+                    color: '#2196F3',
+                    isActive: true,
+                    sortOrder: 2,
+                    metadata: {
+                        rewardType: 'bins',
+                        requiredLevel: 1,
+                        repeatDaily: true
+                    }
+                }
+            },
+            updateRoomTask: {
+                summary: 'Update Room-Specific Task',
+                description: 'Modify a room task with new requirements',
+                value: {
+                    title: 'Send 20 Gifts in Room',
+                    total: 20,
+                    reward: 300,
+                    roomId: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
+                    metadata: {
+                        rewardType: 'diamonds',
+                        requiredLevel: 10,
+                        repeatDaily: true
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Task updated successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Task updated successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+                        },
+                        taskId: { type: 'string', example: 'join_video_calls' },
+                        icon: { type: 'string', example: 'video_call' },
+                        title: {
+                            type: 'string',
+                            example: 'Join 5 Video Calls (Updated)'
+                        },
+                        description: {
+                            type: 'string',
+                            example:
+                                'Join video calls with friends to earn more rewards'
+                        },
+                        total: { type: 'number', example: 5 },
+                        reward: { type: 'number', example: 75 },
+                        color: { type: 'string', example: '#9C27B0' },
+                        taskType: { type: 'string', example: 'global' },
+                        category: { type: 'string', example: 'user_tab' },
+                        isActive: { type: 'boolean', example: true },
+                        sortOrder: { type: 'number', example: 1 },
+                        updatedAt: {
+                            type: 'string',
+                            example: '2025-10-18T12:30:00Z'
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Task not found'
+    })
+    async updateTask(
+        @Param('taskId') taskId: string,
+        @Body() updateTaskDto: UpdateTaskDto
+    ) {
+        const task = await this.taskService.updateTask(taskId, updateTaskDto)
+
+        return {
+            success: true,
+            message: 'Task updated successfully',
+            data: task
+        }
+    }
+
+    @Delete('tasks/:taskId')
+    @ApiOperation({
+        summary: 'Delete a task (Admin Only)',
+        description:
+            'Permanently remove a task from the system. Note: This will delete the task definition but progress records will remain for historical data.'
+    })
+    @ApiParam({
+        name: 'taskId',
+        description: 'Task UUID to delete',
+        example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Task deleted successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Task deleted successfully'
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Task not found',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: false },
+                message: { type: 'string', example: 'Task not found' },
+                statusCode: { type: 'number', example: 404 }
+            }
+        }
+    })
+    async deleteTask(@Param('taskId') taskId: string) {
+        await this.taskService.deleteTask(taskId)
+
+        return {
+            success: true,
+            message: 'Task deleted successfully'
         }
     }
 }

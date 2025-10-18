@@ -28,6 +28,7 @@ import { GiftModule } from './modules/gift/gift.module'
 import { GroupModule } from './modules/group/group.module'
 import { RoomModule } from './modules/room/room.module'
 import { SocketIOModule } from './modules/socketio/socketio.module'
+import { TaskModule } from './modules/task/task.module'
 
 @Module({
     imports: [
@@ -79,7 +80,8 @@ import { SocketIOModule } from './modules/socketio/socketio.module'
         // UploadModule,
         RoomModule, // Add RoomModule to imports
         GiftModule, // Add GiftModule to imports
-        ConversationModule
+        ConversationModule,
+        TaskModule // Add TaskModule for daily tasks
         // OtpModule // Add OtpModule to imports
     ],
     controllers: [AppController],

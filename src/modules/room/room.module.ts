@@ -27,6 +27,7 @@ import { RoomController } from './room.controller'
 import { RoomGateway } from './room.gateway' // Main gateway now uses root namespace
 import { RoomService } from './room.service'
 import { RoomRankingService } from './services/room-ranking.service'
+import { TaskModule } from '../task/task.module'
 
 @Module({
     imports: [
@@ -54,7 +55,8 @@ import { RoomRankingService } from './services/room-ranking.service'
         ScheduleModule.forRoot(),
         AuthModule, // Add AuthModule to provide JwtService for WsJwtGuard
         CloudinaryModule, // Add CloudinaryModule for image upload functionality
-        GiftModule // Add GiftModule for gift functionality
+        GiftModule, // Add GiftModule for gift functionality
+        TaskModule // Add TaskModule for daily tasks functionality
     ],
     controllers: [RoomController],
     providers: [

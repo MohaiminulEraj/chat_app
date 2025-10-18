@@ -13,6 +13,7 @@ import { User } from './entities/user.entity'
 import { ConversionService } from './services/conversion.service'
 import { UserController } from './user.controller'
 import { UserService } from './user.service'
+import { TaskModule } from '../task/task.module'
 
 @Module({
     imports: [
@@ -26,7 +27,8 @@ import { UserService } from './user.service'
             AdminTransaction,
             UserProfileStats
         ]),
-        CloudinaryModule
+        CloudinaryModule,
+        TaskModule
     ],
     controllers: [UserController, ConversionController],
     providers: [UserService, ConversionService],

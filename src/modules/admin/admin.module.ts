@@ -7,6 +7,7 @@ import { AdminTransaction } from '../user/entities/admin-transaction.entity'
 import { ConversionConfig } from '../user/entities/conversion-config.entity'
 import { AdminWallet } from '../user/entities/admin-wallet.entity'
 import { AdminGuard } from '../../common/guards/admin.guard'
+import { TaskModule } from '../task/task.module'
 
 @Module({
     imports: [
@@ -15,7 +16,8 @@ import { AdminGuard } from '../../common/guards/admin.guard'
             AdminTransaction,
             ConversionConfig,
             AdminWallet
-        ])
+        ]),
+        TaskModule
     ],
     controllers: [AdminController],
     providers: [AdminService, AdminGuard],
