@@ -58,10 +58,10 @@ export class RoomRanking extends CustomBaseEntity {
     }
 
     @ManyToOne(() => Room)
-    @JoinColumn({ name: 'roomId' })
+    @JoinColumn({ name: 'roomId', referencedColumnName: 'uuid' })
     room: Room
 
     @ManyToOne(() => User)
-    @JoinColumn({ name: 'userId' })
+    @JoinColumn({ name: 'userId', referencedColumnName: 'uuid' })
     user: User
 }
