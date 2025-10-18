@@ -1117,7 +1117,7 @@ export class RoomGateway
         // Get validated user information
         const validatedUser = await this.getUserInfo(client, data.userId)
         if (!validatedUser) {
-            client.emit('sitInSeatResponse', {
+            const errorResponse = {
                 status: 'rejected',
                 message: 'User information not available',
                 user: {
@@ -1129,7 +1129,16 @@ export class RoomGateway
                     image: null,
                     avatar: null
                 }
-            })
+            }
+
+            // Broadcast error globally if roomId is available
+            if (roomId) {
+                this.server
+                    .to(`room:${roomId}`)
+                    .emit('sitInSeatResponse', errorResponse)
+            } else {
+                client.emit('sitInSeatResponse', errorResponse)
+            }
             return
         }
 
@@ -1176,77 +1185,6 @@ export class RoomGateway
 
             // Get room details
             const roomDetails = await this.roomService.getRoomDetails(roomId)
-
-            // Special handling for seat -1 (host promotion)
-            if (data.seatIndex === -1) {
-                // Only room owner can request seat -1 (host seat)
-                if (roomDetails.ownerId !== userId) {
-                    throw new Error(
-                        'Only the room owner can sit in the host seat (-1)'
-                    )
-                }
-
-                // Remove user from any current seat
-                const currentParticipants =
-                    await this.roomService.getRoomParticipants(roomId)
-                const currentParticipant = currentParticipants.find(
-                    (p) => p.userId === userId
-                )
-
-                if (
-                    currentParticipant &&
-                    currentParticipant.seatNumber !== null
-                ) {
-                    // Clear the current seat
-                    const currentSeatIndex = currentParticipant.seatNumber
-                    const currentSeat = currentSeats.find(
-                        (s) => s.index === currentSeatIndex
-                    )
-                    if (currentSeat) {
-                        currentSeat.occupied = false
-                        currentSeat.occupantUserId = null
-                    }
-                }
-
-                // Set as host
-                await this.roomService.transferRoomOwnership(
-                    roomId,
-                    userId,
-                    roomDetails.ownerId || userId
-                )
-
-                // Success response for host promotion
-                const response = {
-                    status: 'accepted',
-                    message: 'Promoted to host',
-                    user: {
-                        id: userId,
-                        name: user?.name || user?.displayName || userName,
-                        email: user?.email || '',
-                        sitIndex: -1,
-                        seatIndex: -1,
-                        image: user?.avatarUrl || null,
-                        avatar: user?.avatarUrl || null
-                    }
-                }
-
-                client.emit('sitInSeatResponse', response)
-
-                // Broadcast host change
-                this.server.to(`room:${roomId}`).emit('hostChanged', {
-                    roomId,
-                    newHostId: userId,
-                    newHostName: user?.name || userName,
-                    newHostImage: user?.avatarUrl || null,
-                    timestamp: new Date().toISOString()
-                })
-
-                this.logger.log(
-                    `✅ SIT_IN_SEAT success: User ${userName} (${userId}) promoted to host in room ${roomId}`
-                )
-
-                return response
-            }
 
             // Special handling for seat 0 (host/admin seat)
             if (data.seatIndex === 0) {
@@ -1307,7 +1245,10 @@ export class RoomGateway
                     }
                 }
 
-                client.emit('sitInSeatResponse', waitingResponse)
+                // Broadcast waiting response globally to ALL users in the room
+                this.server
+                    .to(`room:${roomId}`)
+                    .emit('sitInSeatResponse', waitingResponse)
 
                 // Notify host about the waiting participant
                 const hostSockets = Array.from(this.connectedUsers.entries())
@@ -1398,7 +1339,8 @@ export class RoomGateway
                 }
             }
 
-            client.emit('sitInSeatResponse', response)
+            // Broadcast sitInSeatResponse globally to ALL users in the room (real-time updates)
+            this.server.to(`room:${roomId}`).emit('sitInSeatResponse', response)
 
             // Broadcast seat update to all room participants
             this.server.to(`room:${roomId}`).emit('seatUpdated', {
@@ -1461,7 +1403,10 @@ export class RoomGateway
                 }
             }
 
-            client.emit('sitInSeatResponse', errorResponse)
+            // Broadcast error response globally to ALL users in the room
+            this.server
+                .to(`room:${roomId}`)
+                .emit('sitInSeatResponse', errorResponse)
             return errorResponse
         }
     }
