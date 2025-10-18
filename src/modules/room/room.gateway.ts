@@ -1124,8 +1124,10 @@ export class RoomGateway
                     id: data.userId || '',
                     name: '',
                     email: '',
-                    sitIndex: data.seatIndex?.toString() || '',
-                    image: ''
+                    sitIndex: data.seatIndex,
+                    seatIndex: data.seatIndex,
+                    image: null,
+                    avatar: null
                 }
             })
             return
@@ -1156,6 +1158,12 @@ export class RoomGateway
                 }
             }
 
+            // Get user details with avatar from database
+            const user = await this.userRepository.findOne({
+                where: { uuid: userId },
+                select: ['uuid', 'name', 'avatarUrl', 'email', 'displayName']
+            })
+
             // Get current room seats and room details
             const currentSeats = await this.roomService.getRoomSeats(roomId)
             const targetSeat = currentSeats.find(
@@ -1166,12 +1174,82 @@ export class RoomGateway
                 throw new Error('Invalid seat index')
             }
 
+            // Get room details
+            const roomDetails = await this.roomService.getRoomDetails(roomId)
+
+            // Special handling for seat -1 (host promotion)
+            if (data.seatIndex === -1) {
+                // Only room owner can request seat -1 (host seat)
+                if (roomDetails.ownerId !== userId) {
+                    throw new Error(
+                        'Only the room owner can sit in the host seat (-1)'
+                    )
+                }
+
+                // Remove user from any current seat
+                const currentParticipants =
+                    await this.roomService.getRoomParticipants(roomId)
+                const currentParticipant = currentParticipants.find(
+                    (p) => p.userId === userId
+                )
+
+                if (
+                    currentParticipant &&
+                    currentParticipant.seatNumber !== null
+                ) {
+                    // Clear the current seat
+                    const currentSeatIndex = currentParticipant.seatNumber
+                    const currentSeat = currentSeats.find(
+                        (s) => s.index === currentSeatIndex
+                    )
+                    if (currentSeat) {
+                        currentSeat.occupied = false
+                        currentSeat.occupantUserId = null
+                    }
+                }
+
+                // Set as host
+                await this.roomService.transferRoomOwnership(
+                    roomId,
+                    userId,
+                    roomDetails.ownerId || userId
+                )
+
+                // Success response for host promotion
+                const response = {
+                    status: 'accepted',
+                    message: 'Promoted to host',
+                    user: {
+                        id: userId,
+                        name: user?.name || user?.displayName || userName,
+                        email: user?.email || '',
+                        sitIndex: -1,
+                        seatIndex: -1,
+                        image: user?.avatarUrl || null,
+                        avatar: user?.avatarUrl || null
+                    }
+                }
+
+                client.emit('sitInSeatResponse', response)
+
+                // Broadcast host change
+                this.server.to(`room:${roomId}`).emit('hostChanged', {
+                    roomId,
+                    newHostId: userId,
+                    newHostName: user?.name || userName,
+                    newHostImage: user?.avatarUrl || null,
+                    timestamp: new Date().toISOString()
+                })
+
+                this.logger.log(
+                    `✅ SIT_IN_SEAT success: User ${userName} (${userId}) promoted to host in room ${roomId}`
+                )
+
+                return response
+            }
+
             // Special handling for seat 0 (host/admin seat)
             if (data.seatIndex === 0) {
-                // Get room details to check ownership
-                const roomDetails =
-                    await this.roomService.getRoomDetails(roomId)
-
                 // Only the room owner can sit in seat 0
                 if (roomDetails.ownerId !== userId) {
                     throw new Error(
@@ -1191,12 +1269,11 @@ export class RoomGateway
             }
 
             // Check if seat is occupied
-            if (targetSeat.occupied) {
+            if (targetSeat.occupied && targetSeat.occupantUserId !== userId) {
                 throw new Error('Seat is already occupied')
             }
 
-            // Get room details and user roles
-            const roomDetails = await this.roomService.getRoomDetails(roomId)
+            // Get user roles
             const userRoles = await this.roomService.getUserRolesInRoom(
                 roomId,
                 userId
@@ -1215,17 +1292,18 @@ export class RoomGateway
                 // Add user to waiting list for this specific seat
                 await this.roomService.addToWaitingList(roomId, userId)
 
-                const userInfo = await this.roomService.findUserById(userId)
                 const waitingResponse = {
                     status: 'waiting',
                     message:
                         'Seat is locked. Added to waiting list for host approval.',
                     user: {
                         id: userId,
-                        name: userInfo?.name || userName,
-                        email: userInfo?.email || '',
-                        sitIndex: data.seatIndex.toString(),
-                        image: userInfo?.avatarUrl || ''
+                        name: user?.name || user?.displayName || userName,
+                        email: user?.email || '',
+                        sitIndex: data.seatIndex,
+                        seatIndex: data.seatIndex,
+                        image: user?.avatarUrl || null,
+                        avatar: user?.avatarUrl || null
                     }
                 }
 
@@ -1243,7 +1321,8 @@ export class RoomGateway
                     this.server.to(socketId).emit('participantWaiting', {
                         roomId,
                         participantId: userId,
-                        participantName: userInfo?.name || userName,
+                        participantName: user?.name || userName,
+                        participantAvatar: user?.avatarUrl || null,
                         seatIndex: data.seatIndex,
                         timestamp: new Date().toISOString()
                     })
@@ -1287,7 +1366,8 @@ export class RoomGateway
                         this.server.to(`room:${roomId}`).emit('hostChanged', {
                             roomId,
                             newHostId: userId,
-                            newHostName: participant.user?.name || userName,
+                            newHostName: user?.name || userName,
+                            newHostImage: user?.avatarUrl || null,
                             previousHostId: currentHostId,
                             timestamp: new Date().toISOString(),
                             reason: 'seat_0_assignment'
@@ -1303,16 +1383,18 @@ export class RoomGateway
             // Update seat state in memory
             await this.updateRoomSeatsState(roomId)
 
-            // Success response
+            // Success response - Flutter expects sitIndex as number, not string
             const response = {
                 status: 'accepted',
                 message: `Successfully seated in seat ${data.seatIndex}`,
                 user: {
                     id: userId,
-                    name: participant.user?.name || userName,
-                    email: participant.user?.email || '',
-                    sitIndex: data.seatIndex.toString(),
-                    image: participant.user?.avatarUrl || ''
+                    name: user?.name || user?.displayName || userName,
+                    email: user?.email || '',
+                    sitIndex: data.seatIndex, // Flutter expects number
+                    seatIndex: data.seatIndex,
+                    image: user?.avatarUrl || null,
+                    avatar: user?.avatarUrl || null
                 }
             }
 
@@ -1325,8 +1407,9 @@ export class RoomGateway
                 occupied: true,
                 user: {
                     id: userId,
-                    name: participant.user?.name || userName,
-                    avatar: participant.user?.avatarUrl || ''
+                    name: user?.name || userName,
+                    avatar: user?.avatarUrl || null,
+                    image: user?.avatarUrl || null
                 },
                 timestamp: new Date().toISOString()
             })
@@ -1334,8 +1417,9 @@ export class RoomGateway
             // Send joinRoomResponse to the user who just sat down
             const joinRoomResponseData = {
                 userId: userId,
-                name: participant.user?.name || userName,
-                avatar: participant.user?.avatarUrl || null,
+                name: user?.name || userName,
+                avatar: user?.avatarUrl || null,
+                avatarUrl: user?.avatarUrl || null,
                 seatIndex: data.seatIndex,
                 isSpeaking: false,
                 micOn: !participant.isMuted, // micOn is inverse of isMuted
@@ -1357,15 +1441,23 @@ export class RoomGateway
                 `❌ SIT_IN_SEAT failed: User ${userName} (${userId}) failed to sit in seat ${data.seatIndex} in room ${roomId} | Error: ${error.message}`
             )
 
+            // Get user details for error response
+            const user = await this.userRepository.findOne({
+                where: { uuid: userId },
+                select: ['uuid', 'name', 'avatarUrl', 'email', 'displayName']
+            })
+
             const errorResponse = {
                 status: 'rejected',
                 message: error.message,
                 user: {
                     id: userId,
-                    name: userName,
-                    email: '',
-                    sitIndex: data.seatIndex?.toString() || '',
-                    image: ''
+                    name: user?.name || user?.displayName || userName,
+                    email: user?.email || '',
+                    sitIndex: data.seatIndex,
+                    seatIndex: data.seatIndex,
+                    image: user?.avatarUrl || null,
+                    avatar: user?.avatarUrl || null
                 }
             }
 
