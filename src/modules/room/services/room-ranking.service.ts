@@ -334,10 +334,14 @@ export class RoomRankingService {
         }
 
         try {
-            await this.roomRankingRepository.delete({
-                roomId,
-                period
-            })
+            // Delete existing rankings using query builder to handle UUID properly
+            await this.roomRankingRepository
+                .createQueryBuilder()
+                .delete()
+                .from(RoomRanking)
+                .where('roomId = :roomId', { roomId })
+                .andWhere('period = :period', { period })
+                .execute()
 
             const rankingEntities = rankings.map((ranking) =>
                 this.roomRankingRepository.create({
@@ -362,6 +366,10 @@ export class RoomRankingService {
             )
 
             await this.roomRankingRepository.save(rankingEntities)
+
+            this.logger.log(
+                `✅ Successfully persisted ${rankingEntities.length} ${period} rankings for room ${roomId}`
+            )
         } catch (error) {
             this.logger.error(
                 `Failed to persist rankings for room ${roomId}: ${error.message}`
