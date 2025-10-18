@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository, Between } from 'typeorm'
 import { Cron, CronExpression } from '@nestjs/schedule'
@@ -330,7 +330,7 @@ export class RoomRankingService {
             this.logger.warn(
                 `Room with ID ${roomId} does not exist. Skipping ranking persistence.`
             )
-            return
+            throw new HttpException('Room not found', HttpStatus.NOT_FOUND)
         }
 
         try {
