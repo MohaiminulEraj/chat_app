@@ -22,6 +22,7 @@ import { AgoraModule } from './modules/agora/agora.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module'
 import { ConversationModule } from './modules/conversation/conversation.module'
+import { CountryModule } from './modules/country/country.module'
 import { EmailService } from './modules/email/services/email.service'
 import { FriendshipModule } from './modules/friendship/friendship.module'
 import { GiftModule } from './modules/gift/gift.module'
@@ -75,6 +76,7 @@ import { TaskModule } from './modules/task/task.module'
         AdminModule, // Add AdminModule for admin-only endpoints
         FriendshipModule,
         GroupModule,
+        CountryModule, // Add CountryModule for country management
         SocketIOModule, // New unified Socket.IO implementation
         CloudinaryModule,
         // UploadModule,
