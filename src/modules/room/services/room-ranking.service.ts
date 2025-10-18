@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository, Between } from 'typeorm'
+import { Repository, Between, In } from 'typeorm'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { RoomRanking, RankingPeriod } from '../entities/room-ranking.entity'
 import { GiftTransaction } from '../../gift/entities/gift-transaction.entity'
@@ -144,8 +144,10 @@ export class RoomRankingService {
         const unrankedUserIds = userIds.filter((id) => !rankedUserIds.has(id))
 
         if (unrankedUserIds.length > 0) {
-            const unrankedUsers =
-                await this.userRepository.findByIds(unrankedUserIds)
+            // Use find with In() instead of deprecated findByIds to properly handle UUIDs
+            const unrankedUsers = await this.userRepository.find({
+                where: { uuid: In(unrankedUserIds) }
+            })
 
             const unrankedRankings = unrankedUsers.map((user) => ({
                 userId: user.uuid,
