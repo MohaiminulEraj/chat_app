@@ -243,8 +243,9 @@ export class RoomRankingService {
 
         if (userIds && userIds.length > 0) {
             // Cast UUIDs explicitly to avoid integer conversion error
+            // Use quoted column names to preserve case sensitivity
             query.andWhere(
-                '(gt.senderId::uuid IN (:...userIds) OR gt.receiverId::uuid IN (:...userIds))',
+                '(gt."senderId"::uuid IN (:...userIds) OR gt."receiverId"::uuid IN (:...userIds))',
                 { userIds }
             )
         }
