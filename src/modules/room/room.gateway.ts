@@ -5149,7 +5149,7 @@ export class RoomGateway
         data: {
             roomId: string
             period: 'hourly' | 'weekly' | 'total' | 'online'
-            limit?: number
+            limit?: number | string
         }
     ) {
         const userInfo = this.connectedUsers.get(client.id)
@@ -5162,7 +5162,11 @@ export class RoomGateway
 
         try {
             let rankings = []
-            const limit = data.limit || 50
+            // Handle limit as string or number (Flutter sends as string "50")
+            const limit =
+                typeof data.limit === 'string'
+                    ? parseInt(data.limit, 10)
+                    : data.limit || 5
 
             switch (data.period) {
                 case 'hourly':
@@ -5435,8 +5439,11 @@ export class RoomGateway
         const requesterId = userInfo?.userId
         const requesterName = userInfo?.userName || 'Unknown User'
 
+        // Default period to 'all' if not provided
+        const period = data.period || 'all'
+
         this.logger.log(
-            `📊 GET_HIGHEST_GIFT_SENDER: User ${requesterName} (${requesterId}) requesting highest sender to user ${data.receiverId} in room ${data.roomId} | Period: ${data.period || 'all'}`
+            `📊 GET_HIGHEST_GIFT_SENDER: User ${requesterName} (${requesterId}) requesting highest sender to user ${data.receiverId} in room ${data.roomId} | Period: ${period}`
         )
 
         if (!data.roomId || !data.receiverId) {
@@ -5486,7 +5493,7 @@ export class RoomGateway
             const result = await this.roomService.getHighestGiftSenderToUser(
                 data.roomId,
                 data.receiverId,
-                data.period
+                period
             )
 
             this.logger.log(

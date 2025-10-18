@@ -138,6 +138,63 @@ export class RoomRankingService {
             userIds
         )
 
+        // CRITICAL: Include ALL online users even if they have no gift activity
+        // Get user details for online users not in rankings
+        const rankedUserIds = new Set(rankings.map((r) => r.userId))
+        const unrankedUserIds = userIds.filter((id) => !rankedUserIds.has(id))
+
+        if (unrankedUserIds.length > 0) {
+            const unrankedUsers =
+                await this.userRepository.findByIds(unrankedUserIds)
+
+            const unrankedRankings = unrankedUsers.map((user) => ({
+                userId: user.uuid,
+                userName: user.name || user.displayName || 'Unknown',
+                name: user.name || user.displayName || 'Unknown',
+                userAvatar: user.avatarUrl || null,
+                image: user.avatarUrl || null,
+                country: user.country || '',
+                diamond:
+                    Math.round(
+                        parseFloat(user.diamondBalance?.toString() || '0') * 100
+                    ) / 100,
+                diamondBalance:
+                    Math.round(
+                        parseFloat(user.diamondBalance?.toString() || '0') * 100
+                    ) / 100,
+                isEmailVerified: user.isEmailVerified || false,
+                isVerified: user.isEmailVerified || false,
+                level: user.level || 0,
+                rank: 0, // Will be recalculated below
+                giftsSent: {
+                    value: 0,
+                    count: 0,
+                    topGift: null
+                },
+                giftsReceived: {
+                    value: 0,
+                    count: 0,
+                    topGift: null
+                },
+                totalScore: 0,
+                interactions: {
+                    uniqueSenders: 0,
+                    uniqueReceivers: 0
+                },
+                isOnline: true,
+                period: RankingPeriod.ONLINE
+            }))
+
+            // Merge ranked and unranked users
+            rankings.push(...unrankedRankings)
+
+            // Re-sort and re-rank
+            rankings.sort((a, b) => b.totalScore - a.totalScore)
+            rankings.forEach((ranking, index) => {
+                ranking.rank = index + 1
+            })
+        }
+
         return limit ? rankings.slice(0, limit) : rankings
     }
 
@@ -155,8 +212,28 @@ export class RoomRankingService {
         const query = this.giftTransactionRepository
             .createQueryBuilder('gt')
             .leftJoinAndSelect('gt.gift', 'gift')
-            .leftJoinAndSelect('gt.sender', 'sender')
-            .leftJoinAndSelect('gt.receiver', 'receiver')
+            .leftJoin('gt.sender', 'sender')
+            .addSelect([
+                'sender.uuid',
+                'sender.name',
+                'sender.displayName',
+                'sender.avatarUrl',
+                'sender.country',
+                'sender.diamondBalance',
+                'sender.isEmailVerified',
+                'sender.level'
+            ])
+            .leftJoin('gt.receiver', 'receiver')
+            .addSelect([
+                'receiver.uuid',
+                'receiver.name',
+                'receiver.displayName',
+                'receiver.avatarUrl',
+                'receiver.country',
+                'receiver.diamondBalance',
+                'receiver.isEmailVerified',
+                'receiver.level'
+            ])
             .where('gt.roomId = :roomId', { roomId })
             .andWhere('gt.createdAt BETWEEN :startDate AND :endDate', {
                 startDate,
@@ -179,6 +256,10 @@ export class RoomRankingService {
                 userId: string
                 userName: string
                 userAvatar: string
+                country: string
+                diamondBalance: number
+                isEmailVerified: boolean
+                level: number
                 giftsSentValue: number
                 giftsSentCount: number
                 giftsReceivedValue: number
@@ -201,8 +282,18 @@ export class RoomRankingService {
             if (!userScores.has(transaction.senderId)) {
                 userScores.set(transaction.senderId, {
                     userId: transaction.senderId,
-                    userName: transaction.sender?.name || 'Unknown',
+                    userName:
+                        transaction.sender?.name ||
+                        transaction.sender?.displayName ||
+                        'Unknown',
                     userAvatar: transaction.sender?.avatarUrl || '',
+                    country: transaction.sender?.country || '',
+                    diamondBalance: parseFloat(
+                        transaction.sender?.diamondBalance?.toString() || '0'
+                    ),
+                    isEmailVerified:
+                        transaction.sender?.isEmailVerified || false,
+                    level: transaction.sender?.level || 0,
                     giftsSentValue: 0,
                     giftsSentCount: 0,
                     giftsReceivedValue: 0,
@@ -237,8 +328,18 @@ export class RoomRankingService {
             if (!userScores.has(transaction.receiverId)) {
                 userScores.set(transaction.receiverId, {
                     userId: transaction.receiverId,
-                    userName: transaction.receiver?.name || 'Unknown',
+                    userName:
+                        transaction.receiver?.name ||
+                        transaction.receiver?.displayName ||
+                        'Unknown',
                     userAvatar: transaction.receiver?.avatarUrl || '',
+                    country: transaction.receiver?.country || '',
+                    diamondBalance: parseFloat(
+                        transaction.receiver?.diamondBalance?.toString() || '0'
+                    ),
+                    isEmailVerified:
+                        transaction.receiver?.isEmailVerified || false,
+                    level: transaction.receiver?.level || 0,
                     giftsSentValue: 0,
                     giftsSentCount: 0,
                     giftsReceivedValue: 0,
@@ -279,8 +380,16 @@ export class RoomRankingService {
             return {
                 userId: stats.userId,
                 userName: stats.userName,
+                name: stats.userName, // Alias for Flutter compatibility
                 userAvatar: stats.userAvatar,
-                rank: 0,
+                image: stats.userAvatar, // Alias for Flutter compatibility
+                country: stats.country,
+                diamond: Math.round(stats.diamondBalance * 100) / 100,
+                diamondBalance: Math.round(stats.diamondBalance * 100) / 100,
+                isEmailVerified: stats.isEmailVerified,
+                isVerified: stats.isEmailVerified, // Alias for Flutter compatibility
+                level: stats.level,
+                rank: 0, // Will be set after sorting
                 giftsSent: {
                     value: Math.round(stats.giftsSentValue * 100) / 100,
                     count: stats.giftsSentCount,
