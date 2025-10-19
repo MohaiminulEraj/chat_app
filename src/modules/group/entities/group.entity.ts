@@ -20,7 +20,7 @@ export class Group extends CustomBaseEntity {
     @Column({ nullable: true })
     avatarUrl: string
 
-    @Column({ default: false })
+    @Column({ default: true })
     isPublic: boolean
 
     @Column({ nullable: true })
