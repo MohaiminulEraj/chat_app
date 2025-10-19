@@ -462,11 +462,14 @@ export class GroupService {
             where: { groupId, name: 'Member' }
         })
 
-        await this.memberRepository.save({
+        // Create entity instance first to trigger @BeforeInsert() hook for UUID generation
+        const newMember = this.memberRepository.create({
             userId: newMemberId,
             groupId,
             roleId: memberRole.uuid
         })
+
+        await this.memberRepository.save(newMember)
     }
 
     async removeMember(
