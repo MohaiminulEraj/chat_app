@@ -418,13 +418,6 @@ export class RoomService {
             }
         })
 
-        if (existingParticipant) {
-            this.logger.log(
-                `User ${userId} is already in room ${roomId}, returning existing participant info`
-            )
-            return existingParticipant
-        }
-
         // Determine seat assignment
         let assignedSeat: number
 
@@ -438,6 +431,34 @@ export class RoomService {
         } else {
             // Auto-assign next available seat (excluding seat 0 unless user is host/owner)
             assignedSeat = await this.findNextAvailableSeat(roomId, userId)
+        }
+
+        // CRITICAL FIX: If user already exists, UPDATE their seat instead of returning old data
+        if (existingParticipant) {
+            const oldSeat = existingParticipant.seatNumber - 1
+            const newSeat = assignedSeat
+
+            // Only update if seat actually changed
+            if (oldSeat !== newSeat) {
+                this.logger.log(
+                    `🔄 User ${userId} moving from seat ${oldSeat} to seat ${newSeat} in room ${roomId}`
+                )
+
+                existingParticipant.seatNumber = assignedSeat + 1 // Store as 1-based
+                const updatedParticipant =
+                    await this.participantRepository.save(existingParticipant)
+
+                this.logger.log(
+                    `✅ Updated participant: User ${userId} now in seat ${newSeat} (stored as ${assignedSeat + 1})`
+                )
+
+                return updatedParticipant
+            } else {
+                this.logger.log(
+                    `User ${userId} is already in seat ${newSeat} in room ${roomId}, no update needed`
+                )
+                return existingParticipant
+            }
         }
 
         const participant = this.participantRepository.create({
@@ -1004,16 +1025,11 @@ export class RoomService {
      */
     async getRoomByGroupId(groupId: string): Promise<any> {
         // Find the room for this group
+        // NOTE: Removed 'participants' and 'roleAssignments' relations to avoid caching issues
+        // These are queried directly in formatRoomDetails() for fresh real-time data
         const room = await this.roomRepository.findOne({
             where: { groupId, isActive: true },
-            relations: [
-                'owner',
-                'group',
-                'participants',
-                'participants.user',
-                'roleAssignments',
-                'roleAssignments.user'
-            ]
+            relations: ['owner', 'group']
         })
 
         if (!room) {
@@ -1028,17 +1044,11 @@ export class RoomService {
      */
     async getRoomDetails(roomId: string): Promise<any> {
         // Find the room by ID
+        // NOTE: Removed 'participants' and 'roleAssignments' relations to avoid caching issues
+        // These are queried directly in formatRoomDetails() for fresh real-time data
         const room = await this.roomRepository.findOne({
             where: { uuid: roomId, isActive: true },
-            relations: [
-                'owner',
-                'group',
-                'country',
-                'participants',
-                'participants.user',
-                'roleAssignments',
-                'roleAssignments.user'
-            ]
+            relations: ['owner', 'group', 'country']
         })
 
         if (!room) {
@@ -1052,11 +1062,17 @@ export class RoomService {
      * Helper method to format room details consistently
      */
     private async formatRoomDetails(room: Room): Promise<any> {
-        // Get role assignments
-        const roleAssignments = await this.roomRoleRepository.find({
-            where: { roomId: room.uuid, isActive: true },
-            relations: ['user']
-        })
+        // CRITICAL: Use QueryBuilder with cache disabled for real-time fresh data
+        // This ensures we always get the latest database state after WebSocket updates
+
+        // Get role assignments with cache disabled
+        const roleAssignments = await this.roomRoleRepository
+            .createQueryBuilder('role')
+            .leftJoinAndSelect('role.user', 'user')
+            .where('role.roomId = :roomId', { roomId: room.uuid })
+            .andWhere('role.isActive = :isActive', { isActive: true })
+            .cache(false) // Explicitly disable query cache
+            .getMany()
 
         // Find host and owner roles
         const hostRole = roleAssignments.find(
@@ -1070,12 +1086,14 @@ export class RoomService {
         const ownerInfo = ownerRole?.user || room.owner
         const hostInfo = hostRole?.user || null
 
-        // Get all participants with their roles
-        const participants = await this.participantRepository.find({
-            where: { roomId: room.uuid },
-            relations: ['user'],
-            order: { seatNumber: 'ASC' }
-        })
+        // Get all participants with FRESH data using QueryBuilder (no cache)
+        const participants = await this.participantRepository
+            .createQueryBuilder('participant')
+            .leftJoinAndSelect('participant.user', 'user')
+            .where('participant.roomId = :roomId', { roomId: room.uuid })
+            .orderBy('participant.seatNumber', 'ASC')
+            .cache(false) // Explicitly disable query cache
+            .getMany()
 
         // Build participants list with the new format
         const hostUserId = hostInfo?.uuid
@@ -2160,18 +2178,27 @@ export class RoomService {
      */
     async getRoomSeats(roomId: string, hostUserId?: string): Promise<any[]> {
         const room = await this.roomRepository.findOne({
-            where: { uuid: roomId },
-            relations: ['participants', 'participants.user']
+            where: { uuid: roomId }
         })
 
         if (!room) {
             throw new NotFoundException('Room not found')
         }
 
-        // Get seat lock information
-        const seatLocks = await this.roomSeatRepository.find({
-            where: { roomId }
-        })
+        // CRITICAL FIX: Query participants directly with cache disabled for real-time updates
+        const participants = await this.participantRepository
+            .createQueryBuilder('participant')
+            .leftJoinAndSelect('participant.user', 'user')
+            .where('participant.roomId = :roomId', { roomId })
+            .cache(false) // Explicitly disable query cache
+            .getMany()
+
+        // Get seat lock information with cache disabled
+        const seatLocks = await this.roomSeatRepository
+            .createQueryBuilder('seat')
+            .where('seat.roomId = :roomId', { roomId })
+            .cache(false)
+            .getMany()
 
         const seats = []
 
@@ -2181,7 +2208,7 @@ export class RoomService {
             const seatLock = seatLocks.find((lock) => lock.seatIndex === i)
             // Find participant whose stored seatNumber matches this index (1-based in DB)
             let participant =
-                room.participants.find((p) => p.seatNumber === i + 1) || null
+                participants.find((p) => p.seatNumber === i + 1) || null
 
             // If hostUserId is provided and this participant is the host, don't show them as occupying the seat
             if (
