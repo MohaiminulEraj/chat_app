@@ -430,17 +430,23 @@ export class GroupService {
         adminId: string,
         newMemberId: string
     ): Promise<void> {
-        // Check permissions
-        const hasPermission = await this.checkPermission(
-            groupId,
-            adminId,
-            'manageMembers'
-        )
-        if (!hasPermission) {
+        // Get the group to check if it's public or private
+        const group = await this.groupRepository.findOne({
+            where: { uuid: groupId }
+        })
+
+        if (!group) {
+            throw new NotFoundException('Group not found')
+        }
+
+        // For private groups, only the owner can add members
+        if (!group.isPublic && group.ownerId !== adminId) {
             throw new ForbiddenException(
-                'You do not have permission to add members'
+                'Only the group owner can add members to private groups'
             )
         }
+
+        // For public groups, any member can add members (no permission check needed)
 
         // Check if already a member
         const existingMember = await this.memberRepository.findOne({

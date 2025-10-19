@@ -353,7 +353,7 @@ export class GroupController {
     @ApiOperation({
         summary: 'Add member to group',
         description:
-            'Add a new member to the group (requires manage members permission)'
+            'Add a new member to the group. Public groups: any member can add members. Private groups: only the owner can add members.'
     })
     @ApiParam({
         name: 'id',
@@ -377,11 +377,15 @@ export class GroupController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: 'You do not have permission to add members'
+        description: 'Only the group owner can add members to private groups'
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
         description: 'User is already a member'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Group not found'
     })
     async addMember(
         @Request() req,
