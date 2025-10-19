@@ -1150,6 +1150,7 @@ export class RoomService {
             roomName: room.name,
             description: room.description || null,
             level: (room as any).level ?? 0,
+            groupId: room.groupId || null,
             // Owner information
             ownerId: ownerInfo.uuid,
             ownerName: ownerInfo.name,
