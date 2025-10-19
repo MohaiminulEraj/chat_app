@@ -45,6 +45,7 @@ import {
     ToggleSeatLockDto
 } from './dto/seat-management.dto'
 import { JoinRoomDto } from './dto/join-room.dto'
+import { LeaveRoomDto } from './dto/leave-room.dto'
 import { UpdateRoomDto, UpdateRoomWithFileDto } from './dto/update-room.dto'
 import { UploadRoomAvatarDto } from './dto/upload-room-avatar.dto'
 import { RoomParticipant } from './entities/room-participant.entity'
@@ -744,6 +745,80 @@ export class RoomController {
                 seats,
                 isExistingParticipant
             }
+        }
+    }
+
+    @Patch('leave-room')
+    @ApiOperation({
+        summary: 'Leave a room',
+        description:
+            'Remove authenticated user from room and clear their seat. Triggers WebSocket events to notify all participants.'
+    })
+    @ApiBody({
+        type: LeaveRoomDto,
+        description: 'Room ID to leave from',
+        examples: {
+            example1: {
+                summary: 'Leave room',
+                value: {
+                    roomId: '987fcdeb-51a2-43e7-9abc-123456789def'
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Successfully left the room',
+        schema: {
+            example: {
+                statusCode: 200,
+                message: 'Successfully left the room',
+                data: {
+                    roomId: '987fcdeb-51a2-43e7-9abc-123456789def',
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                    seats: [
+                        { seatNumber: 0, isLocked: false, user: null },
+                        {
+                            seatNumber: 1,
+                            isLocked: false,
+                            user: { id: '...', username: 'user1' }
+                        }
+                    ]
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: 404,
+        description: 'Room or participant not found'
+    })
+    @ApiResponse({
+        status: 401,
+        description: 'Unauthorized - Invalid or missing authentication token'
+    })
+    async leaveRoom(@Body() leaveRoomDto: LeaveRoomDto, @Request() req: any) {
+        // Get userId from authenticated user (JWT guard)
+        const userId = req.user?.uuid || req.user?.id
+        const roomId = leaveRoomDto.roomId
+
+        // Call service to remove from database
+        await this.roomService.leaveRoom(roomId, userId)
+
+        // Get updated seats
+        const seats = await this.roomService.getRoomSeats(roomId)
+
+        // Emit WebSocket to notify all clients in the room
+        this.roomGateway.server.to(`room:${roomId}`).emit('userLeftRoom', {
+            roomId,
+            userId,
+            seats,
+            timestamp: new Date().toISOString()
+        })
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Successfully left the room',
+            data: { roomId, userId, seats }
         }
     }
 
