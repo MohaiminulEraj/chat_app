@@ -2370,6 +2370,70 @@ export class RoomController {
         }
     }
 
+    @Post(':roomId/claim-task-reward/:taskId')
+    @ApiOperation({
+        summary: 'Claim room daily task reward',
+        description: 'Claim reward for a completed room-specific daily task'
+    })
+    @ApiParam({
+        name: 'roomId',
+        description: 'Room UUID',
+        type: 'string'
+    })
+    @ApiParam({
+        name: 'taskId',
+        description: 'Task UUID',
+        type: 'string'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Reward claimed successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Room task reward claimed successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: true },
+                        reward: { type: 'number', example: 200 },
+                        rewardType: { type: 'string', example: 'diamonds' }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Task not completed or reward already claimed'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Task not found'
+    })
+    async claimRoomTaskReward(
+        @Request() req,
+        @Param('roomId') roomId: string,
+        @Param('taskId') taskId: string
+    ) {
+        const userId = req.user.uuid
+        const result = await this.taskService.claimReward(
+            userId,
+            taskId,
+            roomId
+        )
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Room task reward claimed successfully',
+            data: result
+        }
+    }
+
     @Get(':roomId/pk-battles/active')
     @ApiOperation({
         summary: 'Get active PK Battle in room',

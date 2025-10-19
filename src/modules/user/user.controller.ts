@@ -143,6 +143,72 @@ export class UserController {
         }
     }
 
+    @Post('claim-task-reward/:taskId')
+    @ApiOperation({
+        summary: 'Claim daily task reward',
+        description:
+            'Claim reward for a completed daily task (user or room task)'
+    })
+    @ApiParam({
+        name: 'taskId',
+        description: 'Task UUID',
+        type: 'string'
+    })
+    @ApiQuery({
+        name: 'roomId',
+        description: 'Room UUID (optional, for room-specific tasks)',
+        required: false,
+        type: 'string'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Reward claimed successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Reward claimed successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: true },
+                        reward: { type: 'number', example: 100 },
+                        rewardType: { type: 'string', example: 'bins' }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'Task not completed or reward already claimed'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Task not found'
+    })
+    async claimTaskReward(
+        @Request() req,
+        @Param('taskId') taskId: string,
+        @Query('roomId') roomId?: string
+    ) {
+        const userId = req.user.uuid
+        const result = await this.taskService.claimReward(
+            userId,
+            taskId,
+            roomId
+        )
+
+        return {
+            statusCode: HttpStatus.OK,
+            message: 'Reward claimed successfully',
+            data: result
+        }
+    }
+
     @Get('recommendations')
     @ApiOperation({
         summary: 'Get user recommendations',

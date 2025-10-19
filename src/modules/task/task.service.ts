@@ -342,7 +342,11 @@ export class TaskService {
         userId: string,
         taskId: string,
         roomId?: string
-    ): Promise<{ success: boolean; reward: number }> {
+    ): Promise<{
+        success: boolean
+        reward: number
+        rewardType: 'bins' | 'diamonds'
+    }> {
         const today = new Date()
         today.setHours(0, 0, 0, 0)
 
@@ -403,13 +407,16 @@ export class TaskService {
             )
         }
 
+        const rewardType = task.metadata?.rewardType || 'bins'
+
         this.logger.log(
-            `💰 Reward claimed: ${task.reward} for task ${task.taskId} by user ${userId}`
+            `💰 Reward claimed: ${task.reward} ${rewardType} for task ${task.taskId} by user ${userId}`
         )
 
         return {
             success: true,
-            reward: task.reward
+            reward: task.reward,
+            rewardType
         }
     }
 }
