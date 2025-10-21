@@ -28,8 +28,7 @@ import { User } from '../user/entities/user.entity'
 })
 // @UseGuards(WsJwtGuard) // Temporarily disabled for testing
 export class RoomGateway
-    implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+    implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     public server: Server
 
@@ -87,7 +86,7 @@ export class RoomGateway
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
         private readonly roomRankingService: RoomRankingService
-    ) {}
+    ) { }
 
     afterInit(server: Server) {
         this.server = server
@@ -556,7 +555,7 @@ export class RoomGateway
 
                 this.logger.log(
                     `🔌 User disconnected: ${userInfo.userName} (${userInfo.userId}) | ` +
-                        `Socket: ${client.id} | Total connections: ${this.connectedUsers.size}`
+                    `Socket: ${client.id} | Total connections: ${this.connectedUsers.size}`
                 )
             } else {
                 this.logger.warn(`⚠️ Unknown socket disconnected: ${client.id}`)
@@ -814,25 +813,25 @@ export class RoomGateway
 
             return participant
                 ? {
-                      status: 'success',
-                      participant,
-                      seatIndex: participant.seatNumber - 1,
-                      seats: updatedSeats,
-                      roomUserCount: newCount,
-                      message: `Successfully joined room ${data.roomID}`
-                  }
+                    status: 'success',
+                    participant,
+                    seatIndex: participant.seatNumber - 1,
+                    seats: updatedSeats,
+                    roomUserCount: newCount,
+                    message: `Successfully joined room ${data.roomID}`
+                }
                 : {
-                      status: 'success',
-                      participant: null,
-                      seatIndex: null,
-                      seats: updatedSeats,
-                      roomUserCount: newCount,
-                      message: 'Joined as observer. Tap on a seat to sit down.'
-                  }
+                    status: 'success',
+                    participant: null,
+                    seatIndex: null,
+                    seats: updatedSeats,
+                    roomUserCount: newCount,
+                    message: 'Joined as observer. Tap on a seat to sit down.'
+                }
         } catch (error) {
             this.logger.error(
                 `❌ ROOM_ID failed: User ${userName} (${userId}) failed to join room ${data.roomID} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return {
@@ -960,17 +959,17 @@ export class RoomGateway
             // Format participant data if user is seated
             const participantData = currentUserParticipant
                 ? {
-                      userId: currentUserParticipant.userId,
-                      name:
-                          currentUserParticipant.user?.name ||
-                          currentUserParticipant.user?.email ||
-                          userName,
-                      avatar: currentUserParticipant.user?.avatarUrl || null,
-                      seatIndex: currentUserParticipant.seatNumber - 1,
-                      isSpeaking: currentUserParticipant.isSpeaking || false,
-                      micOn: !currentUserParticipant.isMuted,
-                      role: 'participant'
-                  }
+                    userId: currentUserParticipant.userId,
+                    name:
+                        currentUserParticipant.user?.name ||
+                        currentUserParticipant.user?.email ||
+                        userName,
+                    avatar: currentUserParticipant.user?.avatarUrl || null,
+                    seatIndex: currentUserParticipant.seatNumber - 1,
+                    isSpeaking: currentUserParticipant.isSpeaking || false,
+                    micOn: !currentUserParticipant.isMuted,
+                    role: 'participant'
+                }
                 : null
 
             // Only emit joinRoomResponse when user is actually seated
@@ -1088,7 +1087,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ JOIN_ROOM failed: User ${userName} (${userId}) failed to join room ${roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -1629,14 +1628,14 @@ export class RoomGateway
             const joinRoomResponseFormat =
                 seatIndex !== undefined
                     ? {
-                          userId: data.participantId,
-                          name: participantInfo.name || 'Unknown',
-                          avatar: participantInfo.avatarUrl || null,
-                          seatIndex: seatIndex,
-                          isSpeaking: false,
-                          micOn: true, // Default to unmuted for newly accepted participants
-                          role: 'participant'
-                      }
+                        userId: data.participantId,
+                        name: participantInfo.name || 'Unknown',
+                        avatar: participantInfo.avatarUrl || null,
+                        seatIndex: seatIndex,
+                        isSpeaking: false,
+                        micOn: true, // Default to unmuted for newly accepted participants
+                        role: 'participant'
+                    }
                     : null
 
             // Emit to host
@@ -1906,6 +1905,110 @@ export class RoomGateway
         }
     }
 
+    @SubscribeMessage('leaveSeat')
+    async handleLeaveSeat(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; userId?: string }
+    ) {
+        const userInfo = this.connectedUsers.get(client.id)
+        const userId = data.userId || userInfo?.userId
+        const userName = userInfo?.userName || 'Unknown User'
+        const { roomId } = data
+
+        this.logger.log(
+            `🪑 LEAVE_SEAT request: User ${userName} (${userId}) wants to leave seat in room ${roomId}`
+        )
+
+        try {
+            // Find the participant to check current seat
+            const participant = await this.roomService
+                .getRoomParticipants(roomId)
+                .then((participants) =>
+                    participants.find((p) => p.userId === userId)
+                )
+
+            if (!participant) {
+                this.logger.warn(
+                    `⚠️ LEAVE_SEAT: User ${userId} is not a participant in room ${roomId}`
+                )
+                return {
+                    status: 'error',
+                    message: 'User is not a participant in this room'
+                }
+            }
+
+            const previousSeatIndex = participant.seatNumber
+
+            if (previousSeatIndex === null || previousSeatIndex === undefined) {
+                this.logger.warn(
+                    `⚠️ LEAVE_SEAT: User ${userId} is not sitting in any seat in room ${roomId}`
+                )
+                return {
+                    status: 'error',
+                    message: 'User is not sitting in any seat'
+                }
+            }
+
+            // Update participant status: remove seat and mute microphone
+            await this.roomService.updateParticipantStatus(roomId, userId, {
+                seatNumber: null,
+                isMuted: true,
+                isSpeaking: false,
+                isVideoOn: false
+            })
+
+            // Update seat state in memory
+            await this.updateRoomSeatsState(roomId)
+
+            // Get updated seat information
+            const updatedSeats = this.roomSeats.get(roomId) || []
+
+            this.logger.log(
+                `✅ LEAVE_SEAT success: User ${userName} (${userId}) left seat ${previousSeatIndex} in room ${roomId}`
+            )
+
+            // Notify all room participants about seat change
+            this.server.to(`room:${roomId}`).emit('seatLeft', {
+                status: 'success',
+                roomId,
+                userId,
+                userName,
+                previousSeatIndex,
+                seats: updatedSeats,
+                timestamp: new Date().toISOString(),
+                message: `${userName} left seat ${previousSeatIndex}`
+            })
+
+            // Remove user from online rankings if they left admin seat (seat 0)
+            if (previousSeatIndex === 0) {
+                await this.roomRankingService.removeUserActivity(roomId, userId)
+            }
+
+            // Return success response to the requesting client
+            return {
+                status: 'success',
+                roomId,
+                userId,
+                previousSeatIndex,
+                seats: updatedSeats,
+                message: `Successfully left seat ${previousSeatIndex}`,
+                microphoneMuted: true
+            }
+        } catch (error) {
+            this.logger.error(
+                `❌ LEAVE_SEAT failed: User ${userName} (${userId}) failed to leave seat in room ${roomId} | ` +
+                `Error: ${error.message}`,
+                error.stack
+            )
+            return {
+                status: 'error',
+                message: error.message,
+                roomId,
+                userId
+            }
+        }
+    }
+
     @SubscribeMessage('leaveRoom')
     async handleLeaveRoom(
         @ConnectedSocket() client: Socket,
@@ -1997,7 +2100,7 @@ export class RoomGateway
 
             this.logger.log(
                 `✅ LEAVE_ROOM success: User ${userName} (${userId}) left room ${roomId} | ` +
-                    `Room users: ${newCount}`
+                `Room users: ${newCount}`
             )
 
             return {
@@ -2009,7 +2112,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ LEAVE_ROOM failed: User ${userName} (${userId}) failed to leave room ${roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return {
@@ -2040,8 +2143,8 @@ export class RoomGateway
 
         this.logger.log(
             `💬 SEND_COMMENT request [${requestId}]: User ${userName} (${userId}) sending comment to room ${data.room} | ` +
-                `Client: ${client.id} | Type: ${data.messageType || 'text'} | Length: ${data.content?.length || 0} chars` +
-                (data.replyToId ? ` | Reply to: ${data.replyToId}` : '')
+            `Client: ${client.id} | Type: ${data.messageType || 'text'} | Length: ${data.content?.length || 0} chars` +
+            (data.replyToId ? ` | Reply to: ${data.replyToId}` : '')
         )
 
         try {
@@ -2176,7 +2279,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ SEND_COMMENT [${requestId}] failed: User ${userName} (${userId}) failed to send comment to room ${data.room} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -2254,7 +2357,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ DELETE_COMMENT failed: User ${userName} (${userId}) failed to delete comment ${data.commentId} from room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return {
@@ -2571,10 +2674,10 @@ export class RoomGateway
 
         this.logger.log(
             `📄 GET_ROOM_COMMENTS [${requestId}]: User ${userName} (${userId}) requesting comments for room ${roomId} | ` +
-                `Limit: ${data.limit || 'default'} | Offset: ${data.offset || 0}` +
-                (data.lastCommentId
-                    ? ` | LastCommentId: ${data.lastCommentId}`
-                    : '')
+            `Limit: ${data.limit || 'default'} | Offset: ${data.offset || 0}` +
+            (data.lastCommentId
+                ? ` | LastCommentId: ${data.lastCommentId}`
+                : '')
         )
 
         try {
@@ -2649,7 +2752,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ GET_ROOM_COMMENTS [${requestId}] failed: User ${userName} (${userId}) failed to get comments for room ${roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -2819,7 +2922,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ TOGGLE_MUTE failed: User ${userName} (${userId}) failed to toggle mute for seat ${data.userInfo.seatIndex} in room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -3060,7 +3163,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ KICK_USER failed: User ${userName} (${userId}) failed to kick user | Data: ${JSON.stringify(data)} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -3317,7 +3420,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ BLOCK_USER [${requestId}] failed: User ${blockerUserName} (${blockerUserId}) failed to block user ${data.blockUserID} from room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -3382,7 +3485,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ TOGGLE_DEAFEN failed: User ${userName} (${userId}) failed to toggle deafen in room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3438,7 +3541,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ TOGGLE_VIDEO failed: User ${userName} (${userId}) failed to toggle video in room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3495,7 +3598,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ UPDATE_SPEAKING failed: User ${userName} (${userId}) failed to update speaking status in room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3541,7 +3644,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ GET_ROOM_STATS failed: User ${userName} (${userId}) failed to get stats for room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3590,15 +3693,15 @@ export class RoomGateway
                 },
                 userActivity: userActivity
                     ? {
-                          ...userActivity,
-                          lastActivity: lastActivity?.toISOString()
-                      }
+                        ...userActivity,
+                        lastActivity: lastActivity?.toISOString()
+                    }
                     : null
             }
         } catch (error) {
             this.logger.error(
                 `❌ GET_SYSTEM_STATS failed: User ${userName} (${userId}) failed to get system stats | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3682,7 +3785,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ REACT_TO_COMMENT failed: User ${userName} (${userId}) failed to react to comment | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -3727,7 +3830,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ TYPING_COMMENT failed: User ${userName} (${userId}) failed to send typing indicator | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return { status: 'error', message: error.message }
@@ -4025,8 +4128,7 @@ export class RoomGateway
         const userName = userInfo?.userName || 'Unknown User'
 
         this.logger.log(
-            `🪑 REQUEST_SEAT: User ${userName} (${userId}) requesting seat${
-                data.seatIndex !== undefined ? ` ${data.seatIndex}` : ' (auto)'
+            `🪑 REQUEST_SEAT: User ${userName} (${userId}) requesting seat${data.seatIndex !== undefined ? ` ${data.seatIndex}` : ' (auto)'
             } in room ${data.roomId}`
         )
 
@@ -4097,8 +4199,7 @@ export class RoomGateway
         const { userId, userName } = validatedUser
 
         this.logger.log(
-            `🔒 TOGGLE_SEAT_LOCK: User ${userName} (${userId}) ${
-                data.isLocked ? 'locking' : 'unlocking'
+            `🔒 TOGGLE_SEAT_LOCK: User ${userName} (${userId}) ${data.isLocked ? 'locking' : 'unlocking'
             } seat ${data.seatIndex} in room ${data.roomId}`
         )
 
@@ -4136,8 +4237,7 @@ export class RoomGateway
             )
 
             this.logger.log(
-                `✅ TOGGLE_SEAT_LOCK success: Seat ${data.seatIndex} ${
-                    data.isLocked ? 'locked' : 'unlocked'
+                `✅ TOGGLE_SEAT_LOCK success: Seat ${data.seatIndex} ${data.isLocked ? 'locked' : 'unlocked'
                 } in room ${data.roomId} by ${userName} (${userId})`
             )
 
@@ -4192,8 +4292,8 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ TOGGLE_SEAT_LOCK failed: User ${userName} (${userId}) failed to toggle seat lock | ` +
-                    `RoomId: ${data.roomId}, SeatIndex: ${data.seatIndex}, isLocked: ${data.isLocked} | ` +
-                    `Error: ${error.message}`,
+                `RoomId: ${data.roomId}, SeatIndex: ${data.seatIndex}, isLocked: ${data.isLocked} | ` +
+                `Error: ${error.message}`,
                 error.stack
             )
 
@@ -4448,28 +4548,26 @@ export class RoomGateway
 
         this.logger.log(
             `📊 SYSTEM STATISTICS:\n` +
-                `   ├─ 🔌 Total WebSocket connections: ${totalConnections}\n` +
-                `   ├─ 👥 Unique users connected: ${uniqueUsers.size}\n` +
-                `   ├─ 🏠 Active rooms: ${activeRooms}\n` +
-                `   ├─ 👤 Total room participants: ${totalRoomUsers}\n` +
-                `   ├─ 🪑 Total seats tracked: ${totalSeatsTracked}\n` +
-                `   ├─ 🔥 Top active rooms: ${
-                    roomActivity.length > 0
-                        ? roomActivity
-                              .map(([roomId, count]) => `${roomId}(${count})`)
-                              .join(', ')
-                        : 'None'
-                }\n` +
-                `   └─ ⭐ Most active users: ${
-                    activeUsers.length > 0
-                        ? activeUsers
-                              .map(
-                                  ([userId, counts]) =>
-                                      `${userId}(${counts.totalActions})`
-                              )
-                              .join(', ')
-                        : 'None'
-                }`
+            `   ├─ 🔌 Total WebSocket connections: ${totalConnections}\n` +
+            `   ├─ 👥 Unique users connected: ${uniqueUsers.size}\n` +
+            `   ├─ 🏠 Active rooms: ${activeRooms}\n` +
+            `   ├─ 👤 Total room participants: ${totalRoomUsers}\n` +
+            `   ├─ 🪑 Total seats tracked: ${totalSeatsTracked}\n` +
+            `   ├─ 🔥 Top active rooms: ${roomActivity.length > 0
+                ? roomActivity
+                    .map(([roomId, count]) => `${roomId}(${count})`)
+                    .join(', ')
+                : 'None'
+            }\n` +
+            `   └─ ⭐ Most active users: ${activeUsers.length > 0
+                ? activeUsers
+                    .map(
+                        ([userId, counts]) =>
+                            `${userId}(${counts.totalActions})`
+                    )
+                    .join(', ')
+                : 'None'
+            }`
         )
 
         // Log memory usage if available
@@ -4477,8 +4575,8 @@ export class RoomGateway
             const memory = process.memoryUsage()
             this.logger.debug(
                 `💾 Memory usage: RSS: ${Math.round(memory.rss / 1024 / 1024)}MB | ` +
-                    `Heap Used: ${Math.round(memory.heapUsed / 1024 / 1024)}MB | ` +
-                    `Heap Total: ${Math.round(memory.heapTotal / 1024 / 1024)}MB`
+                `Heap Used: ${Math.round(memory.heapUsed / 1024 / 1024)}MB | ` +
+                `Heap Total: ${Math.round(memory.heapTotal / 1024 / 1024)}MB`
             )
         }
     }
@@ -4534,7 +4632,7 @@ export class RoomGateway
 
             this.logger.log(
                 `✅ LEAVE_ROOM event success: User ${userName} (${userId}) left room ${data.roomId} | ` +
-                    `Room users: ${newCount}`
+                `Room users: ${newCount}`
             )
 
             return {
@@ -4546,7 +4644,7 @@ export class RoomGateway
         } catch (error) {
             this.logger.error(
                 `❌ LEAVE_ROOM event failed: User ${userName} (${userId}) failed to leave room ${data.roomId} | ` +
-                    `Error: ${error.message}`,
+                `Error: ${error.message}`,
                 error.stack
             )
             return {
@@ -5549,10 +5647,10 @@ export class RoomGateway
                 receiverName: receiver.name,
                 highestSender: result.highestSender
                     ? {
-                          userId: result.highestSender.userId,
-                          userName: result.highestSender.userName,
-                          totalGiftValue: result.highestSender.totalGiftValue
-                      }
+                        userId: result.highestSender.userId,
+                        userName: result.highestSender.userName,
+                        totalGiftValue: result.highestSender.totalGiftValue
+                    }
                     : null,
                 timestamp: new Date().toISOString()
             })
