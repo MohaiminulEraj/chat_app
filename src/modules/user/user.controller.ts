@@ -46,7 +46,7 @@ export class UserController {
     constructor(
         private readonly userService: UserService,
         private readonly taskService: TaskService
-    ) {}
+    ) { }
 
     // @Post()
     // @ApiOperation({
@@ -78,18 +78,97 @@ export class UserController {
     @Get()
     @ApiOperation({
         summary: 'Get all users',
-        description: 'Retrieve a list of all active users'
+        description: 'Retrieve a paginated list of all active users'
+    })
+    @ApiQuery({
+        name: 'page',
+        description: 'Page number',
+        type: Number,
+        required: false,
+        example: 1
+    })
+    @ApiQuery({
+        name: 'limit',
+        description: 'Number of items per page',
+        type: Number,
+        required: false,
+        example: 10
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: 'List of users retrieved successfully',
-        type: [User]
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 200 },
+                message: {
+                    type: 'string',
+                    example: 'Users fetched successfully'
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        items: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/User' }
+                        },
+                        meta: {
+                            type: 'object',
+                            properties: {
+                                totalItems: { type: 'number', example: 50 },
+                                itemCount: { type: 'number', example: 10 },
+                                itemsPerPage: { type: 'number', example: 10 },
+                                totalPages: { type: 'number', example: 5 },
+                                currentPage: { type: 'number', example: 1 }
+                            }
+                        },
+                        links: {
+                            type: 'object',
+                            properties: {
+                                first: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3001/api/v1/users?limit=10'
+                                },
+                                previous: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3001/api/v1/users?page=1&limit=10'
+                                },
+                                next: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3001/api/v1/users?page=2&limit=10'
+                                },
+                                last: {
+                                    type: 'string',
+                                    example:
+                                        'http://localhost:3001/api/v1/users?page=5&limit=10'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     })
-    async findAll() {
+    async findAll(
+        @Request() req: any,
+        @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+        @Query('limit', new ParseIntPipe({ optional: true })) limit?: number
+    ) {
+        const options: IPaginationOptions = {
+            page: page || 1,
+            limit: limit || 10,
+            route: req.url
+        }
+
+        const data = await this.userService.findAllPaginated(options)
+
         return {
             statusCode: HttpStatus.OK,
             message: 'Users fetched successfully',
-            data: await this.userService.findAll()
+            data
         }
     }
 
@@ -327,10 +406,19 @@ export class UserController {
         type: [User]
     })
     async search(@Query('q') query: string) {
+        const q = (query || '').trim()
+        if (!q) {
+            return {
+                statusCode: HttpStatus.OK,
+                message: 'Users search results',
+                data: []
+            }
+        }
+
         return {
             statusCode: HttpStatus.OK,
             message: 'Users search results',
-            data: await this.userService.searchUsers(query)
+            data: await this.userService.searchUsers(q)
         }
     }
 
@@ -1001,10 +1089,10 @@ export class UserController {
                 userId: req.user.uuid,
                 fileInfo: avatarFile
                     ? {
-                          name: avatarFile.originalname,
-                          type: avatarFile.mimetype,
-                          size: avatarFile.size
-                      }
+                        name: avatarFile.originalname,
+                        type: avatarFile.mimetype,
+                        size: avatarFile.size
+                    }
                     : 'No file'
             })
 

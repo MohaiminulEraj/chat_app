@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import * as bcrypt from 'bcryptjs'
-import { Repository, Not } from 'typeorm'
+import { Repository, Not, Brackets } from 'typeorm'
 import {
     paginate,
     Pagination,
@@ -35,7 +35,7 @@ export class UserService {
         @InjectRepository(ProfileVisit)
         private profileVisitRepository: Repository<ProfileVisit>,
         private cloudinaryService: CloudinaryService
-    ) {}
+    ) { }
 
     async create(createUserDto: CreateUserDto): Promise<User> {
         // Check if user already exists
@@ -147,6 +147,31 @@ export class UserService {
             }
             return user
         })
+    }
+
+    async findAllPaginated(options: IPaginationOptions): Promise<Pagination<User>> {
+        const queryBuilder = this.userRepository.createQueryBuilder('user')
+            .leftJoinAndSelect('user.country', 'country')
+            .where('user.isActive = :isActive', { isActive: true })
+            .orderBy('user.createdAt', 'DESC')
+
+        const paginatedResult = await paginate<User>(queryBuilder, options)
+
+        // Format currency values as numbers for paginated results
+        const formattedItems = paginatedResult.items.map((user) => {
+            if (user.binsBalance) {
+                user.binsBalance = parseFloat(user.binsBalance.toString())
+            }
+            if (user.diamondBalance) {
+                user.diamondBalance = parseFloat(user.diamondBalance.toString())
+            }
+            return user
+        })
+
+        return {
+            ...paginatedResult,
+            items: formattedItems
+        }
     }
 
     async update(
@@ -284,20 +309,60 @@ export class UserService {
     }
 
     async searchUsers(query: string): Promise<User[]> {
-        return this.userRepository
+        // If query looks like a UUID, search by exact match on uuid as well
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            query
+        )
+
+        const qb = this.userRepository
             .createQueryBuilder('user')
-            .where('user.displayName ILIKE :query OR user.email ILIKE :query', {
-                query: `%${query}%`
+            .where('user.isActive = :isActive', { isActive: true })
+
+        // Grouped OR conditions for fuzzy match across fields
+        qb.andWhere(
+            new Brackets((subQb) => {
+                subQb
+                    .where('user.displayName ILIKE :q', { q: `%${query}%` })
+                    .orWhere('user.email ILIKE :q', { q: `%${query}%` })
+                    .orWhere('user.name ILIKE :q', { q: `%${query}%` })
+                    // Cast phoneNumber to text to be safe across numeric/text schemas
+                    .orWhere('CAST(user.phoneNumber AS TEXT) ILIKE :q', {
+                        q: `%${query}%`
+                    })
+
+                // UUID handling: exact match if valid uuid; otherwise allow partial text match via cast
+                if (isUuid) {
+                    subQb.orWhere('user.uuid = :uuidExact', {
+                        uuidExact: query
+                    })
+                } else {
+                    subQb.orWhere('CAST(user.uuid AS TEXT) ILIKE :q', {
+                        q: `%${query}%`
+                    })
+                }
             })
-            .andWhere('user.isActive = :isActive', { isActive: true })
+        )
             .select([
+                'user.id',
                 'user.uuid',
                 'user.email',
+                'user.name',
                 'user.displayName',
+                'user.phoneNumber',
                 'user.avatarUrl',
-                'user.status'
+                'user.status',
+                'user.userType',
+                'user.binsBalance',
+                'user.diamondBalance',
+                'user.isEmailVerified',
+                'user.isPhoneVerified',
+                'user.authProvider',
+                'user.createdAt',
+                'user.updatedAt'
             ])
-            .getMany()
+            .orderBy('user.createdAt', 'DESC')
+
+        return qb.getMany()
     }
 
     async getUserAchievementData(userId: string): Promise<UserAchievementData> {
