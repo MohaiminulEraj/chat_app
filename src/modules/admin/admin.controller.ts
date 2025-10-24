@@ -47,7 +47,7 @@ export class AdminController {
     constructor(
         private readonly adminService: AdminService,
         private readonly taskService: TaskService
-    ) {}
+    ) { }
 
     @Post('gift-currency')
     @ApiOperation({
@@ -58,7 +58,7 @@ export class AdminController {
         schema: {
             type: 'object',
             properties: {
-                userId: {
+                affectedUserId: {
                     type: 'string',
                     example: 'a71adf4a-221d-4d59-a60a-005e2552f6f8',
                     description: 'Target user UUID'
@@ -84,7 +84,7 @@ export class AdminController {
                     description: 'Additional notes (optional)'
                 }
             },
-            required: ['userId', 'currencyType', 'amount', 'reason']
+            required: ['affectedUserId', 'currencyType', 'amount', 'reason']
         }
     })
     @ApiResponse({
@@ -112,7 +112,7 @@ export class AdminController {
         @Request() req: any,
         @Body()
         body: {
-            userId: string
+            affectedUserId: string
             currencyType: CurrencyType
             amount: number
             reason: string
@@ -122,7 +122,7 @@ export class AdminController {
         const adminId = req.user.uuid
         const result = await this.adminService.giftCurrencyToUser(
             adminId,
-            body.userId,
+            body.affectedUserId,
             body.currencyType,
             body.amount,
             body.reason,
@@ -152,7 +152,7 @@ export class AdminController {
         schema: {
             type: 'object',
             properties: {
-                userId: { type: 'string' },
+                affectedUserId: { type: 'string' },
                 currencyType: {
                     type: 'string',
                     enum: ['bins', 'diamonds']
@@ -169,7 +169,7 @@ export class AdminController {
                 notes: { type: 'string' }
             },
             required: [
-                'userId',
+                'affectedUserId',
                 'currencyType',
                 'amount',
                 'transactionType',
@@ -181,7 +181,7 @@ export class AdminController {
         @Request() req: any,
         @Body()
         body: {
-            userId: string
+            affectedUserId: string
             currencyType: CurrencyType
             amount: number
             transactionType: AdminTransactionType
@@ -192,7 +192,7 @@ export class AdminController {
         const adminId = req.user.uuid
         const result = await this.adminService.adjustUserCurrency(
             adminId,
-            body.userId,
+            body.affectedUserId,
             body.currencyType,
             body.amount,
             body.transactionType,
@@ -276,28 +276,41 @@ export class AdminController {
     @ApiQuery({ name: 'adminId', required: false })
     @ApiQuery({ name: 'userId', required: false })
     @ApiQuery({ name: 'type', enum: AdminTransactionType, required: false })
-    @ApiQuery({ name: 'limit', type: Number, required: false })
-    @ApiQuery({ name: 'offset', type: Number, required: false })
+    @ApiQuery({ name: 'page', type: Number, required: false, description: 'Page number (starts at 1)' })
+    @ApiQuery({ name: 'limit', type: Number, required: false, description: 'Items per page' })
     async getTransactionHistory(
         @Query('adminId') adminId?: string,
         @Query('userId') userId?: string,
         @Query('type') transactionType?: AdminTransactionType,
-        @Query('limit') limit: number = 50,
-        @Query('offset') offset: number = 0
+        @Query('page') page?: string | number,
+        @Query('limit') limit?: string | number
     ) {
+        // Convert to numbers and provide defaults
+        const pageNum = page ? Math.max(1, parseInt(page.toString(), 10)) : 1;
+        const limitNum = limit ? parseInt(limit.toString(), 10) : 20;
+
+        // Calculate offset from page number (page 1 = offset 0)
+        const offsetNum = (pageNum - 1) * limitNum;
+
         const result = await this.adminService.getAdminTransactionHistory(
             adminId,
             userId,
             transactionType,
-            limit,
-            offset
-        )
+            limitNum,
+            offsetNum
+        );
 
         return {
             success: true,
             message: 'Transaction history retrieved',
-            data: result
-        }
+            data: {
+                transactions: result.transactions,
+                total: result.total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(result.total / limitNum)
+            }
+        };
     }
 
     @Get('dashboard')

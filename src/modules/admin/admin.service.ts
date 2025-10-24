@@ -29,7 +29,7 @@ export class AdminService {
         @InjectRepository(ConversionConfig)
         private conversionConfigRepository: Repository<ConversionConfig>,
         private dataSource: DataSource
-    ) {}
+    ) { }
 
     /**
      * Admin gift currency to user
@@ -101,6 +101,7 @@ export class AdminService {
 
             // Create admin transaction record
             const transaction = queryRunner.manager.create(AdminTransaction, {
+                id: undefined, // Ensure auto-increment id is not set
                 adminId,
                 userId: targetUserId,
                 transactionType: AdminTransactionType.GIFT,
@@ -221,6 +222,7 @@ export class AdminService {
 
             // Create admin transaction record
             const transaction = queryRunner.manager.create(AdminTransaction, {
+                id: undefined, // Ensure auto-increment id is not set
                 adminId,
                 userId: targetUserId,
                 transactionType,
@@ -340,6 +342,7 @@ export class AdminService {
 
             // Create admin transaction record for rate change
             const transaction = queryRunner.manager.create(AdminTransaction, {
+                id: undefined, // Ensure auto-increment id is not set
                 adminId,
                 userId: null, // System-wide change
                 transactionType: AdminTransactionType.RATE_CHANGE,
