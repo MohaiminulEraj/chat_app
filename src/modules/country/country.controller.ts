@@ -23,7 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { AdminGuard } from '../../common/guards/admin.guard'
 
 @ApiTags('Countries')
-@Controller('api/v1/countries')
+@Controller('countries')
 export class CountryController {
     constructor(private readonly countryService: CountryService) {}
 
